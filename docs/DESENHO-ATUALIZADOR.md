@@ -28,7 +28,7 @@ Ainda NÃO implementado no ecopdf.py. Este arquivo registra o desenho combinado 
    - Reverter um problema = publicar o código antigo com número NOVO (reverter.bat), nunca um número menor.
 3. Consulta a API de releases; se a versão do canal for maior, baixa zip + sig dos anexos e confere a assinatura com a chave pública embutida no código. Qualquer falha: não instala, registra no log e tenta na próxima checagem.
 4. Confere que o VERSAO.txt DENTRO do zip é igual à tag do release (impede reaproveitar zip antigo assinado com número novo).
-5. Checa ao iniciar e a cada 2 horas (recomendação aceita para proposta, 2026-10-30). Baixa e confere na hora, mas só INSTALA com o EcoPDF ocioso há 20 min (nenhuma imagem chegando, nenhum PDF em montagem) ou no próximo início do PC. Nunca no meio de um exame.
+5. Checa ao iniciar e a cada 2 horas; baixa e confere a assinatura na hora, mas NUNCA instala durante o dia (Helder 2026-10-30: 20 min ocioso não é seguro; PCs desligados à noite). Instala só no INÍCIO do PC, antes de abrir a porta DICOM (~1 min). A confirmar: Vivid reenvia (fila) se a porta estiver fechada nesse minuto; se não, abrir a porta, guardar o que chegar e instalar depois. atualizar_agora.bat para forçar.
 6. Instalação: backup da pasta atual (C:\EcoPDF\_anterior), extrai preservando config.ini local e dados (processados, dicom, log), roda os passos do instalar.bat necessários e reinicia a tarefa. Se o EcoPDF novo não subir, restaura o backup sozinho.
 7. Sem internet ou site fora do ar: segue funcionando normalmente; atualização é opcional, nunca bloqueia o trabalho.
 8. Registra no log e no status.bat: canal, versão local, última checagem, resultado.

@@ -1,10 +1,12 @@
-# Ao enviar uma tag com o numero da versao (ex.: 2026.11.05.1), gera o EcoPDF.zip
-# a partir da pasta EcoPDF/ e cria um RASCUNHO de release com ele anexado.
+# Gera o EcoPDF.zip a partir da pasta EcoPDF/ e cria um RASCUNHO de release com ele
+# anexado, com o numero de EcoPDF/VERSAO.txt. Dispara pelo botao "Run workflow"
+# (aba Actions) ou ao enviar uma tag com o numero da versao.
 # O rascunho nao e visto pelas salas: falta o EcoPDF.zip.sig, que o Helder
 # gera offline com o assinador e anexa antes de publicar.
 name: Rascunho de release
 
 on:
+  workflow_dispatch:
   push:
     tags: ["20[0-9][0-9].[0-9][0-9].[0-9][0-9]*"]
 
@@ -19,13 +21,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Gerar EcoPDF.zip
+      - name: Numero da versao
+        run: |
+          V=$(python -c "print(open('EcoPDF/VERSAO.txt', encoding='utf-8-sig').read().strip())")
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "$V" ]; then
+            echo "Tag ${{ github.ref_name }} diferente de VERSAO.txt ($V)"; exit 1
+          fi
+          if gh release view "$V" >/dev/null 2>&1; then
+            echo "Ja existe release $V. Aumente o numero em EcoPDF/VERSAO.txt."; exit 1
+          fi
+          echo "TAG=$V" >> "$GITHUB_ENV"
         env:
-          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Gerar EcoPDF.zip
         run: python ferramentas/empacotar.py EcoPDF.zip
       - name: Notas da versao (trecho do NOVIDADES.txt)
-        env:
-          TAG: ${{ github.ref_name }}
         run: |
           python - <<'PY'
           import os, re
@@ -45,5 +55,4 @@ jobs:
       - name: Criar rascunho
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" EcoPDF.zip --draft --title "$TAG" --notes-file notas.md
+        run: gh release create "$TAG" EcoPDF.zip --draft --target "${{ github.sha }}" --title "$TAG" --notes-file notas.md
