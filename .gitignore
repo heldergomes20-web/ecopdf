@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+EcoPDF/log/
+EcoPDF/processados/
+EcoPDF/dicom/
+/EcoPDF.zip
+*.sig
+# chave privada do assinador NUNCA vai para o repositorio
+*.pem
+ferramentas/assinador/publicados/

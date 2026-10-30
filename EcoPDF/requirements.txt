@@ -1,0 +1,13 @@
+numpy==2.5.4
+pdfminer.six==20250506
+pdfplumber==0.11.7
+pillow==13.0.0
+pydicom==3.0.2
+pylibjpeg-libjpeg==2.5.0
+pylibjpeg-openjpeg==2.6.0
+pylibjpeg==2.1.0
+pynetdicom==3.0.4
+pypdf==6.21.4
+pypdfium2==5.14.0
+reportlab==5.1.0
+watchdog==6.0.0

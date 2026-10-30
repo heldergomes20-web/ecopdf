@@ -1,0 +1,18 @@
+ASSINADOR DO ECOPDF - fica SO no pendrive (nunca nas salas, nunca no GitHub)
+
+Uma vez so:
+  1. assinador.ini ja aponta para heldergomes20-web/ecopdf.
+  2. gerar_chaves.bat -> cria chave_privada.pem (SECRETA, com senha) e chave_publica.txt.
+  3. Copie esta pasta inteira para um segundo pendrive guardado em outro lugar.
+
+A cada versao nova (o rascunho do release ja foi criado no GitHub):
+  1. Baixe o EcoPDF.zip do rascunho.
+  2. Arraste-o para cima de assinar.bat e digite a senha. Sai EcoPDF.zip.sig ao lado.
+  3. Anexe EcoPDF.zip.sig ao rascunho, marque pre-release e publique.
+  4. Rode verificar_teste.bat. Depois da validacao, marque o release como Latest
+     e rode verificar.bat. So vale se aparecer TUDO CERTO.
+
+Voltar atras:
+  reverter.bat -> refaz o codigo de uma versao antiga com numero novo, ja assinado.
+
+Nunca apague chave_privada.pem nem a pasta publicados.

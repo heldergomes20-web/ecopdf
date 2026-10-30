@@ -1,0 +1,49 @@
+# Ao enviar uma tag com o numero da versao (ex.: 2026.11.05.1), gera o EcoPDF.zip
+# a partir da pasta EcoPDF/ e cria um RASCUNHO de release com ele anexado.
+# O rascunho nao e visto pelas salas: falta o EcoPDF.zip.sig, que o Helder
+# gera offline com o assinador e anexa antes de publicar.
+name: Rascunho de release
+
+on:
+  push:
+    tags: ["20[0-9][0-9].[0-9][0-9].[0-9][0-9]*"]
+
+permissions:
+  contents: write
+
+jobs:
+  rascunho:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Gerar EcoPDF.zip
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python ferramentas/empacotar.py EcoPDF.zip
+      - name: Notas da versao (trecho do NOVIDADES.txt)
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os, re
+          tag = os.environ["TAG"]
+          linhas = open("EcoPDF/NOVIDADES.txt", encoding="utf-8-sig").read().splitlines()
+          notas, dentro = [], False
+          for l in linhas:
+              if re.match(r"^\d{4}\.\d{2}\.\d{2}(\.\d+)?\s*$", l.strip()):
+                  dentro = l.strip() == tag
+                  continue
+              if dentro:
+                  notas.append(l)
+          texto = "\n".join(notas).strip() or "(sem notas no NOVIDADES.txt)"
+          texto += "\n\n---\nRascunho: falta anexar EcoPDF.zip.sig (assinar.bat no pendrive) antes de publicar."
+          open("notas.md", "w", encoding="utf-8").write(texto)
+          PY
+      - name: Criar rascunho
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" EcoPDF.zip --draft --title "$TAG" --notes-file notas.md

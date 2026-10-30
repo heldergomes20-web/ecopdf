@@ -1,0 +1,14 @@
+﻿EcoPDF - novidades por versao
+Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
+Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
+
+2026.10.30
+- Numero de versao (VERSAO.txt) no status.bat, no DADOS DESTE PC.txt e no log.
+- Instalador gera e abre "DADOS DESTE PC.txt" (IP, AE, porta, dados para o roteador).
+- Renomeador embutido no EcoPDF; instalador cria as 5 pastas; config.ini igual em todos os PCs.
+- Tipos: Ecocardiograma_Fetal (sonda convexa 4C); sondas Philips S4-2 e L12-3.
+- Renomeador reconhece laudo fetal pelo conteudo e le a data de "Realizado em".
+- Correcao de laudo por reimpressao, imagens adicionadas, tirar/voltar imagem, "sem imagens", sufixo _retificado.
+
+2026.10.29
+- Primeira instalacao (Bessa, Vivid S6).
