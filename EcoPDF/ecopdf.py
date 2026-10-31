@@ -130,12 +130,6 @@ def carregar_config(caminho):
             if regex.strip():
                 tipos[nome.strip()] = re.compile(regex.strip(), re.IGNORECASE)
 
-    aparelhos = {}
-    if cp.has_section("aparelhos"):
-        for chave, sala in cp["aparelhos"].items():
-            if sala.strip():
-                aparelhos[chave.strip().upper()] = sala.strip()
-
     return {
         "ae_title": c.get("AE_TITLE", "ECOPDF").strip()[:16],
         "porta": c.getint("PORTA", 11112),
@@ -157,7 +151,6 @@ def carregar_config(caminho):
         "sufixo_refeito": c.get("SUFIXO_REFEITO", "_retificado").strip(),
         "pendentes_minutos": c.getint("PENDENTES_MINUTOS", 30),
         "tipos": tipos,
-        "aparelhos": aparelhos,
     }
 
 
@@ -540,39 +533,38 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
             c.drawRightString(ix + w - 3, iy + 3, str(num))
 
         barra(52, 18, f"Página: {primeira_pagina + p}", 7, False)
+        if dados.get("sigla"):
+            # escondido: final da serie do aparelho, na ponta direita da barra cinza,
+            # em cinza pouco mais escuro que ela (para achar o exame no aparelho depois)
+            c.setFillColorRGB(0.56, 0.56, 0.56)
+            c.setFont("Helvetica", 5)
+            c.drawRightString(x1 - 4, 52 + 7, str(dados["sigla"]))
+            c.setFillColorRGB(0, 0, 0)
         c.setFont("Times-Bold", 8.5)
         for k, linha in enumerate(cfg["rodape"]):
             c.drawCentredString(larg / 2, 38 - k * 11, linha)
-        # discreto: sigla do aparelho (unidade + aparelho), para achar o exame nele depois
-        c.setFillColorRGB(0.6, 0.6, 0.6)
-        c.setFont("Helvetica", 6)
-        if dados.get("sigla"):
-            c.drawRightString(x1, 10, str(dados["sigla"]))
-        c.setFillColorRGB(0, 0, 0)
         c.showPage()
     c.save()
 
 
-def sigla(ds, cfg):
-    """Sigla do aparelho (ex.: 'TA'), de [aparelhos] no config.ini, pelo numero de
-    serie que o proprio aparelho manda (ou pelo Station Name). Segue o aparelho
-    mesmo se ele trocar de sala. '' se o aparelho nao estiver na tabela."""
+def sigla(ds, cfg=None):
+    """Final (4 ultimos caracteres) do numero de serie de fabrica que o proprio
+    aparelho manda no DICOM. Identifica o aparelho onde quer que ele esteja,
+    sem tabela para manter. '' se o aparelho nao mandar a serie."""
     if ds is None:
         return ""
-    serie = str(ds.get("DeviceSerialNumber", "") or "").strip().upper()
-    estacao = str(ds.get("StationName", "") or "").strip().upper()
-    siglas = (cfg or {}).get("aparelhos", {})
-    return (serie and siglas.get(serie)) or (estacao and siglas.get(estacao)) or ""
+    serie = re.sub(r"\s", "", str(ds.get("DeviceSerialNumber", "") or ""))
+    return serie[-4:].upper()
 
 
 def aparelho(ds, cfg):
-    """'TA · Vivid T8 · serie 123': de onde vieram as imagens (log e metadados do PDF)."""
+    """'Vivid T8 · serie 123456': de onde vieram as imagens (log e metadados do PDF)."""
     if ds is None:
         return ""
     serie = str(ds.get("DeviceSerialNumber", "") or "").strip()
     estacao = str(ds.get("StationName", "") or "").strip()
     modelo = str(ds.get("ManufacturerModelName", "") or "").strip()
-    partes = [sigla(ds, cfg), modelo or estacao]
+    partes = [modelo or estacao]
     if serie:
         partes.append(f"série {serie}")
     return " · ".join(p for p in partes if p)

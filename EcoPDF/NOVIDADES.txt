@@ -6,7 +6,7 @@ Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar
 - Imagens originais (DICOM) guardadas por 180 dias (antes 30): tirar, voltar e acrescentar imagem funcionam por 6 meses.
 - status.bat mostra o espaco livre no disco C: e quanto ocupam as imagens guardadas.
 - Loops (video) que chegarem ao PC sao aceitos e descartados: nao vao para o PDF nem ocupam disco. O aparelho pode mandar tudo (ex.: Philips com o botao Acquire); a gravacao de loops no aparelho nao muda.
-- Sigla do aparelho (1a letra = unidade, 2a = aparelho, ex.: TA) bem pequena no canto da folha de imagens; modelo e serie nos metadados do PDF. Siglas na secao [aparelhos] do config.ini, pelo numero de serie do aparelho.
+- Folha de imagens traz, escondido na ponta direita da barra "Pagina", o final (4 ultimos caracteres) do numero de serie do aparelho que fez o exame; modelo e serie completa nos metadados do PDF. Nao ha tabela para manter.
 
 2026.10.30
 - Numero de versao (VERSAO.txt) no status.bat, no DADOS DESTE PC.txt e no log.
