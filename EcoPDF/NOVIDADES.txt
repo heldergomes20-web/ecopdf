@@ -8,6 +8,7 @@ Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar
 - Pendentes inclui laudos sem imagens (pasta 1 ha mais de 3 min), com o motivo e o botao "Liberar sem imagens" (pede confirmacao; faz o mesmo que renomear com " sem imagens").
 - Tela do exame: imagem grande com zoom, miniaturas para tirar/voltar imagem da folha e arrastar para mudar a ordem, previa da folha e Salvar.
 - Exame ja finalizado: salvar refaz o final com _retificado (versao anterior em processados\substituidos).
+- PDF de imagens apagado ou movido da pasta 2 antes de juntar ("Fora da pasta 2"): Salvar folha na tela recria o PDF.
 - Medidas do aparelho (relatorio estruturado DICOM) ao lado das imagens e botao "Copiar medidas" no formato chave=valor para a pagina de laudos. Eco fetal: sem medidas. Carotidas: leitura das fotos ainda nao ativada.
 - Tirar/voltar imagem pelo nome do arquivo (" tirar 3 5") saiu: o pedido vira aviso no PENDENTES.txt.
 - Botao Imprimir na lista (exames finalizados) e na tela do exame (acende sozinho quando o laudo junta com as imagens): escolhe folha(s) de fotos (a 1a ja marcada) e laudo; sai num envio so, fotos primeiro (papel fotografico por cima do comum na bandeja), depois o laudo. O PDF final nao muda.

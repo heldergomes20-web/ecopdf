@@ -977,12 +977,13 @@ def salvar_folha(pasta, tipo, ordem, fora, cfg):
             reg = _ler_registro(cfg)
             r = registro_do_grupo(g, reg)
             if r is None:
-                return False, "nao achei o PDF deste exame (pasta 2) nem o exame finalizado"
-            antigo = cfg["pasta_final"] / r["final"]
-            if antigo.exists() and not _livre(antigo):
-                return False, "o PDF final esta aberto em outro programa: feche e salve de novo"
-            if _laudo_guardado(r, cfg) is None:
-                return False, "nao achei o laudo guardado deste exame em processados"
+                pass  # PDF sumiu da pasta 2 sem juntar (apagado/movido): salvar o recria
+            else:
+                antigo = cfg["pasta_final"] / r["final"]
+                if antigo.exists() and not _livre(antigo):
+                    return False, "o PDF final esta aberto em outro programa: feche e salve de novo"
+                if _laudo_guardado(r, cfg) is None:
+                    return False, "nao achei o laudo guardado deste exame em processados"
         t = g["tipo"] or ""
         o, f = _ler_ordem(pasta), _ler_ocultas(pasta)
         o[t], f[t] = ordem, fora
