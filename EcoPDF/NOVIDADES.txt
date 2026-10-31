@@ -11,6 +11,7 @@ Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar
 - Tirar/voltar imagem pelo nome do arquivo (" tirar 3 5") saiu: o pedido vira aviso no PENDENTES.txt.
 - Botao Imprimir na lista (exames finalizados) e na tela do exame (acende sozinho quando o laudo junta com as imagens): escolhe folha(s) de fotos (a 1a ja marcada) e laudo; sai num envio so, fotos primeiro (papel fotografico por cima do comum na bandeja), depois o laudo. O PDF final nao muda.
 - PDF cerca de 35-40% menor: fotos em JPEG qualidade 80 e no maximo 1000 px de largura (antes 92 e tamanho original). Sem diferenca visivel na impressao nem no PC; a tela de exames continua usando a imagem original.
+- Pasta 3: ninguem precisa apagar o que ja subiu; o EcoPDF apaga sozinho os PDFs finais com mais de 6 meses (MANTER_DICOM_DIAS). Laudo e folha guardados em processados continuam.
 - config.ini: TELA_PORTA, TELA_ABRIR, QUALIDADE_JPEG e LARGURA_MAX_IMAGEM.
 
 2026.10.31.2

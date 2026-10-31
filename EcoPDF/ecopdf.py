@@ -1198,6 +1198,18 @@ def limpar_antigos(cfg):
         if pasta.is_dir() and m.exists() and m.stat().st_mtime < limite:
             shutil.rmtree(pasta)  # inclui a subpasta previa/ da tela
             log.info("DICOM antigo removido: %s", pasta.name)
+    # Pasta 3: os medicos nao apagam o que ja subiu; o EcoPDF apaga o final depois do
+    # mesmo prazo (conta da ultima vez que o arquivo foi gerado). So mexe em arquivos que
+    # ele mesmo gerou (estao no registro); laudo e folha guardados em processados ficam.
+    nomes = {r.get("final") for r in _ler_registro(cfg) if r.get("final")}
+    for nome in nomes:
+        arq = cfg["pasta_final"] / nome
+        try:
+            if arq.is_file() and arq.stat().st_mtime < limite:
+                arq.unlink()
+                log.info("Final antigo removido da pasta 3: %s", nome)
+        except OSError:
+            pass  # aberto em outro programa: tenta na proxima limpeza
 
 
 # --------------------------------------------------------------------------
