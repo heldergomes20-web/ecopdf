@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.10.31.2
+- Correcao de laudo depois dos 6 meses (imagens originais ja apagadas): a numeracao "Pagina" da folha de imagens e refeita conforme o numero de paginas do laudo novo.
+
 2026.10.31.1
 - Imagens originais (DICOM) guardadas por 180 dias (antes 30): tirar, voltar e acrescentar imagem funcionam por 6 meses.
 - status.bat mostra o espaco livre no disco C: e quanto ocupam as imagens guardadas.
