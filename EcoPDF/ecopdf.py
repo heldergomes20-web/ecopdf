@@ -130,6 +130,12 @@ def carregar_config(caminho):
             if regex.strip():
                 tipos[nome.strip()] = re.compile(regex.strip(), re.IGNORECASE)
 
+    aparelhos = {}
+    if cp.has_section("aparelhos"):
+        for chave, sala in cp["aparelhos"].items():
+            if sala.strip():
+                aparelhos[chave.strip().upper()] = sala.strip()
+
     return {
         "ae_title": c.get("AE_TITLE", "ECOPDF").strip()[:16],
         "porta": c.getint("PORTA", 11112),
@@ -151,6 +157,7 @@ def carregar_config(caminho):
         "sufixo_refeito": c.get("SUFIXO_REFEITO", "_retificado").strip(),
         "pendentes_minutos": c.getint("PENDENTES_MINUTOS", 30),
         "tipos": tipos,
+        "aparelhos": aparelhos,
     }
 
 
@@ -296,9 +303,9 @@ def on_store(event, cfg):
         # reenvio da mesma imagem sobrescreve o mesmo arquivo
         gravar_atomico(pasta / (limpar_arquivo(sop, 64) + ".dcm"),
                        lambda p: p.write_bytes(dados))
-        log.info("Recebida de %s: %s | %s | quadros=%s | campos de tipo: %s",
+        log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
-                 ds.get("Modality", "?"), ds.get("NumberOfFrames", 1),
+                 ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
                  {k: str(ds.get(k)) for k in CAMPOS_TIPO if ds.get(k)})
         return 0x0000
     except Exception:
@@ -446,7 +453,7 @@ def gerar_pdfs_do_estudo(pasta_estudo, cfg):
             while destino.exists():  # outro estudo do mesmo paciente/dia/tipo
                 destino = cfg["pasta_imagens"] / f"{base}_{n}.pdf"
                 n += 1
-        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref)))
+        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
         log.info("PDF de imagens: %s (%d imagens, %.1f MB)", destino.name, len(imagens),
                  destino.stat().st_size / 1e6)
         registro.append({"pdf": str(destino), "data": data, "paciente": paciente,
@@ -497,6 +504,11 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
 
     c = canvas.Canvas(str(caminho), pagesize=A4)
     c.setTitle(f"Imagens - {paciente}")
+    origem = str(dados.get("aparelho") or "")
+    c.setCreator(f"EcoPDF {versao()}")
+    if origem:
+        c.setSubject(f"Imagens de: {origem}")
+        c.setKeywords(origem)
     c.setLineWidth(0.6)
     for p in range(total):
         if simbolo:
@@ -531,11 +543,33 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
         c.setFont("Times-Bold", 8.5)
         for k, linha in enumerate(cfg["rodape"]):
             c.drawCentredString(larg / 2, 38 - k * 11, linha)
+        # discreto: de qual aparelho/sala vieram as imagens (para achar o exame no aparelho)
+        c.setFillColorRGB(0.6, 0.6, 0.6)
+        c.setFont("Helvetica", 5.5)
+        c.drawRightString(x1, 10, " · ".join(p for p in (origem, f"EcoPDF {versao()}") if p))
+        c.setFillColorRGB(0, 0, 0)
         c.showPage()
     c.save()
 
 
-def dados_do_dicom(ref):
+def aparelho(ds, cfg):
+    """'Tambauzinho sala 8 · Vivid T8 · serie 123': de onde vieram as imagens.
+    A sala vem de [aparelhos] no config.ini (pela serie ou pelo Station Name);
+    modelo e serie vem do proprio DICOM."""
+    if ds is None:
+        return ""
+    serie = str(ds.get("DeviceSerialNumber", "") or "").strip()
+    estacao = str(ds.get("StationName", "") or "").strip()
+    modelo = str(ds.get("ManufacturerModelName", "") or "").strip()
+    salas = (cfg or {}).get("aparelhos", {})
+    sala = salas.get(serie.upper()) or salas.get(estacao.upper()) or ""
+    partes = [sala, modelo or estacao]
+    if serie:
+        partes.append(f"série {serie}")
+    return " · ".join(p for p in partes if p)
+
+
+def dados_do_dicom(ref, cfg=None):
     idade = str(ref.get("PatientAge", "") or "")
     m = re.match(r"0*(\d+)Y", idade)
     return {
@@ -544,6 +578,7 @@ def dados_do_dicom(ref):
         "sexo": str(ref.get("PatientSex", "") or ""),
         "idade": f"{m.group(1)} anos" if m else "",
         "data": data_br(ref.get("StudyDate", "")),
+        "aparelho": aparelho(ref, cfg),
     }
 
 
@@ -916,7 +951,7 @@ def _aplicar_pedido(arq, m, cfg):
     if r is None:
         destino = cfg["pasta_imagens"] / base
         imagens = _numeradas(pasta, g["tipo"], itens)
-        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref)))
+        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
         arq.unlink()
     else:
         laudo = _laudo_guardado(r, cfg)
@@ -1061,10 +1096,24 @@ def _folha_do_laudo(laudo, foto, cfg, tmp):
                 if imagens:
                     dados = dados_do_laudo(laudo, cfg["tipos"])
                     dados["data"] = data_br(ref.get("StudyDate", ""))  # data das imagens
+                    dados["aparelho"] = aparelho(ref, cfg)
                     _desenhar(tmp, imagens, cfg, dados,
                               primeira_pagina=len(PdfReader(str(laudo)).pages) + 1)
                     return tmp
     return foto
+
+
+def _ref_da_folha(foto, cfg):
+    """Dataset de referencia do estudo que gerou esta folha de imagens (ou None)."""
+    for pasta in cfg["pasta_dicom"].iterdir():
+        for g in _ler_grupos(pasta) if pasta.is_dir() else []:
+            if Path(g["pdf"]).name == foto.name:
+                for arq in sorted(pasta.glob("*.dcm")):
+                    try:
+                        return pydicom.dcmread(arq, stop_before_pixels=True)
+                    except Exception:
+                        continue
+    return None
 
 
 def _mesclar(laudo, foto, destino, cfg):
@@ -1074,6 +1123,14 @@ def _mesclar(laudo, foto, destino, cfg):
         w = PdfWriter()
         w.append(str(laudo))
         w.append(str(folha))
+        try:  # metadado e so ajuda: nunca impede a juncao
+            origem = aparelho(_ref_da_folha(foto, cfg), cfg)
+            meta = {"/Creator": f"EcoPDF {versao()}"}
+            if origem:
+                meta.update({"/Subject": f"Imagens de: {origem}", "/Keywords": origem})
+            w.add_metadata(meta)
+        except Exception:
+            log.exception("Nao consegui gravar o aparelho nos metadados")
         with open(destino, "wb") as f:
             w.write(f)
     finally:
