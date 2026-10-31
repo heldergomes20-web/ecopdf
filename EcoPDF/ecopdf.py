@@ -1100,18 +1100,55 @@ def _folha_do_laudo(laudo, foto, cfg, tmp):
     return foto
 
 
+RE_PAGINA = re.compile(r"P.gina:\s*\d+")
+
+
+def _renumerar(folha, primeira, destino):
+    """Folha guardada (DICOM ja apagado) com a barra 'Pagina: N' refeita a partir de
+    'primeira'. So mexe em folha do EcoPDF (A4 com a barra); se nao der, devolve a folha."""
+    try:
+        r = PdfReader(str(folha))
+        larg, alt = A4
+        if not all(abs(float(pg.mediabox.width) - larg) < 2 and abs(float(pg.mediabox.height) - alt) < 2
+                   and RE_PAGINA.search(pg.extract_text() or "") for pg in r.pages):
+            return folha
+        w = PdfWriter()
+        for k, pg in enumerate(r.pages):
+            buf = io.BytesIO()
+            c = canvas.Canvas(buf, pagesize=A4)
+            # cobre so o meio da barra (bordas e o final da serie na ponta direita ficam)
+            c.setFillColorRGB(*CINZA)
+            c.rect(larg / 2 - 60, 53, 120, 16, fill=1, stroke=0)
+            c.setFillColorRGB(0, 0, 0)
+            c.setFont("Helvetica", 7)
+            c.drawCentredString(larg / 2, 52 + 9 - 7 * 0.35, f"Página: {primeira + k}")
+            c.save()
+            pg.merge_page(PdfReader(io.BytesIO(buf.getvalue())).pages[0])
+            w.add_page(pg)
+        with open(destino, "wb") as f:
+            w.write(f)
+        return destino
+    except Exception:
+        log.exception("Nao consegui renumerar a folha guardada; vai como estava")
+        return folha
+
+
 def _mesclar(laudo, foto, destino, cfg):
     tmp = destino.with_name(destino.name + ".folha.tmp")
+    tmp2 = destino.with_name(destino.name + ".renum.tmp")
     try:
         folha = _folha_do_laudo(laudo, foto, cfg, tmp)
+        if folha == foto:  # sem DICOM: folha guardada, com a numeracao do laudo antigo
+            folha = _renumerar(foto, len(PdfReader(str(laudo)).pages) + 1, tmp2)
         w = PdfWriter()
         w.append(str(laudo))
         w.append(str(folha))
         with open(destino, "wb") as f:
             w.write(f)
     finally:
-        if tmp.exists():
-            tmp.unlink()
+        for t in (tmp, tmp2):
+            if t.exists():
+                t.unlink()
 
 
 # --------------------------------------------------------------------------
