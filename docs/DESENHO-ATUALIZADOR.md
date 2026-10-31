@@ -35,3 +35,7 @@ Ainda NÃO implementado no ecopdf.py. Este arquivo registra o desenho combinado 
 
 ## Publicação
 - Ver manual de atualização (Claude Doc https://claude.ai/artifact/4d4bQwgKBCVyYVQCS6sBbo, cópia eco-pdf/MANUAL_ATUALIZACAO.md).
+
+## Proposta pendente (2026-10-31): chave reserva
+- Embutir 2 chaves públicas (principal + reserva offline, outro pendrive/senha). Cliente aceita qualquer uma. Release assinado pela reserva pode trocar a lista de chaves confiáveis (rotação sem reinstalar salas). Aguardando decisão do Helder.
+- Recomendado também: senha em gerenciador + papel no cofre; 2FA no GitHub.
