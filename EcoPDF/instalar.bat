@@ -84,6 +84,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Register-ScheduledTask -TaskName 'EcoPDF' -Action $a -Trigger $t -Settings $s -Force | Out-Null;" ^
   "Stop-ScheduledTask -TaskName 'EcoPDF' -ErrorAction SilentlyContinue; Start-ScheduledTask -TaskName 'EcoPDF'"
 
+set TELA_PORTA=8765
+for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"TELA_PORTA" config.ini') do set TELA_PORTA=%%b
+echo Criando o atalho "EcoPDF - Exames" na Area de Trabalho...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$d=[Environment]::GetFolderPath('Desktop'); Set-Content -Path (Join-Path $d 'EcoPDF - Exames.url') -Encoding ASCII -Value ('[InternetShortcut]','URL=http://127.0.0.1:%TELA_PORTA%/')"
+
 timeout /t 5 >nul
 echo.
 call "%~dp0status.bat" nopause

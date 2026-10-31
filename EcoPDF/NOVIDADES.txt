@@ -2,6 +2,15 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.10.31.3
+- Tela "EcoPDF - Exames" no navegador (so neste PC): abre sozinha ao entrar no Windows e tem atalho na Area de Trabalho.
+- Lista de exames com filtros Hoje / 7 dias / 30 dias / 6 meses e "Sem laudo" (com contador, tambem no titulo da aba); busca por nome ou codigo do aparelho.
+- Tela do exame: imagem grande com zoom, miniaturas para tirar/voltar imagem da folha e arrastar para mudar a ordem, previa da folha e Salvar.
+- Exame ja finalizado: salvar refaz o final com _retificado (versao anterior em processados\substituidos).
+- Medidas do aparelho (relatorio estruturado DICOM) ao lado das imagens e botao "Copiar medidas" no formato chave=valor para a pagina de laudos. Eco fetal: sem medidas. Carotidas: leitura das fotos ainda nao ativada.
+- Tirar/voltar imagem pelo nome do arquivo (" tirar 3 5") saiu: o pedido vira aviso no PENDENTES.txt.
+- config.ini: TELA_PORTA e TELA_ABRIR.
+
 2026.10.31.2
 - Correcao de laudo depois dos 6 meses (imagens originais ja apagadas): a numeracao "Pagina" da folha de imagens e refeita conforme o numero de paginas do laudo novo.
 
