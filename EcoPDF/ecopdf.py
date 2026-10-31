@@ -497,11 +497,7 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
 
     c = canvas.Canvas(str(caminho), pagesize=A4)
     c.setTitle(f"Imagens - {paciente}")
-    origem = str(dados.get("aparelho") or "")
     c.setCreator(f"EcoPDF {versao()}")
-    if origem:
-        c.setSubject(f"Imagens de: {origem}")
-        c.setKeywords(origem)
     c.setLineWidth(0.6)
     for p in range(total):
         if simbolo:
@@ -558,7 +554,7 @@ def sigla(ds, cfg=None):
 
 
 def aparelho(ds, cfg):
-    """'Vivid T8 · serie 123456': de onde vieram as imagens (log e metadados do PDF)."""
+    """'Vivid T8 · serie 123456': de onde vieram as imagens (so no log)."""
     if ds is None:
         return ""
     serie = str(ds.get("DeviceSerialNumber", "") or "").strip()
@@ -579,7 +575,6 @@ def dados_do_dicom(ref, cfg=None):
         "sexo": str(ref.get("PatientSex", "") or ""),
         "idade": f"{m.group(1)} anos" if m else "",
         "data": data_br(ref.get("StudyDate", "")),
-        "aparelho": aparelho(ref, cfg),
         "sigla": sigla(ref, cfg),
     }
 
@@ -1098,25 +1093,11 @@ def _folha_do_laudo(laudo, foto, cfg, tmp):
                 if imagens:
                     dados = dados_do_laudo(laudo, cfg["tipos"])
                     dados["data"] = data_br(ref.get("StudyDate", ""))  # data das imagens
-                    dados["aparelho"] = aparelho(ref, cfg)
                     dados["sigla"] = sigla(ref, cfg)
                     _desenhar(tmp, imagens, cfg, dados,
                               primeira_pagina=len(PdfReader(str(laudo)).pages) + 1)
                     return tmp
     return foto
-
-
-def _ref_da_folha(foto, cfg):
-    """Dataset de referencia do estudo que gerou esta folha de imagens (ou None)."""
-    for pasta in cfg["pasta_dicom"].iterdir():
-        for g in _ler_grupos(pasta) if pasta.is_dir() else []:
-            if Path(g["pdf"]).name == foto.name:
-                for arq in sorted(pasta.glob("*.dcm")):
-                    try:
-                        return pydicom.dcmread(arq, stop_before_pixels=True)
-                    except Exception:
-                        continue
-    return None
 
 
 def _mesclar(laudo, foto, destino, cfg):
@@ -1126,14 +1107,6 @@ def _mesclar(laudo, foto, destino, cfg):
         w = PdfWriter()
         w.append(str(laudo))
         w.append(str(folha))
-        try:  # metadado e so ajuda: nunca impede a juncao
-            origem = aparelho(_ref_da_folha(foto, cfg), cfg)
-            meta = {"/Creator": f"EcoPDF {versao()}"}
-            if origem:
-                meta.update({"/Subject": f"Imagens de: {origem}", "/Keywords": origem})
-            w.add_metadata(meta)
-        except Exception:
-            log.exception("Nao consegui gravar o aparelho nos metadados")
         with open(destino, "wb") as f:
             w.write(f)
     finally:
