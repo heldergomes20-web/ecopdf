@@ -19,6 +19,7 @@ O estado fica todo em disco, entao reiniciar o PC nao perde nada.
 Configuracao: config.ini na mesma pasta deste arquivo.
 """
 
+import collections
 import configparser
 import io
 import json
@@ -121,6 +122,7 @@ def _modo_abrir(v):
     return "ao_receber"
 
 
+TEMPOS_FOLHA = collections.deque(maxlen=300)  # (quando, segundos) para gerar a folha: painel
 TELA = None  # modulo da tela, quando ela esta ligada (para abrir ao receber)
 
 
@@ -1288,7 +1290,9 @@ def vigiar(cfg, parar):
                             (pasta / DESCARTADOS).unlink()
                             log.info("Imagem nova em exame descartado: volta ao normal (%s)", pasta.name)
                         try:
+                            t0 = time.monotonic()
                             gerar_pdfs_do_estudo(pasta, cfg)
+                            TEMPOS_FOLHA.append((time.time(), time.monotonic() - t0))
                         except Exception:
                             log.exception("Falha ao gerar PDF do estudo %s", pasta.name)
                         m.touch()  # nao repete em laco; imagem nova reabre o estudo

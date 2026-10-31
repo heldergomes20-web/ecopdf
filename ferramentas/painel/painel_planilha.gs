@@ -23,7 +23,8 @@ var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão
   'IP do PC', 'AE Title : porta', 'Última conexão de aparelho', 'Última imagem', 'Aparelho (série)',
   'Última junção', 'Imagens sem laudo', 'Laudos sem imagens', 'Motivo do laudo sem imagens',
   '9 - Revisar', 'Retificados (3 dias)', 'Liberados sem imagens (7 dias)', 'Descartados (7 dias)',
-  'Sumiram da pasta 2 (7 dias)', 'Erros (24 h)', 'Disco livre (GB)', 'Impressora', 'Ligado desde',
+  'Sumiram da pasta 2 (7 dias)', 'Erros (24 h)', 'Disco livre (GB)', 'Disco enche em (dias)', 'Imagens guardadas (GB)', 'MB por exame',
+  'Memória EcoPDF (MB)', 'CPU média (%)', 'Folha pronta em (s, média / máx 24 h)', 'Impressora', 'Ligado desde',
   'IP anterior (apague depois de conferir o aparelho)', 'nivel_pc', 'problemas_pc', 'relogio_min'];
 function col(nome) { return COLS.indexOf(nome) + 1; }
 
@@ -83,6 +84,13 @@ function doPost(e) {
     v['Retificados (3 dias)'] = num(d.retificados_3d);
     v['Erros (24 h)'] = num(d.erros_24h);
     v['Disco livre (GB)'] = num(d.disco_livre_gb);
+    v['Disco enche em (dias)'] = d.disco_dias === null || d.disco_dias === undefined ? '— (não está enchendo)' : num(d.disco_dias);
+    v['Imagens guardadas (GB)'] = num(d.imagens_gb);
+    v['MB por exame'] = num(d.mb_por_exame);
+    v['Memória EcoPDF (MB)'] = d.envio === 'manual' ? 'envio manual' : num(d.memoria_mb);
+    v['CPU média (%)'] = d.envio === 'manual' ? 'envio manual' : num(d.cpu_medio_pct);
+    v['Folha pronta em (s, média / máx 24 h)'] = d.folha_s_media === null || d.folha_s_media === undefined ? 'sem exame' :
+      num(d.folha_s_media) + ' / ' + num(d.folha_s_max);
     v['Impressora'] = limpo(d.impressora, 120) || '—';
     v['Ligado desde'] = d.envio === 'manual' ? 'envio manual' : dataBr(d.ligado_desde);
     v['IP anterior (apague depois de conferir o aparelho)'] = ipAnterior;

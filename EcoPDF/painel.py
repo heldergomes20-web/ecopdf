@@ -33,6 +33,9 @@ DISCO_ATENCAO_GB, DISCO_PROBLEMA_GB = 10, 3
 SINAIS_DIAS = 7                 # janela dos sinais de problema abaixo
 LIBERADOS_MAX = 2               # mais que isso em 7 dias = aparelho nao esta enviando?
 DESCARTADOS_MAX = 3             # mais que isso em 7 dias = nome diferente / envio duplicado?
+MEMORIA_MAX_MB = 600            # EcoPDF usando mais que isso = algo acumulando (avisar)
+FOLHA_MAX_S = 60                # folha de imagens demorando mais que isso = PC lento ou exame enorme
+DISCO_DIAS_ATENCAO, DISCO_DIAS_PROBLEMA = 30, 7  # disco acaba em menos que isso no ritmo atual
 # motivo do laudo sem par (texto da tela) -> categoria curta que vai para a planilha
 MOTIVOS = (("nome fora do padrao", "nome fora do padrão"), ("aberto em outro", "PDF aberto"),
            ("DESCARTADAS", "imagens descartadas"), ("nenhuma imagem", "nenhuma imagem"))
@@ -146,6 +149,83 @@ def _sinais(cfg, ep, reg, agora):
         ep.log.exception("Painel: nao consegui ler os motivos dos laudos sem imagens")
     return {"liberados_sem_imagens_7d": liberados, "descartados_7d": descartados,
             "fora_pasta2_7d": fora, "motivos_laudo_sem_par": motivos}
+
+
+def _memoria_mb():
+    """Memoria em uso (working set) deste processo, em MB."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            class PMC(ctypes.Structure):
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+                    (n, ctypes.c_size_t) for n in ("PeakWorkingSetSize", "WorkingSetSize",
+                                                   "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage",
+                                                   "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
+                                                   "PagefileUsage", "PeakPagefileUsage")]
+            k32 = ctypes.WinDLL("kernel32")
+            k32.GetCurrentProcess.restype = wintypes.HANDLE
+            k32.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+            c = PMC()
+            c.cb = ctypes.sizeof(c)
+            if k32.K32GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(c), c.cb):
+                return round(c.WorkingSetSize / 1e6)
+            return None
+        with open("/proc/self/status") as f:
+            for linha in f:
+                if linha.startswith("VmRSS:"):
+                    return round(int(linha.split()[1]) / 1000)
+    except Exception:
+        pass
+    return None
+
+
+def _desempenho(cfg, ep, manual, agora, livre_gb):
+    """Monitor de desempenho: memoria e CPU do EcoPDF, tempo para gerar a folha de
+    imagens (24 h) e quanto o disco ainda dura no ritmo dos ultimos 7 dias."""
+    d = {"memoria_mb": None, "cpu_medio_pct": None}
+    if not manual:
+        d["memoria_mb"] = _memoria_mb()
+        t, up = os.times(), agora - _INICIO
+        if up > 60:
+            d["cpu_medio_pct"] = round(100 * (t.user + t.system) / up / (os.cpu_count() or 1), 1)
+    tempos = [s for q, s in list(getattr(ep, "TEMPOS_FOLHA", [])) if agora - q < 86400]
+    d["folha_s_media"] = round(sum(tempos) / len(tempos), 1) if tempos else None
+    d["folha_s_max"] = round(max(tempos), 1) if tempos else None
+    total = recentes = 0
+    n = 0
+    mais_antiga = agora
+    try:
+        for pasta in cfg["pasta_dicom"].iterdir():
+            if not pasta.is_dir():
+                continue
+            n += 1
+            tam = 0
+            for f in pasta.rglob("*"):
+                try:
+                    if f.is_file():
+                        tam += f.stat().st_size
+                except OSError:
+                    pass
+            total += tam
+            try:
+                criada = pasta.stat().st_ctime
+                mais_antiga = min(mais_antiga, criada)
+                if agora - criada < SINAIS_DIAS * 86400:
+                    recentes += tam
+            except OSError:
+                pass
+    except OSError:
+        pass
+    d["imagens_gb"] = round(total / 1e9, 1)
+    d["mb_por_exame"] = round(total / n / 1e6, 1) if n else None
+    por_dia = recentes / SINAIS_DIAS / 1e9
+    # depois do prazo de guarda o que entra e o que sai se equilibram: o disco para de encher
+    estavel = agora - mais_antiga > (cfg["manter_dicom_dias"] - SINAIS_DIAS) * 86400
+    d["disco_dias"] = (int(livre_gb / por_dia) if livre_gb is not None and por_dia > 0.01 and not estavel
+                       else None)
+    return d
 
 
 _impressora = {"em": 0.0, "valor": ""}
@@ -266,6 +346,7 @@ def coletar(cfg, ep, manual=False):
         "windows": platform.release()[:20],
     }
     d.update(_sinais(cfg, ep, reg, agora))
+    d.update(_desempenho(cfg, ep, manual, agora, disco))
     d["nivel"], d["problemas"] = avaliar(d)
     return d
 
@@ -284,6 +365,15 @@ def avaliar(d):
             verm.append(f"disco quase cheio ({d['disco_livre_gb']} GB)")
         elif d["disco_livre_gb"] < DISCO_ATENCAO_GB:
             amar.append(f"pouco disco ({d['disco_livre_gb']} GB)")
+    dias = d.get("disco_dias")
+    if dias is not None and dias < DISCO_DIAS_PROBLEMA:
+        verm.append(f"no ritmo atual o disco enche em {dias} dias")
+    elif dias is not None and dias < DISCO_DIAS_ATENCAO:
+        amar.append(f"no ritmo atual o disco enche em {dias} dias")
+    if (d.get("memoria_mb") or 0) > MEMORIA_MAX_MB:
+        amar.append(f"EcoPDF usando {d['memoria_mb']} MB de memória: reiniciar o PC")
+    if (d.get("folha_s_max") or 0) > FOLHA_MAX_S:
+        amar.append(f"folha de imagens demorou {d['folha_s_max']} s para ficar pronta (PC lento?)")
     if d["data_aparelho_ok"] is False:
         amar.append("data do aparelho diferente da do PC")
     if d["revisar"]:
