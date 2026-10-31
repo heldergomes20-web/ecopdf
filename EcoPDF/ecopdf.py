@@ -543,27 +543,36 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
         c.setFont("Times-Bold", 8.5)
         for k, linha in enumerate(cfg["rodape"]):
             c.drawCentredString(larg / 2, 38 - k * 11, linha)
-        # discreto: de qual aparelho/sala vieram as imagens (para achar o exame no aparelho)
+        # discreto: sigla do aparelho (unidade + aparelho), para achar o exame nele depois
         c.setFillColorRGB(0.6, 0.6, 0.6)
-        c.setFont("Helvetica", 5.5)
-        c.drawRightString(x1, 10, " · ".join(p for p in (origem, f"EcoPDF {versao()}") if p))
+        c.setFont("Helvetica", 6)
+        if dados.get("sigla"):
+            c.drawRightString(x1, 10, str(dados["sigla"]))
         c.setFillColorRGB(0, 0, 0)
         c.showPage()
     c.save()
 
 
+def sigla(ds, cfg):
+    """Sigla do aparelho (ex.: 'TA'), de [aparelhos] no config.ini, pelo numero de
+    serie que o proprio aparelho manda (ou pelo Station Name). Segue o aparelho
+    mesmo se ele trocar de sala. '' se o aparelho nao estiver na tabela."""
+    if ds is None:
+        return ""
+    serie = str(ds.get("DeviceSerialNumber", "") or "").strip().upper()
+    estacao = str(ds.get("StationName", "") or "").strip().upper()
+    siglas = (cfg or {}).get("aparelhos", {})
+    return (serie and siglas.get(serie)) or (estacao and siglas.get(estacao)) or ""
+
+
 def aparelho(ds, cfg):
-    """'Tambauzinho sala 8 · Vivid T8 · serie 123': de onde vieram as imagens.
-    A sala vem de [aparelhos] no config.ini (pela serie ou pelo Station Name);
-    modelo e serie vem do proprio DICOM."""
+    """'TA · Vivid T8 · serie 123': de onde vieram as imagens (log e metadados do PDF)."""
     if ds is None:
         return ""
     serie = str(ds.get("DeviceSerialNumber", "") or "").strip()
     estacao = str(ds.get("StationName", "") or "").strip()
     modelo = str(ds.get("ManufacturerModelName", "") or "").strip()
-    salas = (cfg or {}).get("aparelhos", {})
-    sala = salas.get(serie.upper()) or salas.get(estacao.upper()) or ""
-    partes = [sala, modelo or estacao]
+    partes = [sigla(ds, cfg), modelo or estacao]
     if serie:
         partes.append(f"série {serie}")
     return " · ".join(p for p in partes if p)
@@ -579,6 +588,7 @@ def dados_do_dicom(ref, cfg=None):
         "idade": f"{m.group(1)} anos" if m else "",
         "data": data_br(ref.get("StudyDate", "")),
         "aparelho": aparelho(ref, cfg),
+        "sigla": sigla(ref, cfg),
     }
 
 
@@ -1097,6 +1107,7 @@ def _folha_do_laudo(laudo, foto, cfg, tmp):
                     dados = dados_do_laudo(laudo, cfg["tipos"])
                     dados["data"] = data_br(ref.get("StudyDate", ""))  # data das imagens
                     dados["aparelho"] = aparelho(ref, cfg)
+                    dados["sigla"] = sigla(ref, cfg)
                     _desenhar(tmp, imagens, cfg, dados,
                               primeira_pagina=len(PdfReader(str(laudo)).pages) + 1)
                     return tmp
