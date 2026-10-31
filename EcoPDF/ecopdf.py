@@ -142,7 +142,7 @@ def carregar_config(caminho):
         "espera": c.getint("ESPERA_SEGUNDOS", 150),
         "colunas": c.getint("COLUNAS", 2),
         "linhas": c.getint("LINHAS", 3),
-        "quadro_loop": c.get("QUADRO_LOOP", "meio").strip().lower(),
+        "quadro_loop": c.get("QUADRO_LOOP", "ignorar").strip().lower(),
         "simbolo": pasta("SIMBOLO", "simbolo.png"),
         "rodape": [l.strip() for l in c.get("RODAPE", "").split("|") if l.strip()],
         "manter_dicom_dias": c.getint("MANTER_DICOM_DIAS", 30),
@@ -281,6 +281,12 @@ def _sem_perda(ds):
 def on_store(event, cfg):
     try:
         ds = event.dataset
+        quadros = int(ds.get("NumberOfFrames", 1) or 1)
+        if quadros > 1 and cfg["quadro_loop"] == "ignorar":
+            # loop (video): aceito para o aparelho nao reenviar, mas nao guardo nem uso
+            log.info("Loop ignorado de %s: %s | quadros=%s",
+                     event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")), quadros)
+            return 0x0000
         estudo = str(ds.get("StudyInstanceUID", "")).strip() or "sem-estudo"
         sop = str(ds.get("SOPInstanceUID", "")).strip() or str(time.time_ns())
         pasta = cfg["pasta_dicom"] / limpar_arquivo(estudo, 64)
