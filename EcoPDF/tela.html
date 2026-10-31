@@ -350,6 +350,7 @@ window.addEventListener("beforeunload", e => { if (sujo) { e.preventDefault(); e
 
 // ---------------- rotas ----------------
 function rota() {
+  document.querySelectorAll(".fundo").forEach(f => f.style.display = "none");
   const q = new URLSearchParams(location.hash.slice(1));
   if (q.get("e")) {
     $("lista").style.display = "none"; $("exame").style.display = "flex";
