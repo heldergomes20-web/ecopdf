@@ -20,6 +20,7 @@ echo  Dados para cadastrar no Vivid:
 echo    AE Title: %AET%
 echo    Porta:    %PORTA%
 for /f "tokens=2 delims=:" %%i in ('ipconfig ^| findstr /c:"IPv4"') do echo    IP:      %%i
+powershell -NoProfile -Command "$d=Get-PSDrive C; $u=(Get-ChildItem dicom -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum; '  Disco C: {0:N1} GB livres  |  imagens originais guardadas: {1:N2} GB' -f ($d.Free/1GB), ($u/1GB)"
 echo.
 echo  Ultimas linhas do registro:
 if exist log\ecopdf.log powershell -NoProfile -Command "Get-Content -Tail 15 -Encoding UTF8 'log\ecopdf.log'"

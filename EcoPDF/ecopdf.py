@@ -142,7 +142,7 @@ def carregar_config(caminho):
         "espera": c.getint("ESPERA_SEGUNDOS", 150),
         "colunas": c.getint("COLUNAS", 2),
         "linhas": c.getint("LINHAS", 3),
-        "quadro_loop": c.get("QUADRO_LOOP", "meio").strip().lower(),
+        "quadro_loop": c.get("QUADRO_LOOP", "ignorar").strip().lower(),
         "simbolo": pasta("SIMBOLO", "simbolo.png"),
         "rodape": [l.strip() for l in c.get("RODAPE", "").split("|") if l.strip()],
         "manter_dicom_dias": c.getint("MANTER_DICOM_DIAS", 30),
@@ -281,6 +281,12 @@ def _sem_perda(ds):
 def on_store(event, cfg):
     try:
         ds = event.dataset
+        quadros = int(ds.get("NumberOfFrames", 1) or 1)
+        if quadros > 1 and cfg["quadro_loop"] == "ignorar":
+            # loop (video): aceito para o aparelho nao reenviar, mas nao guardo nem uso
+            log.info("Loop ignorado de %s: %s | quadros=%s",
+                     event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")), quadros)
+            return 0x0000
         estudo = str(ds.get("StudyInstanceUID", "")).strip() or "sem-estudo"
         sop = str(ds.get("SOPInstanceUID", "")).strip() or str(time.time_ns())
         pasta = cfg["pasta_dicom"] / limpar_arquivo(estudo, 64)
@@ -290,9 +296,9 @@ def on_store(event, cfg):
         # reenvio da mesma imagem sobrescreve o mesmo arquivo
         gravar_atomico(pasta / (limpar_arquivo(sop, 64) + ".dcm"),
                        lambda p: p.write_bytes(dados))
-        log.info("Recebida de %s: %s | %s | quadros=%s | campos de tipo: %s",
+        log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
-                 ds.get("Modality", "?"), ds.get("NumberOfFrames", 1),
+                 ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
                  {k: str(ds.get(k)) for k in CAMPOS_TIPO if ds.get(k)})
         return 0x0000
     except Exception:
@@ -440,7 +446,7 @@ def gerar_pdfs_do_estudo(pasta_estudo, cfg):
             while destino.exists():  # outro estudo do mesmo paciente/dia/tipo
                 destino = cfg["pasta_imagens"] / f"{base}_{n}.pdf"
                 n += 1
-        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref)))
+        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
         log.info("PDF de imagens: %s (%d imagens, %.1f MB)", destino.name, len(imagens),
                  destino.stat().st_size / 1e6)
         registro.append({"pdf": str(destino), "data": data, "paciente": paciente,
@@ -491,6 +497,7 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
 
     c = canvas.Canvas(str(caminho), pagesize=A4)
     c.setTitle(f"Imagens - {paciente}")
+    c.setCreator(f"EcoPDF {versao()}")
     c.setLineWidth(0.6)
     for p in range(total):
         if simbolo:
@@ -522,6 +529,13 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
             c.drawRightString(ix + w - 3, iy + 3, str(num))
 
         barra(52, 18, f"Página: {primeira_pagina + p}", 7, False)
+        if dados.get("sigla"):
+            # escondido: final da serie do aparelho, na ponta direita da barra cinza,
+            # em cinza pouco mais escuro que ela (para achar o exame no aparelho depois)
+            c.setFillColorRGB(0.56, 0.56, 0.56)
+            c.setFont("Helvetica", 5)
+            c.drawRightString(x1 - 4, 52 + 7, str(dados["sigla"]))
+            c.setFillColorRGB(0, 0, 0)
         c.setFont("Times-Bold", 8.5)
         for k, linha in enumerate(cfg["rodape"]):
             c.drawCentredString(larg / 2, 38 - k * 11, linha)
@@ -529,7 +543,30 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
     c.save()
 
 
-def dados_do_dicom(ref):
+def sigla(ds, cfg=None):
+    """Final (4 ultimos caracteres) do numero de serie de fabrica que o proprio
+    aparelho manda no DICOM. Identifica o aparelho onde quer que ele esteja,
+    sem tabela para manter. '' se o aparelho nao mandar a serie."""
+    if ds is None:
+        return ""
+    serie = re.sub(r"\s", "", str(ds.get("DeviceSerialNumber", "") or ""))
+    return serie[-4:].upper()
+
+
+def aparelho(ds, cfg):
+    """'Vivid T8 · serie 123456': de onde vieram as imagens (so no log)."""
+    if ds is None:
+        return ""
+    serie = str(ds.get("DeviceSerialNumber", "") or "").strip()
+    estacao = str(ds.get("StationName", "") or "").strip()
+    modelo = str(ds.get("ManufacturerModelName", "") or "").strip()
+    partes = [modelo or estacao]
+    if serie:
+        partes.append(f"série {serie}")
+    return " · ".join(p for p in partes if p)
+
+
+def dados_do_dicom(ref, cfg=None):
     idade = str(ref.get("PatientAge", "") or "")
     m = re.match(r"0*(\d+)Y", idade)
     return {
@@ -538,6 +575,7 @@ def dados_do_dicom(ref):
         "sexo": str(ref.get("PatientSex", "") or ""),
         "idade": f"{m.group(1)} anos" if m else "",
         "data": data_br(ref.get("StudyDate", "")),
+        "sigla": sigla(ref, cfg),
     }
 
 
@@ -910,7 +948,7 @@ def _aplicar_pedido(arq, m, cfg):
     if r is None:
         destino = cfg["pasta_imagens"] / base
         imagens = _numeradas(pasta, g["tipo"], itens)
-        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref)))
+        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
         arq.unlink()
     else:
         laudo = _laudo_guardado(r, cfg)
@@ -1055,6 +1093,7 @@ def _folha_do_laudo(laudo, foto, cfg, tmp):
                 if imagens:
                     dados = dados_do_laudo(laudo, cfg["tipos"])
                     dados["data"] = data_br(ref.get("StudyDate", ""))  # data das imagens
+                    dados["sigla"] = sigla(ref, cfg)
                     _desenhar(tmp, imagens, cfg, dados,
                               primeira_pagina=len(PdfReader(str(laudo)).pages) + 1)
                     return tmp
