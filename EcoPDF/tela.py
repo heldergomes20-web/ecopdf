@@ -481,6 +481,7 @@ def _handler(ep, cfg):
                     pdf = pdf_impressao(pasta, tipo, folhas, bool(corpo.get("laudo")), ep, cfg)
                     if pdf is None:
                         return self._enviar(404, {"erro": "nada para imprimir"})
+                    _anotar_impressao(cfg)
                     return self._enviar(200, pdf, "application/pdf")
                 if u.path == "/api/previa":
                     pdf = pdf_previa(pasta, tipo, ordem, fora, ep, cfg)
@@ -507,6 +508,20 @@ def abrir_se_fechada(cfg):
         return
     _estado["aberta_em"] = agora
     webbrowser.open(_estado["url"])
+
+
+def _anotar_impressao(cfg):
+    """Data e hora de cada uso do botao Imprimir (para o painel). Nada do paciente."""
+    arq = cfg["pasta_log"] / "impressoes.json"
+    try:
+        usos = json.loads(arq.read_text("utf-8"))
+    except (OSError, ValueError):
+        usos = []
+    usos = (usos + [datetime.now().isoformat(timespec="seconds")])[-300:]
+    try:
+        arq.write_text(json.dumps(usos), "utf-8")
+    except OSError:
+        pass
 
 
 def iniciar(cfg, ep):

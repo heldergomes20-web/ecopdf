@@ -17,7 +17,9 @@ var DIAS_UTEIS = {1: [9, 15], 2: [9, 15], 3: [9, 15], 4: [9, 15], 5: [9, 15], 6:
 var RELOGIO_MAX_MIN = 10;                // diferenca maxima PC x Google
 var REPO = 'heldergomes20-web/ecopdf';   // versao publicada (Latest) no GitHub
 var MAX_LINHAS = 60;
-var MAX_EXTRAS = 30;               // colunas novas que o EcoPDF pode criar sozinho
+var MAX_EXTRAS = 30;
+var MODELO_NOVO_HORAS = 24;         // impressora de modelo nunca visto: ATENCAO por esse tempo
+var BASE_MODELOS_DIAS = 3;          // modelos vistos nos 3 primeiros dias = os de hoje, sem aviso               // colunas novas que o EcoPDF pode criar sozinho
 
 var ABA = 'Salas', ABA_PCS = 'PCs', LIN0 = 4; // dados a partir da linha 4
 var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão',
@@ -26,7 +28,7 @@ var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão
   '9 - Revisar', 'Retificados (3 dias)', 'Liberados sem imagens (7 dias)', 'Descartados (7 dias)',
   'Sumiram da pasta 2 (7 dias)', 'Erros (24 h)', 'Disco livre (GB)', 'Disco enche em (dias)', 'Imagens guardadas (GB)', 'MB por exame',
   'Memória EcoPDF (MB)', 'CPU média (%)', 'Folha pronta em (s, média / máx 24 h)', 'Impressora', 'Ligado desde',
-  'IP anterior (apague depois de conferir o aparelho)', 'nivel_pc', 'problemas_pc', 'relogio_min'];
+  'IP anterior (apague depois de conferir o aparelho)', 'nivel_pc', 'problemas_pc', 'relogio_min', 'modelo_novo'];
 function col(nome) { return COLS.indexOf(nome) + 1; }
 
 // ---------------------------------------------------------------- recepcao
@@ -92,12 +94,13 @@ function doPost(e) {
     v['CPU média (%)'] = d.envio === 'manual' ? 'envio manual' : num(d.cpu_medio_pct);
     v['Folha pronta em (s, média / máx 24 h)'] = d.folha_s_media === null || d.folha_s_media === undefined ? 'sem exame' :
       num(d.folha_s_media) + ' / ' + num(d.folha_s_max);
-    v['Impressora'] = limpo(d.impressora, 120) || '—';
+    v['Impressora'] = limpo(d.impressora, 160) || '—';
     v['Ligado desde'] = d.envio === 'manual' ? 'envio manual' : dataBr(d.ligado_desde);
     v['IP anterior (apague depois de conferir o aparelho)'] = ipAnterior;
     v['nivel_pc'] = ['verde', 'amarelo', 'vermelho'].indexOf(d.nivel) >= 0 ? d.nivel : 'amarelo';
     v['problemas_pc'] = (Array.isArray(d.problemas) ? d.problemas : []).map(function (p) { return limpo(p, 160); }).slice(0, 12).join('; ');
     v['relogio_min'] = relogio;
+    v['modelo_novo'] = modeloNovo_(limpo(d.impressora_modelo, 60));
     v['Situação'] = antes[col('Situação') - 1] || '';
     v['O que olhar'] = '';
     sh.getRange(linha, 1, 1, COLS.length).setValues([COLS.map(function (k) { return v[k] === undefined ? '' : v[k]; })]);
@@ -129,6 +132,18 @@ function extras_(sh, linha, extras) {
   });
 }
 
+/** Guarda os modelos (driver) de impressora ja vistos em qualquer sala. Modelo nunca visto
+ *  (depois dos primeiros dias) volta o nome, para a sala ficar em ATENCAO por 24 h. */
+function modeloNovo_(modelo) {
+  if (!modelo || modelo.charAt(0) === "'") return '';
+  var p = PropertiesService.getScriptProperties();
+  var desde = Number(p.getProperty('MODELOS_DESDE') || 0);
+  if (!desde) { desde = Date.now(); p.setProperty('MODELOS_DESDE', String(desde)); }
+  var mod = JSON.parse(p.getProperty('MODELOS') || '{}');
+  if (!mod[modelo]) { mod[modelo] = Date.now(); p.setProperty('MODELOS', JSON.stringify(mod)); }
+  return mod[modelo] - desde > BASE_MODELOS_DIAS * 86400000 ? modelo : '';
+}
+
 function resp(ok, motivo) {
   return ContentService.createTextOutput(JSON.stringify({ok: ok, motivo: motivo || ''}))
     .setMimeType(ContentService.MimeType.JSON);
@@ -152,6 +167,7 @@ function conferir_() {
     '   ·   conferido em ' + fmt(new Date()) + '   ·   envios às 9h e 15h');
   if (n <= 0) return;
   var dados = sh.getRange(LIN0, 1, n, COLS.length).getValues();
+  var modelos = JSON.parse(PropertiesService.getScriptProperties().getProperty('MODELOS') || '{}');
   var saida = dados.map(function (r) {
     var prob = [], aten = [];
     var envio = r[col('Último envio') - 1];
@@ -168,6 +184,10 @@ function conferir_() {
     }
     var rel = r[col('relogio_min') - 1];
     if (rel !== '' && Math.abs(rel) > RELOGIO_MAX_MIN) prob.push('relogio do PC errado (' + rel + ' min)');
+    var mn = String(r[col('modelo_novo') - 1] || '');
+    if (mn && modelos[mn] && Date.now() - modelos[mn] < MODELO_NOVO_HORAS * 3600000) {
+      aten.push('impressora de modelo novo (' + mn + '): conferir a qualidade da foto impressa');
+    }
     var v = String(r[col('Versão') - 1] || '');
     if (publicada && compVersao(v, publicada) < 0) aten.push('versao antiga (' + v + ')');
     prob = prob.filter(String); aten = aten.filter(String);
@@ -260,7 +280,7 @@ function configurar() {
   sh.setColumnWidth(1, 120); sh.setColumnWidth(2, 95); sh.setColumnWidth(3, 320);
   sh.getRange(LIN0, col('Último envio'), MAX_LINHAS, 1).setNumberFormat('dd/MM HH:mm');
   sh.getRange(LIN0, col('O que olhar'), MAX_LINHAS, 1).setWrap(true);
-  sh.hideColumns(col('nivel_pc'), 3);
+  sh.hideColumns(col('nivel_pc'), 4);
   var faixa = sh.getRange(LIN0, col('Situação'), MAX_LINHAS, 1);
   var regra = function (txt, cor) {
     return SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(txt).setBackground(cor)

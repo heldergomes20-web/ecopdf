@@ -228,25 +228,70 @@ def _desempenho(cfg, ep, manual, agora, livre_gb):
     return d
 
 
-_impressora = {"em": 0.0, "valor": ""}
+FILA_PARADA_MIN = 10            # trabalho na fila da impressora ha mais que isso = impressora com problema
+ERROS_IMPRESSORA = {3: "pouco papel", 4: "sem papel", 5: "pouca tinta/toner", 6: "sem tinta/toner",
+                    7: "tampa aberta", 8: "papel atolado", 9: "offline", 10: "pede manutencao",
+                    11: "bandeja de saida cheia"}
+GRAVES = {4, 6, 7, 8, 9, 10, 11}  # impede imprimir; 3 e 5 so avisam
+PS_IMPRESSORA = r"""
+$p = Get-CimInstance Win32_Printer -Filter 'Default=true' | Select-Object -First 1
+if (-not $p) { '{}'; exit }
+$j = @(Get-CimInstance Win32_PrintJob | Where-Object { $_.Name.StartsWith($p.Name + ',') })
+$min = 0
+if ($j.Count) { $min = [int]((Get-Date) - ($j | Sort-Object TimeSubmitted | Select-Object -First 1).TimeSubmitted).TotalMinutes }
+[pscustomobject]@{ nome = $p.Name; driver = $p.DriverName; offline = [bool]$p.WorkOffline;
+  status = [int]$p.PrinterStatus; erro = [int]$p.DetectedErrorState; fila = $j.Count; fila_min = $min } |
+  ConvertTo-Json -Compress
+"""
 
 
 def _impressora_padrao():
-    """'Nome (driver)' da impressora padrao do Windows. Consulta 1x por hora."""
+    """Impressora padrao do Windows: nome, driver (= modelo), situacao e fila.
+    {} fora do Windows ou se a consulta falhar."""
     if os.name != "nt":
-        return ""
-    if time.time() - _impressora["em"] < 3600:
-        return _impressora["valor"]
-    cmd = ("$p=Get-CimInstance Win32_Printer -Filter 'Default=true' | Select-Object -First 1;"
-           "if($p){$p.Name+' ('+$p.DriverName+')'}")
+        return {}
     try:
-        r = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True,
-                           text=True, timeout=30, creationflags=0x08000000)
-        v = r.stdout.strip()[:120]
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", PS_IMPRESSORA], capture_output=True,
+                           text=True, timeout=40, creationflags=0x08000000)
+        i = json.loads(r.stdout.strip() or "{}")
     except Exception:
-        v = ""
-    _impressora.update(em=time.time(), valor=v)
-    return v
+        return {}
+    if not i:
+        return {"nome": "", "situacao": "nenhuma impressora padrao", "grave": True}
+    erro = int(i.get("erro") or 0)
+    if i.get("offline") or int(i.get("status") or 0) == 7:
+        sit, grave = "offline", True
+    elif erro in ERROS_IMPRESSORA:
+        sit, grave = ERROS_IMPRESSORA[erro], erro in GRAVES
+    elif int(i.get("status") or 0) == 6:
+        sit, grave = "parou de imprimir", True
+    else:
+        sit, grave = "pronta", False
+    fila, fila_min = int(i.get("fila") or 0), int(i.get("fila_min") or 0)
+    if fila and fila_min > FILA_PARADA_MIN:
+        grave = True
+    return {"nome": str(i.get("nome") or "")[:60], "driver": str(i.get("driver") or "")[:60],
+            "situacao": sit, "grave": grave, "fila": fila, "fila_min": fila_min}
+
+
+def _texto_impressora(i):
+    if not i:
+        return ""
+    if not i.get("nome"):
+        return i.get("situacao", "")
+    t = f"{i['nome']} ({i.get('driver', '')}) · {i['situacao']}"
+    if i.get("fila"):
+        t += f" · fila {i['fila']} (mais antigo {i.get('fila_min', 0)} min)"
+    return t[:160]
+
+
+def _usos_imprimir(cfg, agora):
+    """Quantas vezes o botao Imprimir da tela foi usado em 7 dias (so data e hora)."""
+    try:
+        usos = json.loads((cfg["pasta_log"] / "impressoes.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return sum(1 for u in usos if _recente(u, agora))
 
 
 def _ips():
@@ -342,14 +387,16 @@ def coletar(cfg, ep, manual=False):
         "erros_24h": _erros_24h(cfg),
         "disco_livre_gb": disco,
         "renomeador_ok": renomeador,
-        "impressora": _impressora_padrao(),
+        "impressora_info": _impressora_padrao(),
         "windows": platform.release()[:20],
     }
     d.update(_sinais(cfg, ep, reg, agora))
     d.update(_desempenho(cfg, ep, manual, agora, disco))
     # campos novos de versoes futuras: {rotulo da coluna: valor}. A planilha cria a coluna
     # sozinha, sem trocar o script. (Os avisos continuam vindo de avaliar(), daqui.)
-    d["extras"] = {}
+    d["impressora"] = _texto_impressora(d["impressora_info"])
+    d["impressora_modelo"] = d["impressora_info"].get("driver", "")
+    d["extras"] = {"Botão Imprimir usado (7 dias)": _usos_imprimir(cfg, agora)}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
 
@@ -377,6 +424,11 @@ def avaliar(d):
         amar.append(f"EcoPDF usando {d['memoria_mb']} MB de memória: reiniciar o PC")
     if (d.get("folha_s_max") or 0) > FOLHA_MAX_S:
         amar.append(f"folha de imagens demorou {d['folha_s_max']} s para ficar pronta (PC lento?)")
+    imp = d.get("impressora_info") or {}
+    if imp.get("grave"):
+        amar.append(f"impressora: {_texto_impressora(imp)}")
+    elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):
+        amar.append(f"impressora com {imp['situacao']}")
     if d["data_aparelho_ok"] is False:
         amar.append("data do aparelho diferente da do PC")
     if d["revisar"]:
