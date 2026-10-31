@@ -347,6 +347,9 @@ def coletar(cfg, ep, manual=False):
     }
     d.update(_sinais(cfg, ep, reg, agora))
     d.update(_desempenho(cfg, ep, manual, agora, disco))
+    # campos novos de versoes futuras: {rotulo da coluna: valor}. A planilha cria a coluna
+    # sozinha, sem trocar o script. (Os avisos continuam vindo de avaliar(), daqui.)
+    d["extras"] = {}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
 

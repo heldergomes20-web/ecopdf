@@ -17,6 +17,7 @@ var DIAS_UTEIS = {1: [9, 15], 2: [9, 15], 3: [9, 15], 4: [9, 15], 5: [9, 15], 6:
 var RELOGIO_MAX_MIN = 10;                // diferenca maxima PC x Google
 var REPO = 'heldergomes20-web/ecopdf';   // versao publicada (Latest) no GitHub
 var MAX_LINHAS = 60;
+var MAX_EXTRAS = 30;               // colunas novas que o EcoPDF pode criar sozinho
 
 var ABA = 'Salas', ABA_PCS = 'PCs', LIN0 = 4; // dados a partir da linha 4
 var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão',
@@ -100,11 +101,32 @@ function doPost(e) {
     v['Situação'] = antes[col('Situação') - 1] || '';
     v['O que olhar'] = '';
     sh.getRange(linha, 1, 1, COLS.length).setValues([COLS.map(function (k) { return v[k] === undefined ? '' : v[k]; })]);
+    extras_(sh, linha, d.extras);
     conferir_();
   } finally {
     lock.releaseLock();
   }
   return resp(true);
+}
+
+/** Campos novos do EcoPDF (d.extras = {rotulo: valor}) viram colunas sozinhos, depois das
+ *  fixas: versao nova do EcoPDF acrescenta informacao sem precisar trocar este script. */
+function extras_(sh, linha, extras) {
+  if (!extras || typeof extras !== 'object') return;
+  var largura = Math.max(sh.getLastColumn(), COLS.length);
+  var cab = sh.getRange(LIN0 - 1, 1, 1, largura).getValues()[0].map(String);
+  Object.keys(extras).slice(0, MAX_EXTRAS).forEach(function (k) {
+    var rot = limpo(k, 40);
+    if (!rot || rot.charAt(0) === "'") return; // rotulo que pareceria formula: ignora
+    var c = cab.indexOf(rot);
+    if (c < 0) {
+      if (cab.length >= COLS.length + MAX_EXTRAS) return;
+      cab.push(rot); c = cab.length - 1;
+      sh.getRange(LIN0 - 1, c + 1).setValue(rot).setFontWeight('bold').setBackground('#eceff1').setWrap(true);
+    }
+    var x = extras[k];
+    sh.getRange(linha, c + 1).setValue(typeof x === 'number' ? x : limpo(x, 120));
+  });
 }
 
 function resp(ok, motivo) {
