@@ -97,7 +97,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
   </div>
   <div class="cartao">
     <table>
-      <thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Tipo</th><th>Aparelho</th><th>Imagens</th><th>Medidas</th><th>Situação</th></tr></thead>
+      <thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Tipo</th><th>Aparelho</th><th>Imagens</th><th>Medidas</th><th>Situação</th><th></th></tr></thead>
       <tbody id="linhas"></tbody>
     </table>
     <div class="vazio" id="vazio" style="display:none">Nenhum exame neste filtro.</div>
@@ -212,13 +212,17 @@ function desenharLista() {
     <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td>${esc(e.tipo_nome)}</td>
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
     <td class="${e.medidas ? "" : "quieto"}">${e.sem_medidas ? "não exibidas" : (e.medidas ? "✓ recebidas" : "— não recebidas")}</td>
-    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span></td></tr>`).join("");
+    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span></td>
+    <td style="text-align:right">${e.situacao === "Finalizado" ? `<button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
   $("vazio").style.display = lista.length ? "none" : "block";
 }
 document.querySelectorAll("[data-dias]").forEach(b => b.onclick = () => { filtro.dias = Number(b.dataset.dias); filtro.semLaudo = false; salvarFiltro(); desenharLista(); });
 $("b-semlaudo").onclick = () => { filtro.semLaudo = !filtro.semLaudo; salvarFiltro(); desenharLista(); };
 $("busca").oninput = e => { filtro.busca = e.target.value; desenharLista(); };
-$("linhas").onclick = e => { const tr = e.target.closest("tr"); if (!tr) return; const x = exames[Number(tr.dataset.k)]; location.hash = `e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; };
+$("linhas").onclick = e => {
+  const bi = e.target.closest("[data-imp]");
+  if (bi) { imprimirDaLista(exames[Number(bi.dataset.imp)]); return; }
+  const tr = e.target.closest("tr"); if (!tr) return; const x = exames[Number(tr.dataset.k)]; location.hash = `e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; };
 function salvarFiltro() { try { localStorage.setItem("ecopdf-filtro", JSON.stringify({dias: filtro.dias, semLaudo: filtro.semLaudo})); } catch (e) {} }
 
 // ---------------- exame ----------------
@@ -231,7 +235,7 @@ async function abrirExame(estudo, tipo) {
   $("e-nome").textContent = ex.paciente;
   $("e-sub").textContent = `${ex.tipo_nome} · ${ex.data} ${hora(ex.hora)} · aparelho ${ex.sigla || "?"} · ${ex.situacao}`;
   $("e-sub").title = ex.aparelho || "";
-  $("b-imprimir").style.display = ex.impressao ? "" : "none";
+  botaoImprimir();
   painel(); desenharTiras(); mostrar(0);
 }
 function horaDe(id) { const i = ex.imagens.find(x => x.id === id); return i ? i.hora : ""; }
@@ -240,6 +244,7 @@ function contagem() {
   const n = ordem.length - fora.size, pg = Math.ceil(n / ex.por_pagina);
   $("e-cont").innerHTML = `Folha: <b style="color:#1d2433">${n} de ${ordem.length}</b> imagens · ${pg} página(s)`;
   $("e-sujo").style.display = sujo ? "inline" : "none";
+  if (ex) botaoImprimir();
 }
 function img(id, s) { return `/img?e=${encodeURIComponent(ex.estudo)}&i=${encodeURIComponent(id)}&s=${s}`; }
 function desenharTiras() {
@@ -352,10 +357,26 @@ async function salvar() {
   $("b-salvar").disabled = false; contagem();
 }
 // ---------------- impressao ----------------
-function abrirImpressao() {
-  if (sujo) { aviso("Salve a folha antes de imprimir: a impressão usa o exame salvo.", true); return; }
-  const p = ex.impressao; if (!p) return;
-  const pp = ex.por_pagina; let h = "";
+let imp = null;   // exame a imprimir (da tela do exame ou da lista)
+function botaoImprimir() {
+  const b = $("b-imprimir"); b.style.display = "";
+  b.disabled = !ex.impressao;
+  b.textContent = ex.impressao ? "Imprimir" : "Imprimir (aguardando laudo)";
+  b.classList.toggle("pri", !!ex.impressao && !sujo);
+  $("b-salvar").classList.toggle("pri", !ex.impressao || sujo);
+}
+async function imprimirDaLista(x) {
+  try {
+    const r = await fetch(`/api/exame?e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`);
+    const d = await r.json();
+    if (!r.ok || !d.impressao) { aviso("Este exame ainda não tem laudo para imprimir.", true); return; }
+    abrirImpressao(d);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+}
+function abrirImpressao(d) {
+  if (d === ex && sujo) { aviso("Salve a folha antes de imprimir: a impressão usa o exame salvo.", true); return; }
+  imp = d; const p = d.impressao; if (!p) return;
+  const pp = d.por_pagina; let h = "";
   for (let f = 1; f <= p.folhas; f++)
     h += `<label class="opc"><input type="checkbox" data-folha="${f}" ${f === 1 ? "checked" : ""}> Folha de fotos ${f}${p.folhas > 1 ? ` <span class="quieto pq">(imagens ${(f - 1) * pp + 1}–${f * pp})</span>` : ""}</label>`;
   h += `<label class="opc"><input type="checkbox" id="i-laudo" checked> Laudo <span class="quieto pq">(${p.laudo} página${p.laudo > 1 ? "s" : ""}, papel comum)</span></label>`;
@@ -382,7 +403,7 @@ async function imprimir() {
   $("i-sim").disabled = true;
   try {
     const r = await fetch("/api/imprimir", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({e: ex.estudo, t: ex.tipo, folhas: esc.folhas, laudo: esc.laudo})});
+      body: JSON.stringify({e: imp.estudo, t: imp.tipo, folhas: esc.folhas, laudo: esc.laudo})});
     if (!r.ok) { aviso("Não consegui montar a impressão.", true); $("i-sim").disabled = false; return; }
     const url = URL.createObjectURL(await r.blob());
     const q = $("i-quadro");
@@ -394,7 +415,20 @@ async function imprimir() {
     $("m-imp").style.display = "none";
   } catch (e) { aviso("Sem conexão com o EcoPDF.", true); $("i-sim").disabled = false; }
 }
-$("b-imprimir").onclick = abrirImpressao;
+$("b-imprimir").onclick = () => abrirImpressao(ex);
+// tela do exame aberta enquanto o laudo e feito: o botao acende sozinho quando o laudo junta
+setInterval(async () => {
+  if (!ex || ex.impressao || document.hidden) return;
+  try {
+    const r = await fetch(`/api/exame?e=${encodeURIComponent(ex.estudo)}&t=${encodeURIComponent(ex.tipo)}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!ex || d.estudo !== ex.estudo || d.tipo !== ex.tipo || !d.impressao) return;
+    ex.impressao = d.impressao; ex.situacao = d.situacao; ex.final = d.final;
+    $("e-sub").textContent = `${ex.tipo_nome} · ${ex.data} ${hora(ex.hora)} · aparelho ${ex.sigla || "?"} · ${ex.situacao}`;
+    botaoImprimir(); aviso("Laudo juntado com as imagens: pronto para imprimir.");
+  } catch (e) {}
+}, 5000);
 $("i-nao").onclick = () => { $("m-imp").style.display = "none"; };
 $("i-sim").onclick = imprimir;
 $("b-previa").onclick = previa;
