@@ -141,6 +141,65 @@ def listar_exames(ep, cfg):
     return exames
 
 
+LAUDO_ESPERA_MIN = 3  # laudo recem-impresso costuma juntar em segundos: so mostra depois disso
+
+
+def laudos_sem_imagens(ep, cfg):
+    """Laudos parados na pasta 1 (sem par na pasta 2), com o motivo. So leitura."""
+    pasta = cfg["pasta_laudos"]
+    if not pasta.exists():
+        return []
+    agora = time.time()
+    fotos = ep._listar(cfg["pasta_imagens"], cfg, agora + 60)
+    laudos = ep._listar(pasta, cfg, agora + 60)
+    out = []
+    for arq in sorted(pasta.glob("*.pdf")):
+        try:
+            idade = agora - arq.stat().st_mtime
+        except OSError:
+            continue
+        if idade < LAUDO_ESPERA_MIN * 60 or ep.SEM_IMG.match(arq.stem) or ep.PEDIDO.match(arq.stem):
+            continue
+        info = ep.ler_nome(arq, cfg["tipos"])
+        if info:
+            data, nome, tipo = info
+            motivo = None
+            for l in laudos:
+                if l[0] == arq:
+                    _, motivo = ep._casar(l, laudos, fotos, cfg)
+            if motivo and motivo.startswith("sem PDF de imagens"):
+                motivo = "nenhuma imagem deste paciente nesta data (nome diferente no aparelho ou exame sem fotos)"
+        else:
+            data, nome, tipo, motivo = "", arq.stem, "", "nome fora do padrao AAAA_MM_DD_Nome_Tipo"
+        out.append({"laudo": arq.name, "paciente": nome.upper(), "data": data,
+                    "tipo_nome": (tipo or "Exame").replace("_", " "),
+                    "minutos": int(idade // 60), "motivo": motivo or "aguardando a juncao",
+                    "liberavel": bool(info)})
+    return out
+
+
+def liberar_sem_imagens(nome, ep, cfg):
+    """Botao 'Liberar sem imagens': renomeia o laudo da pasta 1 com ' sem imagens'
+    (o mesmo pedido de sempre; o vigia libera em ate 10 s). (ok, mensagem)."""
+    arq = cfg["pasta_laudos"] / Path(nome).name
+    if Path(nome).name != nome or arq.suffix.lower() != ".pdf" or not arq.is_file():
+        return False, "Laudo nao encontrado na pasta 1 (talvez ja tenha juntado)."
+    info = ep.ler_nome(arq, cfg["tipos"])
+    if not info:
+        return False, "Nome do laudo fora do padrao: renomeie na pasta 1."
+    data, paciente, tipo = info
+    if any(f[1] == data and f[3] == tipo and ep._mesmo_paciente(f[2], paciente, cfg)
+           for f in ep._listar(cfg["pasta_imagens"], cfg, time.time() + 60)):
+        return False, "Ha imagens deste exame na pasta 2: elas vao juntar, nao libere sem imagens."
+    with ep.TRAVA:
+        try:
+            arq.rename(arq.with_name(arq.stem + " sem imagens.pdf"))
+        except OSError:
+            return False, "Laudo aberto em outro programa: feche e tente de novo."
+    ep.log.info("Tela: laudo liberado sem imagens: %s", arq.name)
+    return True, "Laudo liberado sem imagens: vai para a pasta 3 em alguns segundos."
+
+
 def _pasta(estudo, cfg):
     """Pasta do estudo, sem permitir sair de dicom/."""
     if not estudo or "/" in estudo or "\\" in estudo or estudo.startswith("."):
@@ -323,6 +382,7 @@ def _handler(ep, cfg):
                     return self._enviar(200, html.encode("utf-8"), "text/html; charset=utf-8")
                 if u.path == "/api/exames":
                     return self._enviar(200, {"exames": listar_exames(ep, cfg), "versao": ep.versao(),
+                                              "laudos_sem_imagens": laudos_sem_imagens(ep, cfg),
                                               "dias_guardados": cfg["manter_dicom_dias"],
                                               "agora": datetime.now().strftime("%H:%M:%S")})
                 if u.path == "/api/exame":
@@ -347,6 +407,9 @@ def _handler(ep, cfg):
             try:
                 n = int(self.headers.get("Content-Length", 0) or 0)
                 corpo = json.loads(self.rfile.read(n) or b"{}")
+                if u.path == "/api/liberar":
+                    ok, msg = liberar_sem_imagens(str(corpo.get("laudo", "")), ep, cfg)
+                    return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
                 pasta = _pasta(str(corpo.get("e", "")), cfg)
                 if pasta is None:
                     return self._enviar(404, {"erro": "exame nao encontrado"})

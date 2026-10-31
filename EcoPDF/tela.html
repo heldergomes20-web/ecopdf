@@ -76,6 +76,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
 .papel{background:#fff6dd;border:1px solid #f0d58a;border-radius:8px;padding:10px 12px;margin-top:12px;line-height:1.45}
 #aviso{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--tinta);color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:20;max-width:80%}
 #aviso.erro{background:#a12a2a}
+tr.sem-img{cursor:default;background:#fff8f8}
 </style>
 </head>
 <body>
@@ -93,7 +94,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
     <button class="btn" data-dias="30">30 dias</button>
     <button class="btn" data-dias="9999" id="b-tudo">6 meses (tudo)</button>
     <span style="width:14px"></span>
-    <button class="btn alerta" id="b-semlaudo">Sem laudo <span class="cont" id="n-semlaudo">0</span></button>
+    <button class="btn alerta" id="b-semlaudo" title="Imagens sem laudo e laudos sem imagens">Pendentes <span class="cont" id="n-semlaudo">0</span></button>
     <input class="busca" id="busca" placeholder="Buscar paciente ou código do aparelho…">
   </div>
   <div class="cartao">
@@ -103,7 +104,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
     </table>
     <div class="vazio" id="vazio" style="display:none">Nenhum exame neste filtro.</div>
   </div>
-  <p class="quieto pq">Clique no paciente para abrir. “Sem laudo” = imagens ainda não juntadas a um laudo. A lista se atualiza sozinha.</p>
+  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” = imagens ainda sem laudo e laudos ainda sem imagens. A lista se atualiza sozinha.</p>
 </div>
 
 <div id="exame">
@@ -175,6 +176,7 @@ const SEM_LAUDO = ["Recebendo","Novo","Folha ajustada","Pendente"];
 let filtro = {dias: 0, semLaudo: false, busca: ""};
 try { const f = JSON.parse(localStorage.getItem("ecopdf-filtro") || "null"); if (f) filtro = Object.assign(filtro, f, {busca: ""}); } catch (e) {}
 let exames = [];
+let laudosSemImg = [];
 let ex = null;          // exame aberto
 let ordem = [], fora = new Set(), atual = 0, sujo = false, zoom = 1, pan = {x: 0, y: 0};
 
@@ -192,6 +194,7 @@ async function carregarLista() {
   try {
     const r = await fetch("/api/exames"); const d = await r.json();
     exames = d.exames || [];
+    laudosSemImg = d.laudos_sem_imagens || [];
     $("atualizado").textContent = `Atualizado ${d.agora} · atualiza sozinho · EcoPDF ${d.versao}`;
     $("b-tudo").textContent = `${Math.round((d.dias_guardados || 180) / 30)} meses (tudo)`;
     desenharLista();
@@ -202,8 +205,9 @@ function desenharLista() {
   const limite = new Date(hoje); limite.setDate(limite.getDate() - (filtro.dias >= 9999 ? 100000 : filtro.dias));
   const lim = `${limite.getFullYear()}${String(limite.getMonth()+1).padStart(2,"0")}${String(limite.getDate()).padStart(2,"0")}`;
   const semLaudo = exames.filter(e => SEM_LAUDO.includes(e.situacao));
-  $("n-semlaudo").textContent = semLaudo.length;
-  document.title = (semLaudo.length ? `(${semLaudo.length}) ` : "") + "EcoPDF – Exames";
+  const nPend = semLaudo.length + laudosSemImg.length;
+  $("n-semlaudo").textContent = nPend;
+  document.title = (nPend ? `(${nPend}) ` : "") + "EcoPDF – Exames";
   const b = filtro.busca.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   let lista = filtro.semLaudo ? semLaudo : exames.filter(e => (e.data || "99999999") >= lim);
   if (b) lista = exames.filter(e => (e.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") + " " + (e.sigla || "").toLowerCase()).includes(b));
@@ -215,12 +219,37 @@ function desenharLista() {
     <td class="${e.medidas ? "" : "quieto"}">${e.sem_medidas ? "não exibidas" : (e.medidas ? "✓ recebidas" : "— não recebidas")}</td>
     <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span></td>
     <td style="text-align:right">${e.situacao === "Finalizado" ? `<button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
-  $("vazio").style.display = lista.length ? "none" : "block";
+  let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim);
+  if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
+  $("linhas").insertAdjacentHTML("afterbegin", laudos.map(l => `<tr class="sem-img">
+    <td>${dataBr(l.data)}</td><td class="quieto">—</td><td><b>${esc(l.paciente)}</b></td><td>${esc(l.tipo_nome)}</td>
+    <td class="quieto">—</td><td colspan="2" class="quieto pq">${esc(l.motivo)} · há ${tempo(l.minutos)}</td>
+    <td><span class="selo s-Pendente">Laudo sem imagens</span></td>
+    <td style="text-align:right">${l.liberavel ? `<button class="btn" data-lib="${esc(l.laudo)}">Liberar sem imagens</button>` : ""}</td></tr>`).join(""));
+  $("vazio").style.display = lista.length + laudos.length ? "none" : "block";
+}
+function tempo(m) { return m >= 1440 ? `${Math.floor(m / 1440)} d` : m >= 60 ? `${Math.floor(m / 60)} h` : `${m} min`; }
+async function liberar(bt) {
+  if (bt.dataset.conf !== "1") {
+    bt.dataset.conf = "1"; bt.classList.add("alerta", "on"); bt.textContent = "Confirmar: sem imagens";
+    setTimeout(() => { if (bt.isConnected) { bt.dataset.conf = ""; bt.classList.remove("alerta", "on"); bt.textContent = "Liberar sem imagens"; } }, 5000);
+    return;
+  }
+  bt.disabled = true;
+  try {
+    const r = await fetch("/api/liberar", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({laudo: bt.dataset.lib})});
+    const d = await r.json();
+    aviso(d.ok ? d.mensagem : d.erro, !d.ok);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+  setTimeout(carregarLista, 1500);
 }
 document.querySelectorAll("[data-dias]").forEach(b => b.onclick = () => { filtro.dias = Number(b.dataset.dias); filtro.semLaudo = false; salvarFiltro(); desenharLista(); });
 $("b-semlaudo").onclick = () => { filtro.semLaudo = !filtro.semLaudo; salvarFiltro(); desenharLista(); };
 $("busca").oninput = e => { filtro.busca = e.target.value; desenharLista(); };
 $("linhas").onclick = e => {
+  const bl = e.target.closest("[data-lib]");
+  if (bl) { liberar(bl); return; }
+  if (e.target.closest("tr.sem-img")) return;
   const bi = e.target.closest("[data-imp]");
   if (bi) { imprimirDaLista(exames[Number(bi.dataset.imp)]); return; }
   const tr = e.target.closest("tr"); if (!tr) return; const x = exames[Number(tr.dataset.k)]; location.hash = `e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; };
@@ -455,7 +484,7 @@ function rota() {
   }
 }
 window.addEventListener("hashchange", rota);
-setInterval(() => { if (!ex) carregarLista(); else fetch("/api/exames").then(r => r.json()).then(d => { exames = d.exames || []; const n = exames.filter(e => SEM_LAUDO.includes(e.situacao)).length; document.title = (n ? `(${n}) ` : "") + "EcoPDF – Exames"; }).catch(() => {}); }, 15000);
+setInterval(() => { if (!ex) carregarLista(); else fetch("/api/exames").then(r => r.json()).then(d => { exames = d.exames || []; laudosSemImg = d.laudos_sem_imagens || []; const n = exames.filter(e => SEM_LAUDO.includes(e.situacao)).length + laudosSemImg.length; document.title = (n ? `(${n}) ` : "") + "EcoPDF – Exames"; }).catch(() => {}); }, 15000);
 rota();
 </script>
 </body>

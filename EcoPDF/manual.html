@@ -73,7 +73,7 @@ li{margin:4px 0}
 <h2 id="tela">A tela EcoPDF - Exames</h2>
 <p>É uma aba do navegador, só do PC de laudo, que abre sozinha quando o Windows entra. Se você fechar, reabra pelo atalho <b>EcoPDF - Exames</b> na Área de Trabalho. Ela se atualiza sozinha; não precisa recarregar.</p>
 <p><b>Dúvida?</b> O botão <b>? Manual</b>, no alto da tela, abre este guia, sempre na versão instalada no PC. Abre mesmo sem internet.</p>
-<p><b>Lista de exames.</b> Mostra os exames de hoje, com os filtros <b>7 dias</b>, <b>30 dias</b> e <b>6 meses (tudo)</b>. O botão <b>Sem laudo</b> mostra só o que ainda não juntou com um laudo, e o número dele aparece também no título da aba. A busca aceita o nome do paciente ou o código do aparelho (os 4 caracteres finais do número de série). Clique no paciente para abrir o exame.</p>
+<p><b>Lista de exames.</b> Mostra os exames de hoje, com os filtros <b>7 dias</b>, <b>30 dias</b> e <b>6 meses (tudo)</b>. O botão <b>Pendentes</b> mostra o que ainda não juntou: imagens sem laudo e laudos sem imagens (estes aparecem alguns minutos depois de impressos, com o motivo). O número aparece também no título da aba. A busca aceita o nome do paciente ou o código do aparelho (os 4 caracteres finais do número de série). Clique no paciente para abrir o exame.</p>
 <p><b>Tela do exame.</b></p>
 <ul>
   <li>Imagem grande com zoom (roda do mouse ou botões − / +); arraste para mover a imagem ampliada. As setas ← → trocam de imagem.</li>
@@ -127,7 +127,7 @@ li{margin:4px 0}
   <tr><td><b>Imagem a mais</b></td><td>Na tela <b>EcoPDF - Exames</b>, abra o exame, clique no ✓ da imagem e em <b>Salvar folha</b></td><td>A folha é refeita sem a imagem; se já estava finalizado, volta à pasta 3 com <code>_retificado</code></td><td>Não é possível: o exame não aparece mais na tela</td></tr>
   <tr><td><b>Tirou sem querer</b></td><td>Na tela, clique de novo no ✓ da imagem e em <b>Salvar folha</b></td><td>A imagem volta</td><td>Não é possível</td></tr>
   <tr><td><b>Ordem das imagens</b></td><td>Na tela, arraste a miniatura para a posição certa e clique em Salvar folha</td><td>A folha é refeita na nova ordem</td><td>Não é possível</td></tr>
-  <tr><td><b>Exame sem imagens</b></td><td>Renomeie o laudo da pasta 1 acrescentando <code>sem imagens</code></td><td>O laudo vai sozinho para a pasta 3. Se as imagens chegarem depois, ele junta e avisa</td><td>Igual</td></tr>
+  <tr><td><b>Exame sem imagens</b></td><td>Na tela, em <b>Pendentes</b>, clique em <b>Liberar sem imagens</b> na linha do laudo e confirme (ou renomeie o laudo da pasta 1 acrescentando <code>sem imagens</code>)</td><td>O laudo vai sozinho para a pasta 3. Se as imagens chegarem depois, ele junta e avisa</td><td>Igual</td></tr>
   <tr><td><b>Laudo de antes da instalação</b></td><td>Suba como antes, sem o EcoPDF</td><td>Não se aplica</td><td>O laudo reimpresso fica parado na pasta 1 e aparece no PENDENTES. Tire de lá</td></tr>
 </table>
 <p>Os 6 meses (180 dias) contam a partir da data do exame. É o tempo que o PC guarda as imagens originais. Depois disso, ele mantém só a folha de imagens pronta, que ainda serve para corrigir o laudo.</p>
