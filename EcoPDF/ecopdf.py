@@ -153,6 +153,8 @@ def carregar_config(caminho):
         "renomeador": c.get("RENOMEADOR", "sim").strip().lower() in ("sim", "s", "1", "yes", "true"),
         "sufixo_refeito": c.get("SUFIXO_REFEITO", "_retificado").strip(),
         "pendentes_minutos": c.getint("PENDENTES_MINUTOS", 30),
+        "qualidade_jpeg": min(95, max(50, c.getint("QUALIDADE_JPEG", 80))),
+        "largura_max": max(0, c.getint("LARGURA_MAX_IMAGEM", 1000)),
         "porta_tela": c.getint("TELA_PORTA", 8765),
         "abrir_tela": c.get("TELA_ABRIR", "sim").strip().lower() in ("sim", "s", "1", "yes", "true"),
         "tipos": tipos,
@@ -545,8 +547,11 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
             cy = topo - pad - (lin + 1) * cel_h - lin * esp
             esc = min(cel_w / img.width, cel_h / img.height)
             w, h = img.width * esc, img.height * esc
+            lim = cfg.get("largura_max", 0)
+            if lim and img.width > lim:   # so reduz; ~360 dpi na celula de 7 cm
+                img = img.resize((lim, max(1, round(img.height * lim / img.width))), Image.LANCZOS)
             buf = io.BytesIO()
-            img.save(buf, "JPEG", quality=92)
+            img.save(buf, "JPEG", quality=cfg.get("qualidade_jpeg", 80))
             buf.seek(0)
             ix, iy = cx + (cel_w - w) / 2, cy + (cel_h - h) / 2
             c.drawImage(ImageReader(buf), ix, iy, w, h)
