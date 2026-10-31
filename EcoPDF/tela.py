@@ -112,6 +112,18 @@ def _situacao(pasta, tipo, g, reg, ep, cfg):
     return "Fora da pasta 2"
 
 
+def _subir_de_novo(g, reg, ep):
+    """Final refeito nos ultimos 3 dias (mesma regra do PENDENTES): motivo, senao ''."""
+    r = ep.registro_do_grupo(g, reg) if g else None
+    em = (r or {}).get("corrigido_em")
+    try:
+        if em and time.time() - datetime.fromisoformat(em).timestamp() < 3 * 86400:
+            return f"{(r.get('motivo') or 'LAUDO CORRIGIDO').capitalize()} em {datetime.fromisoformat(em):%d/%m %H:%M}"
+    except ValueError:
+        pass
+    return ""
+
+
 def listar_exames(ep, cfg):
     reg = ep._ler_registro(cfg)
     exames = []
@@ -136,6 +148,7 @@ def listar_exames(ep, cfg):
                 "medidas": med.categoria(tipo) != "" and info["srs"] > 0,
                 "sem_medidas": med.categoria(tipo) == "",
                 "situacao": _situacao(pasta, tipo, g, reg, ep, cfg),
+                "subir_de_novo": _subir_de_novo(g, reg, ep),
             })
     exames.sort(key=lambda e: (e["data"], e["hora"]), reverse=True)
     return exames
@@ -166,7 +179,10 @@ def laudos_sem_imagens(ep, cfg):
             motivo = None
             for l in laudos:
                 if l[0] == arq:
-                    _, motivo = ep._casar(l, laudos, fotos, cfg)
+                    foto, motivo = ep._casar(l, laudos, fotos, cfg)
+                    if foto is not None:
+                        motivo = ("as imagens foram achadas, mas um dos PDFs esta aberto em outro "
+                                  "programa: feche para juntar")
             if motivo and motivo.startswith("sem PDF de imagens"):
                 motivo = "nenhuma imagem deste paciente nesta data (nome diferente no aparelho ou exame sem fotos)"
         else:

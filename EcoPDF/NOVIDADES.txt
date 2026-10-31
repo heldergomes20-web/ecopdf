@@ -6,6 +6,7 @@ Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar
 - Tela "EcoPDF - Exames" no navegador (so neste PC): abre sozinha ao entrar no Windows e tem atalho na Area de Trabalho.
 - Lista de exames com filtros Hoje / 7 dias / 30 dias / 6 meses e "Pendentes" (com contador, tambem no titulo da aba); busca por nome ou codigo do aparelho.
 - Pendentes inclui laudos sem imagens (pasta 1 ha mais de 3 min), com o motivo e o botao "Liberar sem imagens" (pede confirmacao; faz o mesmo que renomear com " sem imagens").
+- Selo "Subir de novo" (3 dias) nos exames cujo final foi refeito, e motivo "PDF aberto" no laudo que achou as imagens mas nao juntou: a tela passa a mostrar tudo o que o PENDENTES.txt mostrava. O PENDENTES.txt continua sendo gerado, como reserva.
 - Tela do exame: imagem grande com zoom, miniaturas para tirar/voltar imagem da folha e arrastar para mudar a ordem, previa da folha e Salvar.
 - Exame ja finalizado: salvar refaz o final com _retificado (versao anterior em processados\substituidos).
 - PDF de imagens apagado ou movido da pasta 2 antes de juntar ("Fora da pasta 2"): Salvar folha na tela recria o PDF.

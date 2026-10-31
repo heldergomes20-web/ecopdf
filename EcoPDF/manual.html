@@ -82,6 +82,19 @@ li{margin:4px 0}
   <li><b>Pré-visualizar folha</b> mostra a folha como vai sair. <b>Salvar folha</b> grava. Se o exame já estiver finalizado, o PDF é refeito e volta à pasta 3 com <code>_retificado</code>.</li>
   <li><b>Medidas:</b> quando o aparelho envia o relatório de medidas, elas aparecem ao lado. <b>Copiar medidas</b> copia o texto para colar na página de laudos. Medida em branco = não medida ou duvidosa, e não entra no texto copiado. Eco fetal não mostra medidas; nas carótidas, a leitura ainda não está ativada.</li>
 </ul>
+<p><b>Situação de cada exame.</b> Tudo termina em <b>Finalizado</b>.</p>
+<table>
+  <tr><th>Situação</th><th>O que significa</th><th>O que fazer</th></tr>
+  <tr><td>Recebendo</td><td>Imagens chegando do aparelho</td><td>Nada. Em 2,5 min sem imagem nova vira Novo</td></tr>
+  <tr><td>Novo</td><td>Folha de imagens pronta, esperando o laudo</td><td>Laudar e imprimir no Medware</td></tr>
+  <tr><td>Folha ajustada</td><td>Igual a Novo, com imagens tiradas ou reordenadas na tela</td><td>Laudar</td></tr>
+  <tr><td>Pendente</td><td>Imagens há mais de 30 min sem laudo</td><td>Laudar; se já laudou, conferir nome, data e tipo do laudo</td></tr>
+  <tr><td>Fora da pasta 2</td><td>O PDF de imagens foi apagado ou movido antes de juntar</td><td>Abrir o exame e clicar em Salvar folha</td></tr>
+  <tr><td>Laudo sem imagens</td><td>Laudo há mais de 3 min sem as imagens; o motivo aparece na linha</td><td>Seguir o motivo, ou "Liberar sem imagens" se o exame não teve foto</td></tr>
+  <tr><td>Finalizado</td><td>Laudo + imagens (ou só o laudo, se liberado) na pasta 3</td><td>Subir no prontuário; Imprimir, se precisar</td></tr>
+  <tr><td>Subir de novo</td><td>O PDF final foi refeito nos últimos 3 dias (_retificado)</td><td>Subir de novo no prontuário; o selo some sozinho</td></tr>
+</table>
+<p>O botão <b>Pendentes</b> junta tudo o que ainda não está finalizado e os "Subir de novo".</p>
 
 <h2 id="imprimir">Imprimir</h2>
 <p>O botão <b>Imprimir</b> aparece na linha de cada exame <b>Finalizado</b> da lista e no alto da tela do exame. Se você estiver com o exame aberto enquanto lauda, o botão fica cinza ("aguardando laudo") e acende sozinho quando o laudo junta com as imagens.</p>
@@ -128,11 +141,11 @@ li{margin:4px 0}
   <tr><td><b>Tirou sem querer</b></td><td>Na tela, clique de novo no ✓ da imagem e em <b>Salvar folha</b></td><td>A imagem volta</td><td>Não é possível</td></tr>
   <tr><td><b>Ordem das imagens</b></td><td>Na tela, arraste a miniatura para a posição certa e clique em Salvar folha</td><td>A folha é refeita na nova ordem</td><td>Não é possível</td></tr>
   <tr><td><b>Exame sem imagens</b></td><td>Na tela, em <b>Pendentes</b>, clique em <b>Liberar sem imagens</b> na linha do laudo e confirme (ou renomeie o laudo da pasta 1 acrescentando <code>sem imagens</code>)</td><td>O laudo vai sozinho para a pasta 3. Se as imagens chegarem depois, ele junta e avisa</td><td>Igual</td></tr>
-  <tr><td><b>Laudo de antes da instalação</b></td><td>Suba como antes, sem o EcoPDF</td><td>Não se aplica</td><td>O laudo reimpresso fica parado na pasta 1 e aparece no PENDENTES. Tire de lá</td></tr>
+  <tr><td><b>Laudo de antes da instalação</b></td><td>Suba como antes, sem o EcoPDF</td><td>Não se aplica</td><td>O laudo reimpresso fica parado na pasta 1 e aparece em Pendentes na tela. Tire de lá</td></tr>
 </table>
 <p>Os 6 meses (180 dias) contam a partir da data do exame. É o tempo que o PC guarda as imagens originais. Depois disso, ele mantém só a folha de imagens pronta, que ainda serve para corrigir o laudo.</p>
-<p>Desde a versão 2026.10.31.3, tirar, voltar e reordenar imagens é só pela tela. Renomear o PDF com "tirar 3" ou "voltar 3" não altera mais nada: o pedido aparece como aviso no PENDENTES.</p>
-<p>Sempre que um PDF da pasta 3 é refeito, o PENDENTES lembra por 3 dias: "subir novamente no prontuário".</p>
+<p>Desde a versão 2026.10.31.3, tirar, voltar e reordenar imagens é só pela tela. Renomear o PDF com "tirar 3" ou "voltar 3" não altera mais nada: o pedido é ignorado.</p>
+<p>Sempre que um PDF da pasta 3 é refeito, a tela mostra o selo "Subir de novo" na linha do exame por 3 dias.</p>
 
 <h2 id="faq">Perguntas frequentes</h2>
 <div class="faq">
@@ -140,10 +153,10 @@ li{margin:4px 0}
 <p><b>Faço Eco e Carótidas no mesmo cadastro. Ele separa?</b> Sim, pela sonda de cada imagem: setorial vai para o Eco, linear vai para as Carótidas e a convexa 4C vai para o Eco Fetal. Sai um PDF para cada laudo.</p>
 <p><b>Como ele sabe que terminei o exame?</b> Quando passam 2,5 minutos sem chegar imagem nova. Se chegar mais imagem depois, ele refaz.</p>
 <p><b>Posso ver as imagens enquanto laudo?</b> Pode, pela tela <b>EcoPDF - Exames</b>: imagem grande, com zoom e com as medidas do aparelho. Ela usa as imagens originais e não trava nada. O PDF da pasta 2 também pode ser aberto, mas, enquanto ele estiver aberto, a junção espera.</p>
-<p><b>E se eu não laudar no mesmo dia?</b> As imagens ficam esperando na pasta 2 e juntam quando o laudo sair. Elas aparecem no PENDENTES como lembrete.</p>
-<p><b>Como sei que um laudo já foi refeito?</b> De três formas. O arquivo volta a aparecer na pasta 3 com <code>_retificado</code> no fim do nome. O PENDENTES mostra o motivo e o horário por 3 dias ("LAUDO CORRIGIDO", "IMAGENS ADICIONADAS" ou "IMAGENS RETIRADAS"). E a versão anterior fica guardada em <code>C:\EcoPDF\processados\substituidos</code>. Para saber o que precisa subir de novo, use o aviso do PENDENTES e o _retificado no fim do nome.</p>
-<p><b>O que é o PENDENTES.txt?</b> Um arquivo de texto na pasta 2, atualizado sozinho a cada 10 segundos. Ele lista o que precisa da sua atenção, com o motivo de cada item: exame sem par há mais de 30 minutos, pedido de tirar imagem pelo nome do arquivo (não vale mais: use a tela), PDF aberto travando a junção e PDFs refeitos que precisam subir de novo. Quando está tudo certo, mostra só "Nenhum.".</p>
-<p><b>O laudo não apareceu na pasta 3. E agora?</b> Abra o PENDENTES. Os motivos mais comuns são três. Se o nome estiver diferente no aparelho, renomeie o PDF de imagens da pasta 2 para ficar igual ao do laudo (data, nome e tipo). Se houver dois laudos ou dois PDFs do mesmo exame, apague o errado. Se o laudo estiver na pasta 9 - Revisar, renomeie no padrão <code>AAAA_MM_DD_Nome_Tipo.pdf</code> e mova para a pasta 1.</p>
+<p><b>E se eu não laudar no mesmo dia?</b> As imagens ficam esperando na pasta 2 e juntam quando o laudo sair. Elas aparecem em Pendentes, na tela, como lembrete.</p>
+<p><b>Como sei que um laudo já foi refeito?</b> De três formas. O arquivo volta a aparecer na pasta 3 com <code>_retificado</code> no fim do nome. A tela mostra o selo "Subir de novo" por 3 dias (passe o mouse para ver o motivo e o horário). E a versão anterior fica guardada em <code>C:\EcoPDF\processados\substituidos</code>. Para saber o que precisa subir de novo, use o selo "Subir de novo" da tela e o _retificado no fim do nome.</p>
+<p><b>O que é o PENDENTES.txt?</b> Uma cópia em texto do que a tela mostra em Pendentes, na pasta 2. Fica como reserva para a administração da clínica; no dia a dia, use a tela.</p>
+<p><b>O laudo não apareceu na pasta 3. E agora?</b> Abra a tela em Pendentes: a linha do exame mostra o motivo. Os mais comuns são três. Se o nome estiver diferente no aparelho, renomeie o PDF de imagens da pasta 2 para ficar igual ao do laudo (data, nome e tipo). Se houver dois laudos ou dois PDFs do mesmo exame, apague o errado. Se o laudo estiver na pasta 9 - Revisar, renomeie no padrão <code>AAAA_MM_DD_Nome_Tipo.pdf</code> e mova para a pasta 1.</p>
 <p><b>Quanto tempo as imagens ficam guardadas no PC?</b> As imagens originais ficam 6 meses (180 dias; era 30 até a versão 2026.10.30). Durante esse período, dá para tirar, voltar, reordenar (pela tela) e adicionar imagens. Os PDFs ficam guardados sem prazo em <code>C:\EcoPDF\processados</code>. Isso é uma cópia de trabalho: o arquivo oficial continua sendo o prontuário.</p>
 <p><b>Alguém apagou um arquivo ou uma pasta. Perdi?</b> Quase nunca. As pastas se recriam sozinhas. Um laudo apagado volta imprimindo de novo, e um PDF apagado da pasta 3 é refeito reimprimindo o laudo. Um PDF de imagens apagado da pasta 2 volta abrindo o exame na tela e clicando em Salvar folha (ou reenviando pelo aparelho, ou pela Lixeira).</p>
 <p><b>Posso renomear ou mudar as pastas de lugar?</b> Não. O sistema procura sempre as pastas com esses nomes na Área de Trabalho. Se elas forem movidas ou renomeadas, o fluxo para.</p>
@@ -152,7 +165,7 @@ li{margin:4px 0}
 <h2 id="naofaca">Não faça</h2>
 <ul>
   <li>Laudar num PC diferente do que recebe as imagens daquele aparelho, porque nesse caso não junta.</li>
-  <li>Apagar ou mover arquivos das pastas 1 e 2 para "organizar". Mexa neles só quando o PENDENTES pedir.</li>
+  <li>Apagar ou mover arquivos das pastas 1 e 2 para "organizar". Mexa neles só quando a tela pedir.</li>
   <li>Desligar o PC de laudo durante o expediente ou sair do usuário do Windows.</li>
 </ul>
 

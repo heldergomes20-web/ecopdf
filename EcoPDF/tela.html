@@ -77,6 +77,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
 #aviso{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--tinta);color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:20;max-width:80%}
 #aviso.erro{background:#a12a2a}
 tr.sem-img{cursor:default;background:#fff8f8}
+.s-Subir{background:#fde9d7;color:#9a4a12}
 </style>
 </head>
 <body>
@@ -104,7 +105,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
     </table>
     <div class="vazio" id="vazio" style="display:none">Nenhum exame neste filtro.</div>
   </div>
-  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” = imagens ainda sem laudo e laudos ainda sem imagens. A lista se atualiza sozinha.</p>
+  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” = imagens ainda sem laudo, laudos ainda sem imagens e finais refeitos para subir de novo no prontuário (3 dias). A lista se atualiza sozinha.</p>
 </div>
 
 <div id="exame">
@@ -204,7 +205,7 @@ function desenharLista() {
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const limite = new Date(hoje); limite.setDate(limite.getDate() - (filtro.dias >= 9999 ? 100000 : filtro.dias));
   const lim = `${limite.getFullYear()}${String(limite.getMonth()+1).padStart(2,"0")}${String(limite.getDate()).padStart(2,"0")}`;
-  const semLaudo = exames.filter(e => SEM_LAUDO.includes(e.situacao));
+  const semLaudo = exames.filter(e => SEM_LAUDO.includes(e.situacao) || e.subir_de_novo);
   const nPend = semLaudo.length + laudosSemImg.length;
   $("n-semlaudo").textContent = nPend;
   document.title = (nPend ? `(${nPend}) ` : "") + "EcoPDF – Exames";
@@ -217,7 +218,7 @@ function desenharLista() {
     <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td>${esc(e.tipo_nome)}</td>
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
     <td class="${e.medidas ? "" : "quieto"}">${e.sem_medidas ? "não exibidas" : (e.medidas ? "✓ recebidas" : "— não recebidas")}</td>
-    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span></td>
+    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}</td>
     <td style="text-align:right">${e.situacao === "Finalizado" ? `<button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
   let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim);
   if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
@@ -484,7 +485,7 @@ function rota() {
   }
 }
 window.addEventListener("hashchange", rota);
-setInterval(() => { if (!ex) carregarLista(); else fetch("/api/exames").then(r => r.json()).then(d => { exames = d.exames || []; laudosSemImg = d.laudos_sem_imagens || []; const n = exames.filter(e => SEM_LAUDO.includes(e.situacao)).length + laudosSemImg.length; document.title = (n ? `(${n}) ` : "") + "EcoPDF – Exames"; }).catch(() => {}); }, 15000);
+setInterval(() => { if (!ex) carregarLista(); else fetch("/api/exames").then(r => r.json()).then(d => { exames = d.exames || []; laudosSemImg = d.laudos_sem_imagens || []; const n = exames.filter(e => SEM_LAUDO.includes(e.situacao) || e.subir_de_novo).length + laudosSemImg.length; document.title = (n ? `(${n}) ` : "") + "EcoPDF – Exames"; }).catch(() => {}); }, 15000);
 rota();
 </script>
 </body>
