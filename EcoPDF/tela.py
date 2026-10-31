@@ -9,6 +9,7 @@ processados/finalizados.json). A folha e sempre refeita pela mesma funcao do Eco
 
 import io
 import json
+import re
 import threading
 import time
 import uuid
@@ -316,6 +317,10 @@ def _handler(ep, cfg):
             try:
                 if u.path in ("/", "/index.html"):
                     return self._enviar(200, (BASE / "tela.html").read_bytes(), "text/html; charset=utf-8")
+                if u.path == "/manual":
+                    html = (BASE / "manual.html").read_text("utf-8")
+                    html = re.sub(r'(<b id="versao">)[^<]*', lambda m: m.group(1) + ep.versao(), html, count=1)
+                    return self._enviar(200, html.encode("utf-8"), "text/html; charset=utf-8")
                 if u.path == "/api/exames":
                     return self._enviar(200, {"exames": listar_exames(ep, cfg), "versao": ep.versao(),
                                               "dias_guardados": cfg["manter_dicom_dias"],

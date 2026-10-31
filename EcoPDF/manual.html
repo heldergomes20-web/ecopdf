@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoPDF – Manual</title>
+<!-- Copia do "EcoPDF: guia do operador" (Claude Doc). Atualizar junto com o guia a cada versao. -->
+<style>
+:root{--vinho:#8b1e2d;--tinta:#1d2433;--quieto:#6b7380;--borda:#d6dbe2;--fundo:#eef1f5;--branco:#fff}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--fundo);color:var(--tinta);font-size:15px;line-height:1.55}
+.topo{background:var(--branco);border-bottom:1px solid var(--borda);height:52px;display:flex;align-items:center;padding:0 22px;gap:16px;position:sticky;top:0;z-index:2}
+.logo{font-weight:700;color:var(--vinho);font-size:17px}.logo span{color:var(--tinta);font-weight:400}
+.btn{border:1px solid #c3c9d2;background:var(--branco);border-radius:7px;padding:7px 14px;color:var(--tinta);text-decoration:none;font-size:14px}
+.btn:hover{border-color:#8f97a3}
+.pagina{display:flex;gap:28px;max-width:1120px;margin:0 auto;padding:22px}
+nav{position:sticky;top:74px;align-self:flex-start;width:230px;flex:none;background:var(--branco);border:1px solid var(--borda);border-radius:10px;padding:14px 16px;font-size:13.5px}
+nav b{display:block;margin-bottom:6px;color:var(--quieto);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+nav a{display:block;color:var(--tinta);text-decoration:none;padding:4px 0}
+nav a:hover{color:var(--vinho)}
+main{flex:1;min-width:0;background:var(--branco);border:1px solid var(--borda);border-radius:10px;padding:26px 34px 34px}
+h1{font-size:24px;margin:0 0 6px;color:var(--vinho)}
+h2{font-size:19px;margin:30px 0 8px;padding-top:6px;border-top:1px solid var(--borda)}
+h2:first-of-type{border-top:0}
+.sub{color:var(--quieto);margin:0 0 16px}
+.habitos{background:#fbf3f4;border-left:4px solid var(--vinho);border-radius:6px;padding:12px 16px;margin:14px 0}
+code{background:#f1f3f6;border-radius:4px;padding:1px 5px;font-family:Consolas,monospace;font-size:13.5px}
+table{border-collapse:collapse;width:100%;margin:10px 0 14px;font-size:14px}
+th,td{border:1px solid var(--borda);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:#f4f6f9}
+li{margin:4px 0}
+.faq p{margin:0 0 12px}
+@media (max-width:820px){.pagina{flex-direction:column;padding:12px}nav{position:static;width:auto}main{padding:18px}}
+@media print{.topo,nav{display:none}.pagina{padding:0}main{border:0}}
+</style>
+</head>
+<body>
+<div class="topo">
+  <div class="logo">♥ Clínica Ecocardio <span>· EcoPDF Manual</span></div>
+  <div style="flex:1"></div>
+  <a class="btn" href="/">← Voltar aos exames</a>
+</div>
+<div class="pagina">
+<nav>
+  <b>Neste manual</b>
+  <a href="#exame">Em cada exame</a>
+  <a href="#tela">A tela EcoPDF - Exames</a>
+  <a href="#imprimir">Imprimir</a>
+  <a href="#cadastro">Cadastro do paciente</a>
+  <a href="#pastas">As pastas</a>
+  <a href="#corrigir">Quando precisar corrigir</a>
+  <a href="#faq">Perguntas frequentes</a>
+  <a href="#naofaca">Não faça</a>
+  <a href="#parou">Se parar de funcionar</a>
+</nav>
+<main>
+<h1>Imagens no laudo: guia para os médicos</h1>
+<p class="sub">Manual da versão <b id="versao">2026.10.31.3</b> do EcoPDF, a mesma instalada neste PC.</p>
+
+<p>As imagens que você seleciona no aparelho passam a sair automaticamente junto com o laudo, num único PDF pronto para o prontuário. O programa que faz isso, o <b>EcoPDF</b>, é igual em todos os PCs de laudo da clínica. Você não precisa abrir nada: basta manter três hábitos.</p>
+<div class="habitos"><b>Os três hábitos:</b> nome completo do paciente no aparelho · gravar só as fotos que vão para o laudo, congeladas · conferir o nome na folha de imagens antes de subir.</div>
+
+<h2 id="exame">Em cada exame</h2>
+<ol>
+  <li><b>Cadastre o paciente com o nome completo</b>, igual ao que vai no laudo. Pequenos erros de digitação são tolerados; nome curto ou apelido, não.</li>
+  <li><b>Grave as imagens com a tecla de sempre:</b> <b>Store</b> nos GE Vivid, <b>Acquire</b> no Philips. Elas ficam guardadas no aparelho e vão também para o PC. <b>Toda foto congelada que você gravar entra no PDF</b>, então grave só as que vão para o laudo. Loops (vídeos) continuam gravados no aparelho como sempre, mas o PC os descarta e eles não aparecem no PDF. (No Bessa, até a atualização do aparelho, o envio ainda é pelo P1.)</li>
+  <li><b>Laude e imprima no Medware como sempre</b>, no PC de laudo ligado àquele aparelho. O laudo fetal, feito na outra plataforma, entra igual: salve ou imprima o PDF dele na pasta <code>0 - Entrada PDF24</code>.</li>
+  <li>Em 1 a 3 minutos aparece em <b>3 - Finalizados (subir no prontuário)</b> o PDF completo: o laudo e, em seguida, a folha de imagens com o mesmo cabeçalho, o nome do paciente e a numeração de páginas continuando a do laudo.</li>
+  <li><b>Antes de subir, confira o nome na barra cinza da folha de imagens.</b> É a única conferência que o sistema não faz por você.</li>
+  <li>Não precisa apagar nada da pasta 3: o EcoPDF apaga sozinho os arquivos com mais de 6 meses.</li>
+</ol>
+
+<h2 id="tela">A tela EcoPDF - Exames</h2>
+<p>É uma aba do navegador, só do PC de laudo, que abre sozinha quando o Windows entra. Se você fechar, reabra pelo atalho <b>EcoPDF - Exames</b> na Área de Trabalho. Ela se atualiza sozinha; não precisa recarregar.</p>
+<p><b>Dúvida?</b> O botão <b>? Manual</b>, no alto da tela, abre este guia, sempre na versão instalada no PC. Abre mesmo sem internet.</p>
+<p><b>Lista de exames.</b> Mostra os exames de hoje, com os filtros <b>7 dias</b>, <b>30 dias</b> e <b>6 meses (tudo)</b>. O botão <b>Sem laudo</b> mostra só o que ainda não juntou com um laudo, e o número dele aparece também no título da aba. A busca aceita o nome do paciente ou o código do aparelho (os 4 caracteres finais do número de série). Clique no paciente para abrir o exame.</p>
+<p><b>Tela do exame.</b></p>
+<ul>
+  <li>Imagem grande com zoom (roda do mouse ou botões − / +); arraste para mover a imagem ampliada. As setas ← → trocam de imagem.</li>
+  <li><b>Tirar ou voltar uma imagem da folha:</b> clique no ✓ da miniatura. A imagem tirada fica apagada e tracejada.</li>
+  <li><b>Mudar a ordem:</b> arraste a miniatura. O número de cada miniatura é a posição dela na folha.</li>
+  <li><b>Pré-visualizar folha</b> mostra a folha como vai sair. <b>Salvar folha</b> grava. Se o exame já estiver finalizado, o PDF é refeito e volta à pasta 3 com <code>_retificado</code>.</li>
+  <li><b>Medidas:</b> quando o aparelho envia o relatório de medidas, elas aparecem ao lado. <b>Copiar medidas</b> copia o texto para colar na página de laudos. Medida em branco = não medida ou duvidosa, e não entra no texto copiado. Eco fetal não mostra medidas; nas carótidas, a leitura ainda não está ativada.</li>
+</ul>
+
+<h2 id="imprimir">Imprimir</h2>
+<p>O botão <b>Imprimir</b> aparece na linha de cada exame <b>Finalizado</b> da lista e no alto da tela do exame. Se você estiver com o exame aberto enquanto lauda, o botão fica cinza ("aguardando laudo") e acende sozinho quando o laudo junta com as imagens.</p>
+<ol>
+  <li>Clique em <b>Imprimir</b>. Já vêm marcados a <b>folha de fotos 1</b> e o <b>laudo</b>. Marque outras folhas de fotos, se precisar.</li>
+  <li>Coloque na bandeja, <b>por cima do papel comum</b>, o número de folhas de papel fotográfico que a janela indicar.</li>
+  <li>Clique em <b>Papel colocado · Imprimir</b> e confirme na janela de impressão.</li>
+</ol>
+<p>Sai tudo num envio só, na ordem de entrega: primeiro as fotos, depois o laudo. O PDF da pasta 3 não muda. O jeito antigo continua valendo: fotos impressas direto do aparelho e laudo impresso direto do Medware. O botão Imprimir é uma opção a mais, não substitui o anterior. Se as fotos saírem borradas, avise a administração da clínica.</p>
+
+<h2 id="cadastro">Cadastro do paciente em cada aparelho</h2>
+<p>O nome digitado no aparelho é o que liga as imagens ao laudo. Use sempre <b>nome completo</b>, sem abreviações nem apelido, e confira a data e a hora do aparelho.</p>
+<table>
+  <tr><th>Aparelho</th><th>Onde cadastrar</th><th>Botão que envia a imagem</th></tr>
+  <tr><td>GE Vivid S6 (Bessa; Tambauzinho sala 3)</td><td>Tecla <b>Patient</b> (Paciente) → Novo paciente → sobrenome e nome nos campos próprios</td><td><b>Store</b></td></tr>
+  <tr><td>GE Vivid T8 (Tambauzinho sala 8)</td><td>Tecla <b>Patient</b> → Novo paciente → sobrenome e nome</td><td><b>Store</b></td></tr>
+  <tr><td>Philips Affiniti 50G (Tambauzinho sala 6)</td><td>Tecla <b>Patient</b> → novo exame → sobrenome e nome</td><td><b>Acquire</b></td></tr>
+</table>
+<p>O tipo do exame sai da sonda usada, não do cadastro:</p>
+<table>
+  <tr><th>Sonda</th><th>Tipo de exame</th></tr>
+  <tr><td>Setorial adulto (M4S, 3Sc, S4-2) e infantil (6S)</td><td>Ecocardiograma</td></tr>
+  <tr><td>Linear (9L, 12L, L12-3)</td><td>Duplex Scan das Carótidas</td></tr>
+  <tr><td>Convexa 4C</td><td>Ecocardiograma Fetal</td></tr>
+</table>
+<p>Eco e Carótidas no mesmo paciente e no mesmo dia podem ficar no mesmo cadastro: cada sonda gera o seu PDF. Para outro paciente, sempre um cadastro novo. Para acrescentar imagem num exame já feito, reabra o <b>mesmo</b> exame, sem cadastrar de novo.</p>
+
+<h2 id="pastas">As pastas</h2>
+<p>Ficam em <b>Laudos - Não Apagar</b>, na Área de Trabalho. No dia a dia você só usa a pasta 3.</p>
+<table>
+  <tr><th>Pasta</th><th>O que tem</th></tr>
+  <tr><td><b>1 - Laudos aguardando imagens</b></td><td>Laudo impresso que ainda não encontrou as imagens</td></tr>
+  <tr><td><b>2 - Imagens aguardando laudo</b></td><td>Folha de imagens esperando o laudo, e o arquivo <b>PENDENTES.txt</b></td></tr>
+  <tr><td><b>3 - Finalizados (subir no prontuário)</b></td><td>Laudo + imagens, pronto para subir</td></tr>
+  <tr><td><b>9 - Revisar</b></td><td>Laudo que o sistema não conseguiu ler</td></tr>
+</table>
+
+<h2 id="corrigir">Quando precisar corrigir</h2>
+<table>
+  <tr><th>Situação</th><th>O que fazer</th><th>Até 6 meses do exame</th><th>Depois de 6 meses</th></tr>
+  <tr><td><b>Laudo errado</b></td><td>Corrija no Medware (ou na plataforma do fetal) e imprima de novo</td><td>O PDF é refeito com as mesmas imagens e o nome do laudo novo, e volta à pasta 3 com <code>_retificado</code></td><td>Funciona igual: usa a folha de imagens que foi guardada</td></tr>
+  <tr><td><b>Faltou imagem</b></td><td>Reabra o <b>mesmo exame</b> no aparelho, congele e grave a imagem (Store/Acquire)</td><td>2,5 min depois o PDF é refeito com todas as imagens</td><td><b>Não faça.</b> As imagens originais já foram apagadas e o PDF poderia sair só com as novas. Avise a administração da clínica</td></tr>
+  <tr><td><b>Imagem a mais</b></td><td>Na tela <b>EcoPDF - Exames</b>, abra o exame, clique no ✓ da imagem e em <b>Salvar folha</b></td><td>A folha é refeita sem a imagem; se já estava finalizado, volta à pasta 3 com <code>_retificado</code></td><td>Não é possível: o exame não aparece mais na tela</td></tr>
+  <tr><td><b>Tirou sem querer</b></td><td>Na tela, clique de novo no ✓ da imagem e em <b>Salvar folha</b></td><td>A imagem volta</td><td>Não é possível</td></tr>
+  <tr><td><b>Ordem das imagens</b></td><td>Na tela, arraste a miniatura para a posição certa e clique em Salvar folha</td><td>A folha é refeita na nova ordem</td><td>Não é possível</td></tr>
+  <tr><td><b>Exame sem imagens</b></td><td>Renomeie o laudo da pasta 1 acrescentando <code>sem imagens</code></td><td>O laudo vai sozinho para a pasta 3. Se as imagens chegarem depois, ele junta e avisa</td><td>Igual</td></tr>
+  <tr><td><b>Laudo de antes da instalação</b></td><td>Suba como antes, sem o EcoPDF</td><td>Não se aplica</td><td>O laudo reimpresso fica parado na pasta 1 e aparece no PENDENTES. Tire de lá</td></tr>
+</table>
+<p>Os 6 meses (180 dias) contam a partir da data do exame. É o tempo que o PC guarda as imagens originais. Depois disso, ele mantém só a folha de imagens pronta, que ainda serve para corrigir o laudo.</p>
+<p>Desde a versão 2026.10.31.3, tirar, voltar e reordenar imagens é só pela tela. Renomear o PDF com "tirar 3" ou "voltar 3" não altera mais nada: o pedido aparece como aviso no PENDENTES.</p>
+<p>Sempre que um PDF da pasta 3 é refeito, o PENDENTES lembra por 3 dias: "subir novamente no prontuário".</p>
+
+<h2 id="faq">Perguntas frequentes</h2>
+<div class="faq">
+<p><b>Como o sistema sabe de quem é cada imagem?</b> Cada imagem sai do aparelho com o nome do paciente, a data e a sonda usada. O PC junta o laudo e as imagens que têm a mesma data, o mesmo tipo de exame e o mesmo paciente. O nome que aparece na folha é sempre o do laudo.</p>
+<p><b>Faço Eco e Carótidas no mesmo cadastro. Ele separa?</b> Sim, pela sonda de cada imagem: setorial vai para o Eco, linear vai para as Carótidas e a convexa 4C vai para o Eco Fetal. Sai um PDF para cada laudo.</p>
+<p><b>Como ele sabe que terminei o exame?</b> Quando passam 2,5 minutos sem chegar imagem nova. Se chegar mais imagem depois, ele refaz.</p>
+<p><b>Posso ver as imagens enquanto laudo?</b> Pode, pela tela <b>EcoPDF - Exames</b>: imagem grande, com zoom e com as medidas do aparelho. Ela usa as imagens originais e não trava nada. O PDF da pasta 2 também pode ser aberto, mas, enquanto ele estiver aberto, a junção espera.</p>
+<p><b>E se eu não laudar no mesmo dia?</b> As imagens ficam esperando na pasta 2 e juntam quando o laudo sair. Elas aparecem no PENDENTES como lembrete.</p>
+<p><b>Como sei que um laudo já foi refeito?</b> De três formas. O arquivo volta a aparecer na pasta 3 com <code>_retificado</code> no fim do nome. O PENDENTES mostra o motivo e o horário por 3 dias ("LAUDO CORRIGIDO", "IMAGENS ADICIONADAS" ou "IMAGENS RETIRADAS"). E a versão anterior fica guardada em <code>C:\EcoPDF\processados\substituidos</code>. Para saber o que precisa subir de novo, use o aviso do PENDENTES e o _retificado no fim do nome.</p>
+<p><b>O que é o PENDENTES.txt?</b> Um arquivo de texto na pasta 2, atualizado sozinho a cada 10 segundos. Ele lista o que precisa da sua atenção, com o motivo de cada item: exame sem par há mais de 30 minutos, pedido de tirar imagem pelo nome do arquivo (não vale mais: use a tela), PDF aberto travando a junção e PDFs refeitos que precisam subir de novo. Quando está tudo certo, mostra só "Nenhum.".</p>
+<p><b>O laudo não apareceu na pasta 3. E agora?</b> Abra o PENDENTES. Os motivos mais comuns são três. Se o nome estiver diferente no aparelho, renomeie o PDF de imagens da pasta 2 para ficar igual ao do laudo (data, nome e tipo). Se houver dois laudos ou dois PDFs do mesmo exame, apague o errado. Se o laudo estiver na pasta 9 - Revisar, renomeie no padrão <code>AAAA_MM_DD_Nome_Tipo.pdf</code> e mova para a pasta 1.</p>
+<p><b>Quanto tempo as imagens ficam guardadas no PC?</b> As imagens originais ficam 6 meses (180 dias; era 30 até a versão 2026.10.30). Durante esse período, dá para tirar, voltar, reordenar (pela tela) e adicionar imagens. Os PDFs ficam guardados sem prazo em <code>C:\EcoPDF\processados</code>. Isso é uma cópia de trabalho: o arquivo oficial continua sendo o prontuário.</p>
+<p><b>Alguém apagou um arquivo ou uma pasta. Perdi?</b> Quase nunca. As pastas se recriam sozinhas. Um laudo apagado volta imprimindo de novo, e um PDF apagado da pasta 3 é refeito reimprimindo o laudo. Imagens apagadas da pasta 2 podem ser reenviadas pelo aparelho, ou recuperadas na Lixeira.</p>
+<p><b>Posso renomear ou mudar as pastas de lugar?</b> Não. O sistema procura sempre as pastas com esses nomes na Área de Trabalho. Se elas forem movidas ou renomeadas, o fluxo para.</p>
+</div>
+
+<h2 id="naofaca">Não faça</h2>
+<ul>
+  <li>Laudar num PC diferente do que recebe as imagens daquele aparelho, porque nesse caso não junta.</li>
+  <li>Apagar ou mover arquivos das pastas 1 e 2 para "organizar". Mexa neles só quando o PENDENTES pedir.</li>
+  <li>Desligar o PC de laudo durante o expediente ou sair do usuário do Windows.</li>
+</ul>
+
+<h2 id="parou">Se parar de funcionar</h2>
+<p>Se nada chegar na pasta 2 depois de gravar as imagens (alguns aparelhos só enviam ao fim do exame), dê dois cliques em <code>C:\EcoPDF\status.bat</code>. Se aparecer <b>PARADO</b>, rode <code>C:\EcoPDF\reiniciar.bat</code>. Se o problema continuar, tire uma foto da tela e encaminhe para a administração da clínica.</p>
+<div class="faq">
+<p><b>Em qual aparelho estão as imagens de um exame antigo?</b> Na folha de imagens, na ponta direita da barra cinza "Página", há 4 caracteres quase invisíveis: são o final do número de série do aparelho que fez o exame. Ache o aparelho cuja etiqueta ou tela "Sobre" termina assim e procure pelo nome do paciente e pela data.</p>
+<p><b>Corrigi o laudo de um exame em que imagens tinham sido tiradas. Preciso tirar de novo?</b> Não. A correção do laudo usa as imagens como estão no final atual: as que foram tiradas continuam fora e as devolvidas continuam dentro. Isso vale antes e depois dos 6 meses. Até 6 meses, o programa lembra quais foram tiradas. Depois disso, reaproveita a folha de imagens do último final e refaz a numeração "Página" conforme o laudo novo (desde a 2026.10.31.2).</p>
+</div>
+</main>
+</div>
+</body>
+</html>
