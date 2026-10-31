@@ -30,6 +30,12 @@ PASTA0_PARADO_MIN = 5           # laudo na pasta 0 ha mais que isso = renomeador
 ESQUECIDO_HORAS = 24            # pendencia mais velha que isso deixa a sala amarela
 SEM_IMAGEM_DIAS = 3             # dias uteis sem nenhuma imagem = aparelho desligado do EcoPDF?
 DISCO_ATENCAO_GB, DISCO_PROBLEMA_GB = 10, 3
+SINAIS_DIAS = 7                 # janela dos sinais de problema abaixo
+LIBERADOS_MAX = 2               # mais que isso em 7 dias = aparelho nao esta enviando?
+DESCARTADOS_MAX = 3             # mais que isso em 7 dias = nome diferente / envio duplicado?
+# motivo do laudo sem par (texto da tela) -> categoria curta que vai para a planilha
+MOTIVOS = (("nome fora do padrao", "nome fora do padrão"), ("aberto em outro", "PDF aberto"),
+           ("DESCARTADAS", "imagens descartadas"), ("nenhuma imagem", "nenhuma imagem"))
 RE_ERRO = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ (ERROR|CRITICAL) ")
 
 
@@ -97,6 +103,49 @@ def _erros_24h(cfg):
         except OSError:
             pass
     return n
+
+
+def _recente(iso, agora, dias=SINAIS_DIAS):
+    try:
+        return bool(iso) and agora - datetime.fromisoformat(iso).timestamp() < dias * 86400
+    except (TypeError, ValueError):
+        return False
+
+
+def _sinais(cfg, ep, reg, agora):
+    """Sinais de problema (nao de produtividade) dos ultimos SINAIS_DIAS dias:
+    laudos liberados sem imagens, exames descartados, PDFs sumidos da pasta 2 e o
+    motivo mais comum dos laudos parados sem par. So contagens e categorias."""
+    liberados = sum(1 for r in reg if r.get("sem_imagens") and _recente(r.get("em"), agora))
+    descartados = fora = 0
+    try:
+        estudos = [p for p in cfg["pasta_dicom"].iterdir() if p.is_dir()]
+    except OSError:
+        estudos = []
+    with ep.TRAVA:  # nao contar exame no meio da juncao (PDF ja saiu, registro ainda nao)
+        reg_agora = ep._ler_registro(cfg)
+        for pasta in estudos:
+            marcas = ep._ler_descartados(pasta)
+            descartados += sum(1 for em in marcas.values() if _recente(em, agora))
+            try:
+                if agora - pasta.stat().st_mtime > SINAIS_DIAS * 86400:
+                    continue
+            except OSError:
+                continue
+            for g in ep._ler_grupos(pasta):
+                if (not Path(g["pdf"]).exists() and not ep.registro_do_grupo(g, reg_agora)
+                        and (g.get("tipo") or "") not in marcas):
+                    fora += 1
+    motivos = {}
+    try:
+        import tela
+        for l in tela.laudos_sem_imagens(ep, cfg):
+            m = next((c for k, c in MOTIVOS if k in l["motivo"]), "outro")
+            motivos[m] = motivos.get(m, 0) + 1
+    except Exception:
+        ep.log.exception("Painel: nao consegui ler os motivos dos laudos sem imagens")
+    return {"liberados_sem_imagens_7d": liberados, "descartados_7d": descartados,
+            "fora_pasta2_7d": fora, "motivos_laudo_sem_par": motivos}
 
 
 _impressora = {"em": 0.0, "valor": ""}
@@ -216,6 +265,7 @@ def coletar(cfg, ep, manual=False):
         "impressora": _impressora_padrao(),
         "windows": platform.release()[:20],
     }
+    d.update(_sinais(cfg, ep, reg, agora))
     d["nivel"], d["problemas"] = avaliar(d)
     return d
 
@@ -246,7 +296,16 @@ def avaliar(d):
     if d["imagens_sem_laudo_mais_antiga_min"] > esquecido:
         amar.append("imagens sem laudo há mais de 1 dia")
     if d["laudos_sem_imagens_mais_antigo_min"] > esquecido:
-        amar.append("laudo sem imagens há mais de 1 dia")
+        amar.append("laudo sem imagens há mais de 1 dia" + _motivo_principal(d))
+    if d.get("liberados_sem_imagens_7d", 0) > LIBERADOS_MAX:
+        amar.append(f"{d['liberados_sem_imagens_7d']} laudos liberados sem imagens em 7 dias: "
+                    "conferir se o aparelho está enviando (Store, rede, AE)")
+    if d.get("descartados_7d", 0) > DESCARTADOS_MAX:
+        amar.append(f"{d['descartados_7d']} exames descartados em 7 dias: conferir se o nome "
+                    "no aparelho bate com o do Medware ou se há envio duplicado")
+    if d.get("fora_pasta2_7d", 0):
+        amar.append(f"{d['fora_pasta2_7d']} PDF(s) de imagens sumiram da pasta 2 sem juntar: "
+                    "alguém apagou ou moveu à mão (Salvar folha recria)")
     if d["ultima_imagem_min"] is not None and d["ultima_imagem_min"] > SEM_IMAGEM_DIAS * 1440:
         amar.append(f"nenhuma imagem há {d['ultima_imagem_min'] // 1440} dias")
     c = d.get("ultima_conexao") or {}
@@ -254,6 +313,14 @@ def avaliar(d):
         amar.append(f"aparelho {c.get('ip')} tentou conectar e foi recusado")
     nivel = "vermelho" if verm else "amarelo" if amar else "verde"
     return nivel, verm + amar
+
+
+def _motivo_principal(d):
+    m = d.get("motivos_laudo_sem_par") or {}
+    if not m:
+        return ""
+    k = max(m, key=m.get)
+    return f" (motivo: {k})"
 
 
 def enviar(cfg, ep, dados=None):

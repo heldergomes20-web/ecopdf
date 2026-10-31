@@ -21,8 +21,9 @@ var MAX_LINHAS = 60;
 var ABA = 'Salas', ABA_PCS = 'PCs', LIN0 = 4; // dados a partir da linha 4
 var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão',
   'IP do PC', 'AE Title : porta', 'Última conexão de aparelho', 'Última imagem', 'Aparelho (série)',
-  'Última junção', 'Imagens sem laudo', 'Laudos sem imagens', '9 - Revisar', 'Retificados (3 dias)',
-  'Erros (24 h)', 'Disco livre (GB)', 'Impressora', 'Ligado desde',
+  'Última junção', 'Imagens sem laudo', 'Laudos sem imagens', 'Motivo do laudo sem imagens',
+  '9 - Revisar', 'Retificados (3 dias)', 'Liberados sem imagens (7 dias)', 'Descartados (7 dias)',
+  'Sumiram da pasta 2 (7 dias)', 'Erros (24 h)', 'Disco livre (GB)', 'Impressora', 'Ligado desde',
   'IP anterior (apague depois de conferir o aparelho)', 'nivel_pc', 'problemas_pc', 'relogio_min'];
 function col(nome) { return COLS.indexOf(nome) + 1; }
 
@@ -74,7 +75,11 @@ function doPost(e) {
     v['Última junção'] = dataBr(d.ultima_juncao) || 'nenhuma';
     v['Imagens sem laudo'] = pend(d.imagens_sem_laudo, d.imagens_sem_laudo_mais_antiga_min);
     v['Laudos sem imagens'] = pend(d.laudos_sem_imagens, d.laudos_sem_imagens_mais_antigo_min);
+    v['Motivo do laudo sem imagens'] = motivos(d.motivos_laudo_sem_par);
     v['9 - Revisar'] = num(d.revisar);
+    v['Liberados sem imagens (7 dias)'] = num(d.liberados_sem_imagens_7d);
+    v['Descartados (7 dias)'] = num(d.descartados_7d);
+    v['Sumiram da pasta 2 (7 dias)'] = num(d.fora_pasta2_7d);
     v['Retificados (3 dias)'] = num(d.retificados_3d);
     v['Erros (24 h)'] = num(d.erros_24h);
     v['Disco livre (GB)'] = num(d.disco_livre_gb);
@@ -82,7 +87,7 @@ function doPost(e) {
     v['Ligado desde'] = d.envio === 'manual' ? 'envio manual' : dataBr(d.ligado_desde);
     v['IP anterior (apague depois de conferir o aparelho)'] = ipAnterior;
     v['nivel_pc'] = ['verde', 'amarelo', 'vermelho'].indexOf(d.nivel) >= 0 ? d.nivel : 'amarelo';
-    v['problemas_pc'] = (Array.isArray(d.problemas) ? d.problemas : []).map(function (p) { return limpo(p, 80); }).slice(0, 10).join('; ');
+    v['problemas_pc'] = (Array.isArray(d.problemas) ? d.problemas : []).map(function (p) { return limpo(p, 160); }).slice(0, 12).join('; ');
     v['relogio_min'] = relogio;
     v['Situação'] = antes[col('Situação') - 1] || '';
     v['O que olhar'] = '';
@@ -264,6 +269,10 @@ function pend(n, min) {
   if (!n) return 0;
   min = num(min) || 0;
   return n + ' (mais antigo: ' + (min >= 1440 ? Math.floor(min / 1440) + ' d' : min >= 60 ? Math.floor(min / 60) + ' h' : min + ' min') + ')';
+}
+function motivos(m) {
+  if (!m || typeof m !== 'object') return '';
+  return Object.keys(m).slice(0, 6).map(function (k) { return limpo(k, 30) + ' (' + (num(m[k]) || 0) + ')'; }).join(', ');
 }
 function fmt(d) { return Utilities.formatDate(d, TZ, 'dd/MM HH:mm'); }
 function dataBr(iso) {

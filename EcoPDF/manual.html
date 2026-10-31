@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
+<link rel="icon" href="/favicon.ico">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EcoPDF – Manual</title>
@@ -20,7 +21,7 @@ nav a{display:block;color:var(--tinta);text-decoration:none;padding:4px 0}
 nav a:hover{color:var(--vinho)}
 main{flex:1;min-width:0;background:var(--branco);border:1px solid var(--borda);border-radius:10px;padding:26px 34px 34px}
 h1{font-size:24px;margin:0 0 6px;color:var(--vinho)}
-h2{font-size:19px;margin:30px 0 8px;padding-top:6px;border-top:1px solid var(--borda)}
+h2{scroll-margin-top:80px;font-size:19px;margin:30px 0 8px;padding-top:6px;border-top:1px solid var(--borda)}
 h2:first-of-type{border-top:0}
 .sub{color:var(--quieto);margin:0 0 16px}
 .habitos{background:#fbf3f4;border-left:4px solid var(--vinho);border-radius:6px;padding:12px 16px;margin:14px 0}
@@ -45,6 +46,7 @@ li{margin:4px 0}
   <b>Neste manual</b>
   <a href="#exame">Em cada exame</a>
   <a href="#tela">A tela EcoPDF - Exames</a>
+  <a href="#verfinal">Ver final</a>
   <a href="#imprimir">Imprimir</a>
   <a href="#cadastro">Cadastro do paciente</a>
   <a href="#pastas">As pastas</a>
@@ -71,7 +73,7 @@ li{margin:4px 0}
 </ol>
 
 <h2 id="tela">A tela EcoPDF - Exames</h2>
-<p>É uma aba do navegador, só do PC de laudo, que abre sozinha quando o Windows entra. Se você fechar, reabra pelo atalho <b>EcoPDF - Exames</b> na Área de Trabalho. Ela se atualiza sozinha; não precisa recarregar.</p>
+<p>É uma aba do navegador, só do PC de laudo, que abre sozinha quando chega a primeira imagem de um exame ou um laudo (se ainda não estiver aberta). Ao ligar o PC ela não abre. Se você fechar, reabra pelo atalho <b>EcoPDF - Exames</b> na Área de Trabalho. Ela se atualiza sozinha; não precisa recarregar.</p>
 <p><b>Dúvida?</b> O botão <b>? Manual</b>, no alto da tela, abre este guia, sempre na versão instalada no PC. Abre mesmo sem internet.</p>
 <p><b>Lista de exames.</b> Mostra os exames de hoje, com os filtros <b>7 dias</b>, <b>30 dias</b> e <b>6 meses (tudo)</b>. O botão <b>Pendentes</b> mostra o que ainda não juntou: imagens sem laudo e laudos sem imagens (estes aparecem alguns minutos depois de impressos, com o motivo). O número aparece também no título da aba. A busca aceita o nome do paciente ou o código do aparelho (os 4 caracteres finais do número de série). Clique no paciente para abrir o exame.</p>
 <p><b>Tela do exame.</b></p>
@@ -92,10 +94,13 @@ li{margin:4px 0}
   <tr><td>Fora da pasta 2</td><td>O PDF de imagens foi apagado ou movido antes de juntar</td><td>Abrir o exame e clicar em Salvar folha</td></tr>
   <tr><td>Laudo sem imagens</td><td>Laudo há mais de 3 min sem as imagens; o motivo aparece na linha</td><td>Seguir o motivo, ou "Liberar sem imagens" se o exame não teve foto</td></tr>
   <tr><td>Descartado</td><td>Imagens que nunca terão laudo (teste, envio duplicado, paciente que saiu), tiradas de Pendentes pelo botão <b>Descartar</b> na tela do exame (pede confirmação). Ficam guardadas 6 meses</td><td>Nada. Se o laudo aparecer depois, a linha dele avisa: abra o exame e clique em <b>Restaurar</b>. Imagem nova do aparelho também reativa o exame</td></tr>
-  <tr><td>Finalizado</td><td>Laudo + imagens (ou só o laudo, se liberado) na pasta 3</td><td>Subir no prontuário; Imprimir, se precisar</td></tr>
+  <tr><td>Finalizado</td><td>Laudo + imagens (ou só o laudo, se liberado) na pasta 3</td><td>Subir no prontuário; Ver final para conferir; Imprimir, se precisar</td></tr>
   <tr><td>Subir de novo</td><td>O PDF final foi refeito nos últimos 3 dias (_retificado)</td><td>Subir de novo no prontuário; o selo some sozinho</td></tr>
 </table>
 <p>O botão <b>Pendentes</b> junta tudo o que ainda não está finalizado e os "Subir de novo".</p>
+
+<h2 id="verfinal">Ver o arquivo final</h2>
+<p>Nos exames <b>Finalizado</b>, o botão <b>Ver final</b> (na linha da lista e no alto da tela do exame) abre numa aba nova o PDF da pasta <b>3 - Finalizados</b>: exatamente o arquivo que sobe no prontuário, já na versão <b>_retificado</b> quando houver. Só mostra, não muda nada. Não precisa abrir a pasta 3.</p>
 
 <h2 id="imprimir">Imprimir</h2>
 <p>O botão <b>Imprimir</b> aparece na linha de cada exame <b>Finalizado</b> da lista e no alto da tela do exame. Se você estiver com o exame aberto enquanto lauda, o botão fica cinza ("aguardando laudo") e acende sozinho quando o laudo junta com as imagens.</p>

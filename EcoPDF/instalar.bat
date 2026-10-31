@@ -35,7 +35,7 @@ echo [1/5] Python encontrado: %PY%
 echo [2/5] Preparando o ambiente do EcoPDF...
 if not exist venv "%PY%" -m venv venv
 if not exist venv\Scripts\pythonw.exe (
-  echo  Falhou criar o ambiente Python. Me mande uma foto desta tela.
+  echo  Falhou criar o ambiente Python. Encaminhe uma foto desta tela para a administracao da clinica.
   pause
   exit /b 1
 )
@@ -88,7 +88,7 @@ set TELA_PORTA=8765
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"TELA_PORTA" config.ini') do set TELA_PORTA=%%b
 echo Criando o atalho "EcoPDF - Exames" na Area de Trabalho...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$d=[Environment]::GetFolderPath('Desktop'); Set-Content -Path (Join-Path $d 'EcoPDF - Exames.url') -Encoding ASCII -Value ('[InternetShortcut]','URL=http://127.0.0.1:%TELA_PORTA%/')"
+  "$d=[Environment]::GetFolderPath('Desktop'); Set-Content -Path (Join-Path $d 'EcoPDF - Exames.url') -Encoding ASCII -Value ('[InternetShortcut]','URL=http://127.0.0.1:%TELA_PORTA%/','IconFile=%~dp0ecopdf.ico','IconIndex=0')"
 
 timeout /t 5 >nul
 echo.

@@ -17,7 +17,7 @@ import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import pydicom
 from pypdf import PdfReader, PdfWriter
@@ -308,6 +308,15 @@ def previa(pasta, ident, tam, ep, cfg):
     return dados
 
 
+def arquivo_final(pasta, tipo, ep, cfg):
+    """PDF da pasta 3 do exame finalizado (o mesmo que sobe no prontuario), ou None."""
+    t = tipo or ""
+    g = next((x for x in ep._ler_grupos(pasta) if (x["tipo"] or "") == t), None)
+    r = ep.registro_do_grupo(g, ep._ler_registro(cfg)) if g else None
+    arq = cfg["pasta_final"] / r["final"] if r and r.get("final") else None
+    return arq if arq and arq.is_file() else None
+
+
 def _partes_impressao(r, ep, cfg):
     """(laudo, folha de fotos) guardados do exame finalizado: os mesmos que formam o final."""
     laudo = ep._laudo_guardado(r, cfg)
@@ -387,7 +396,7 @@ def _handler(ep, cfg):
             self.send_response(codigo)
             self.send_header("Content-Type", tipo)
             self.send_header("Content-Length", str(len(corpo)))
-            self.send_header("Cache-Control", "no-store" if "json" in tipo or "html" in tipo else "max-age=86400")
+            self.send_header("Cache-Control", "max-age=86400" if tipo.startswith("image/") else "no-store")
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
@@ -403,11 +412,14 @@ def _handler(ep, cfg):
         def do_GET(self):
             if not self._ok_host():
                 return
+            _estado["contato"] = time.time()
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             try:
                 if u.path in ("/", "/index.html"):
                     return self._enviar(200, (BASE / "tela.html").read_bytes(), "text/html; charset=utf-8")
+                if u.path == "/favicon.ico":
+                    return self._enviar(200, (BASE / "ecopdf.ico").read_bytes(), "image/x-icon")
                 if u.path == "/manual":
                     html = (BASE / "manual.html").read_text("utf-8")
                     html = re.sub(r'(<b id="versao">)[^<]*', lambda m: m.group(1) + ep.versao(), html, count=1)
@@ -421,6 +433,15 @@ def _handler(ep, cfg):
                     pasta = _pasta(q.get("e", ""), cfg)
                     d = detalhe(pasta, q.get("t", ""), ep, cfg) if pasta else None
                     return self._enviar(200 if d else 404, d or {"erro": "exame nao encontrado"})
+                if u.path == "/final":
+                    pasta = _pasta(q.get("e", ""), cfg)
+                    arq = arquivo_final(pasta, q.get("t", ""), ep, cfg) if pasta else None
+                    if arq is None:
+                        return self._enviar(404, "<p style='font:16px sans-serif'>Arquivo final nao encontrado na "
+                                            "pasta 3 (pode ter sido apagado apos o prazo de guarda).</p>",
+                                            "text/html; charset=utf-8")
+                    return self._enviar(200, arq.read_bytes(), "application/pdf",
+                                        {"Content-Disposition": "inline; filename*=UTF-8''" + quote(arq.name)})
                 if u.path == "/img":
                     pasta = _pasta(q.get("e", ""), cfg)
                     dados = previa(pasta, q.get("i", ""), q.get("s", "m"), ep, cfg) if pasta else None
@@ -473,8 +494,24 @@ def _handler(ep, cfg):
     return H
 
 
+_estado = {"contato": 0.0, "aberta_em": 0.0, "url": ""}
+ABERTA_SEG = 120   # pagina aberta consulta a cada 15 s (aba minimizada: ~1 por minuto)
+
+
+def abrir_se_fechada(cfg):
+    """TELA_ABRIR = ao_receber: abre o navegador quando chega imagem ou laudo, so se a
+    tela nao estiver aberta (sem consulta recente) e nao tiver sido aberta agora ha pouco."""
+    agora = time.time()
+    if (cfg.get("abrir_tela") != "ao_receber" or not _estado["url"]
+            or agora - _estado["contato"] < ABERTA_SEG or agora - _estado["aberta_em"] < ABERTA_SEG):
+        return
+    _estado["aberta_em"] = agora
+    webbrowser.open(_estado["url"])
+
+
 def iniciar(cfg, ep):
-    """Sobe a tela em 127.0.0.1:TELA_PORTA e abre o navegador (uma vez, ao iniciar)."""
+    """Sobe a tela em 127.0.0.1:TELA_PORTA. Navegador: ao iniciar (TELA_ABRIR = sim) ou
+    quando chega imagem/laudo e a tela nao esta aberta (ao_receber, padrao)."""
     porta = cfg["porta_tela"]
     if porta <= 0:
         return None
@@ -487,7 +524,8 @@ def iniciar(cfg, ep):
     threading.Thread(target=srv.serve_forever, daemon=True, name="tela").start()
     url = f"http://127.0.0.1:{porta}/"
     ep.log.info("Tela EcoPDF - Exames em %s", url)
-    if cfg.get("abrir_tela"):
+    _estado["url"] = url
+    if cfg.get("abrir_tela") == "inicio":
         try:
             webbrowser.open(url)
         except Exception:

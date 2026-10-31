@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
+<link rel="icon" href="/favicon.ico">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EcoPDF – Exames</title>
@@ -118,6 +119,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
     <span class="quieto pq" id="e-cont"></span>
     <span class="sujo pq" id="e-sujo" style="display:none">alterações não salvas</span>
     <button class="btn" id="b-descartar" style="display:none" title="Imagens que nunca terão laudo (teste, duplicado, paciente que saiu)">Descartar</button>
+    <a class="btn" id="b-final" style="display:none" target="_blank" title="Abre o PDF da pasta 3 - Finalizados (o que sobe no prontuário)">Ver final</a>
     <button class="btn" id="b-imprimir" style="display:none">Imprimir</button>
     <button class="btn" id="b-previa">Pré-visualizar folha</button>
     <button class="btn pri" id="b-salvar">Salvar folha</button>
@@ -222,7 +224,7 @@ function desenharLista() {
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
     <td class="${e.medidas ? "" : "quieto"}">${e.sem_medidas ? "não exibidas" : (e.medidas ? "✓ recebidas" : "— não recebidas")}</td>
     <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}</td>
-    <td style="text-align:right">${e.situacao === "Finalizado" ? `<button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
+    <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
   let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim);
   if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
   $("linhas").insertAdjacentHTML("afterbegin", laudos.map(l => `<tr class="sem-img">
@@ -253,7 +255,7 @@ $("busca").oninput = e => { filtro.busca = e.target.value; desenharLista(); };
 $("linhas").onclick = e => {
   const bl = e.target.closest("[data-lib]");
   if (bl) { liberar(bl); return; }
-  if (e.target.closest("tr.sem-img")) return;
+  if (e.target.closest("tr.sem-img") || e.target.closest("[data-final]")) return;
   const bi = e.target.closest("[data-imp]");
   if (bi) { imprimirDaLista(exames[Number(bi.dataset.imp)]); return; }
   const tr = e.target.closest("tr"); if (!tr) return; const x = exames[Number(tr.dataset.k)]; location.hash = `e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; };
@@ -416,8 +418,10 @@ async function descartarOuRestaurar() {
   botaoDescartar();
 }
 $("b-descartar").onclick = descartarOuRestaurar;
+function urlFinal(x) { return `/final?e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; }
 function botaoImprimir() {
   botaoDescartar();
+  const f = $("b-final"); f.style.display = ex.situacao === "Finalizado" ? "" : "none"; f.href = urlFinal(ex);
   const b = $("b-imprimir"); b.style.display = "";
   b.disabled = !ex.impressao;
   b.textContent = ex.impressao ? "Imprimir" : "Imprimir (aguardando laudo)";

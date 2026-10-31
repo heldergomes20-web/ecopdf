@@ -111,6 +111,27 @@ def area_de_trabalho():
         return Path.home() / "Desktop"
 
 
+def _modo_abrir(v):
+    """TELA_ABRIR: ao_receber (abre quando chega imagem ou laudo) | sim (ao iniciar) | nao."""
+    v = (v or "").strip().lower()
+    if v in ("nao", "não", "n", "0", "no", "false"):
+        return "nao"
+    if v in ("sim", "s", "1", "yes", "true", "inicio", "ao_iniciar"):
+        return "inicio"
+    return "ao_receber"
+
+
+TELA = None  # modulo da tela, quando ela esta ligada (para abrir ao receber)
+
+
+def _avisar_tela(cfg):
+    if TELA is not None:
+        try:
+            TELA.abrir_se_fechada(cfg)
+        except Exception:
+            log.exception("Tela: nao consegui abrir o navegador")
+
+
 def carregar_config(caminho):
     cp = configparser.ConfigParser(interpolation=None)
     cp.optionxform = str  # preserva maiusculas dos tipos de exame
@@ -160,7 +181,7 @@ def carregar_config(caminho):
         "painel_url": c.get("PAINEL_URL", "").strip(),
         "painel_chave": c.get("PAINEL_CHAVE", "").strip(),
         "painel_horarios": [h.strip() for h in c.get("PAINEL_HORARIOS", "09:00, 15:00").split(",") if h.strip()],
-        "abrir_tela": c.get("TELA_ABRIR", "sim").strip().lower() in ("sim", "s", "1", "yes", "true"),
+        "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "tipos": tipos,
     }
 
@@ -334,6 +355,7 @@ def on_store(event, cfg):
         gravar_atomico(pasta / (limpar_arquivo(sop, 64) + ".dcm"),
                        lambda p: p.write_bytes(dados))
         _anotar_conexao(event, "imagem")
+        _avisar_tela(cfg)
         log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
                  ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
@@ -1031,6 +1053,13 @@ def _liberar_sem_imagens(arq, m, cfg):
     return None
 
 
+def _mtime(f):
+    try:
+        return f.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def _ler_descartados(pasta_estudo):
     return _ler_json(pasta_estudo / DESCARTADOS, {})
 
@@ -1238,9 +1267,14 @@ def _mesclar(laudo, foto, destino, cfg):
 
 def vigiar(cfg, parar):
     ultima_limpeza = 0.0
+    laudo_visto = time.time()  # laudo que chega na pasta 1 depois disso abre a tela (TELA_ABRIR = ao_receber)
     while not parar.is_set():
         agora = time.time()
         try:
+            novos = [m for m in (_mtime(f) for f in cfg["pasta_laudos"].glob("*.pdf")) if m > laudo_visto]
+            if novos:
+                laudo_visto = max(novos)
+                _avisar_tela(cfg)
             for pasta in cfg["pasta_dicom"].iterdir():
                 dcms = list(pasta.glob("*.dcm")) if pasta.is_dir() else []
                 if not dcms:
@@ -1366,8 +1400,10 @@ def main():
     parar = threading.Event()
     threading.Thread(target=vigiar, args=(cfg, parar), daemon=True).start()
     try:
+        global TELA
         import tela
-        tela.iniciar(cfg, sys.modules[__name__])
+        if tela.iniciar(cfg, sys.modules[__name__]):
+            TELA = tela
     except Exception:
         log.exception("Tela EcoPDF - Exames nao iniciou (o resto continua funcionando)")
     try:
