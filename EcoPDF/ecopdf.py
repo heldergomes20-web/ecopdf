@@ -156,6 +156,9 @@ def carregar_config(caminho):
         "qualidade_jpeg": min(95, max(50, c.getint("QUALIDADE_JPEG", 80))),
         "largura_max": max(0, c.getint("LARGURA_MAX_IMAGEM", 1000)),
         "porta_tela": c.getint("TELA_PORTA", 8765),
+        "painel_url": c.get("PAINEL_URL", "").strip(),
+        "painel_chave": c.get("PAINEL_CHAVE", "").strip(),
+        "painel_horarios": [h.strip() for h in c.get("PAINEL_HORARIOS", "09:00, 15:00").split(",") if h.strip()],
         "abrir_tela": c.get("TELA_ABRIR", "sim").strip().lower() in ("sim", "s", "1", "yes", "true"),
         "tipos": tipos,
     }
@@ -264,7 +267,33 @@ def tipo_da_imagem(ds, tipos):
 
 def on_echo(event):
     log.info("Teste de conexao (C-ECHO) de %s", event.assoc.requestor.address)
+    _anotar_conexao(event, "teste (Verify/Echo)")
     return 0x0000
+
+
+def _anotar_conexao(event, tipo):
+    """Ultimo aparelho que falou com este PC (IP, AE Title, quando), para o painel das
+    salas separar 'o aparelho nem conectou' de 'conectou e nao mandou imagem'."""
+    try:
+        req = event.assoc.requestor
+        dados = {"ip": str(req.address), "ae": str(req.ae_title).strip(), "tipo": tipo,
+                 "em": datetime.now().isoformat(timespec="seconds")}
+        arq = BASE_CONEXAO[0]
+        if arq:
+            gravar_atomico(arq, lambda p: p.write_text(json.dumps(dados), "utf-8"))
+    except Exception:
+        pass  # so informativo
+
+
+BASE_CONEXAO = [None]  # log/conexao.json (definido no main)
+
+
+def on_conectou(event, cfg):
+    _anotar_conexao(event, "conexao")
+
+
+def on_recusou(event, cfg):
+    _anotar_conexao(event, "recusada (AE Title/configuracao)")
 
 
 def _sem_perda(ds):
@@ -303,6 +332,7 @@ def on_store(event, cfg):
         # reenvio da mesma imagem sobrescreve o mesmo arquivo
         gravar_atomico(pasta / (limpar_arquivo(sop, 64) + ".dcm"),
                        lambda p: p.write_bytes(dados))
+        _anotar_conexao(event, "imagem")
         log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
                  ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
@@ -1290,11 +1320,18 @@ def main():
         tela.iniciar(cfg, sys.modules[__name__])
     except Exception:
         log.exception("Tela EcoPDF - Exames nao iniciou (o resto continua funcionando)")
+    try:
+        import painel
+        painel.iniciar(cfg, sys.modules[__name__], parar)
+    except Exception:
+        log.exception("Painel das salas nao iniciou (o resto continua funcionando)")
 
     log.info("EcoPDF %s ouvindo: AE=%s porta=%d | fotos em %s | laudos em %s -> %s",
              versao(), cfg["ae_title"], cfg["porta"], cfg["pasta_imagens"],
              cfg["pasta_laudos"], cfg["pasta_final"])
-    handlers = [(evt.EVT_C_ECHO, on_echo), (evt.EVT_C_STORE, on_store, [cfg])]
+    BASE_CONEXAO[0] = cfg["pasta_log"] / "conexao.json"
+    handlers = [(evt.EVT_C_ECHO, on_echo), (evt.EVT_C_STORE, on_store, [cfg]),
+                (evt.EVT_ACCEPTED, on_conectou, [cfg]), (evt.EVT_REJECTED, on_recusou, [cfg])]
     try:
         ae.start_server(("0.0.0.0", cfg["porta"]), block=True, evt_handlers=handlers)
     except OSError:
