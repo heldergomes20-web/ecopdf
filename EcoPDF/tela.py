@@ -109,6 +109,8 @@ def _situacao(pasta, tipo, g, reg, ep, cfg):
         return "Novo"
     if ep.registro_do_grupo(g, reg):
         return "Finalizado"
+    if (tipo or "") in ep._ler_descartados(pasta):
+        return "Descartado"
     return "Fora da pasta 2"
 
 
@@ -184,7 +186,9 @@ def laudos_sem_imagens(ep, cfg):
                         motivo = ("as imagens foram achadas, mas um dos PDFs esta aberto em outro "
                                   "programa: feche para juntar")
             if motivo and motivo.startswith("sem PDF de imagens"):
-                motivo = "nenhuma imagem deste paciente nesta data (nome diferente no aparelho ou exame sem fotos)"
+                motivo = ("ha imagens DESCARTADAS deste paciente nesta data: abra o exame e clique em Restaurar"
+                          if _tem_descartado(data, nome, tipo, ep, cfg) else
+                          "nenhuma imagem deste paciente nesta data (nome diferente no aparelho ou exame sem fotos)")
         else:
             data, nome, tipo, motivo = "", arq.stem, "", "nome fora do padrao AAAA_MM_DD_Nome_Tipo"
         out.append({"laudo": arq.name, "paciente": nome.upper(), "data": data,
@@ -192,6 +196,18 @@ def laudos_sem_imagens(ep, cfg):
                     "minutos": int(idade // 60), "motivo": motivo or "aguardando a juncao",
                     "liberavel": bool(info)})
     return out
+
+
+def _tem_descartado(data, nome, tipo, ep, cfg):
+    raiz = cfg["pasta_dicom"]
+    for pasta in raiz.iterdir() if raiz.exists() else []:
+        d = ep._ler_descartados(pasta) if pasta.is_dir() else {}
+        for g in ep._ler_grupos(pasta) if d else []:
+            if (g["tipo"] or "") in d:
+                info = ep.ler_nome(Path(g["pdf"]), cfg["tipos"])
+                if info and info[0] == data and info[2] == tipo and ep._mesmo_paciente(info[1], nome, cfg):
+                    return True
+    return False
 
 
 def liberar_sem_imagens(nome, ep, cfg):
@@ -435,6 +451,10 @@ def _handler(ep, cfg):
                 if u.path == "/api/salvar":
                     ok, msg = ep.salvar_folha(pasta, tipo, ordem, fora, cfg)
                     return self._enviar(200 if ok else 409, {"ok": ok, "mensagem": msg})
+                if u.path in ("/api/descartar", "/api/restaurar"):
+                    f = ep.descartar if u.path.endswith("descartar") else ep.restaurar
+                    ok, msg = f(pasta, tipo, cfg)
+                    return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
                 if u.path == "/api/imprimir":
                     folhas = [int(x) for x in corpo.get("folhas", []) if str(x).isdigit()]
                     pdf = pdf_impressao(pasta, tipo, folhas, bool(corpo.get("laudo")), ep, cfg)

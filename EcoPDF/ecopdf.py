@@ -82,6 +82,7 @@ GERADO = ".gerado"
 GRUPOS = "grupos.json"
 OCULTAS = "ocultas.json"   # {tipo: [ids fora da folha]}
 ORDEM = "ordem.json"       # {tipo: [ids na ordem da folha]} (definida na tela)
+DESCARTADOS = "descartados.json"  # {tipo: quando} exames descartados na tela (nunca terao laudo)
 # vigia (thread) e tela (servidor web) mexem nos mesmos arquivos: um de cada vez
 TRAVA = threading.RLock()
 # pedido antigo pelo nome do arquivo ("..._Ecocardiograma tirar 3 5"): hoje so gera aviso (use a tela)
@@ -1030,6 +1031,51 @@ def _liberar_sem_imagens(arq, m, cfg):
     return None
 
 
+def _ler_descartados(pasta_estudo):
+    return _ler_json(pasta_estudo / DESCARTADOS, {})
+
+
+def descartar(pasta, tipo, cfg):
+    """Botao Descartar da tela: imagens que nunca terao laudo (teste, duplicado, paciente
+    que saiu). O PDF sai da pasta 2 para processados/descartados; o DICOM fica pelo prazo
+    normal. Nao junta sozinho depois: Restaurar devolve a folha. (ok, mensagem)."""
+    with TRAVA:
+        t = tipo or ""
+        g = next((x for x in _ler_grupos(pasta) if (x["tipo"] or "") == t), None)
+        if g is None:
+            return False, "o exame ainda esta sendo recebido"
+        if registro_do_grupo(g, _ler_registro(cfg)):
+            return False, "exame ja finalizado: nao da para descartar"
+        pdf = Path(g["pdf"])
+        if pdf.exists():
+            if not _livre(pdf):
+                return False, "o PDF de imagens esta aberto em outro programa: feche e tente de novo"
+            _mover(pdf, cfg["pasta_processados"] / "descartados", f"{datetime.now():%Y-%m-%d_%H%M%S}_{pdf.name}")
+        d = _ler_descartados(pasta)
+        d[t] = datetime.now().isoformat(timespec="seconds")
+        gravar_atomico(pasta / DESCARTADOS, lambda p: p.write_text(json.dumps(d), "utf-8"))
+        log.info("DESCARTADO na tela: %s", pdf.name)
+        return True, "Exame descartado: saiu de Pendentes. Se precisar, abra e clique em Restaurar."
+
+
+def restaurar(pasta, tipo, cfg):
+    """Desfaz o Descartar: refaz a folha na pasta 2 (junta se o laudo ja estiver na 1)."""
+    t = tipo or ""
+    with TRAVA:
+        d = _ler_descartados(pasta)
+        if t not in d:
+            return False, "este exame nao esta descartado"
+        g = next((x for x in _ler_grupos(pasta) if (x["tipo"] or "") == t), None)
+        ok, msg = salvar_folha(pasta, tipo, _ler_ordem(pasta).get(t, []), _ler_ocultas(pasta).get(t, []), cfg) \
+            if g and not Path(g["pdf"]).exists() else (True, "")
+        if not ok:
+            return False, msg
+        d.pop(t, None)
+        gravar_atomico(pasta / DESCARTADOS, lambda p: p.write_text(json.dumps(d), "utf-8"))
+        log.info("RESTAURADO na tela: %s", Path(g["pdf"]).name if g else pasta.name)
+        return True, "Exame restaurado: a folha voltou para a pasta 2 e junta com o laudo, se ele ja estiver la."
+
+
 def _juntar_tardio(foto, fotos, cfg):
     """PDF de imagens que chegou depois de o laudo ter sido liberado 'sem imagens'."""
     arq, data, nome, tipo = foto
@@ -1204,6 +1250,9 @@ def vigiar(cfg, parar):
                 feito = m.stat().st_mtime if m.exists() else 0
                 if ultima > feito and agora - ultima >= cfg["espera"]:
                     with TRAVA:
+                        if (pasta / DESCARTADOS).exists():  # imagem nova: o exame voltou a valer
+                            (pasta / DESCARTADOS).unlink()
+                            log.info("Imagem nova em exame descartado: volta ao normal (%s)", pasta.name)
                         try:
                             gerar_pdfs_do_estudo(pasta, cfg)
                         except Exception:

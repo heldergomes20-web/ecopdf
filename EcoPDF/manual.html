@@ -82,7 +82,7 @@ li{margin:4px 0}
   <li><b>Pré-visualizar folha</b> mostra a folha como vai sair. <b>Salvar folha</b> grava. Se o exame já estiver finalizado, o PDF é refeito e volta à pasta 3 com <code>_retificado</code>.</li>
   <li><b>Medidas:</b> quando o aparelho envia o relatório de medidas, elas aparecem ao lado. <b>Copiar medidas</b> copia o texto para colar na página de laudos. Medida em branco = não medida ou duvidosa, e não entra no texto copiado. Eco fetal não mostra medidas; nas carótidas, a leitura ainda não está ativada.</li>
 </ul>
-<p><b>Situação de cada exame.</b> Tudo termina em <b>Finalizado</b>.</p>
+<p><b>Situação de cada exame.</b> Tudo termina em <b>Finalizado</b>, exceto o que for descartado.</p>
 <table>
   <tr><th>Situação</th><th>O que significa</th><th>O que fazer</th></tr>
   <tr><td>Recebendo</td><td>Imagens chegando do aparelho</td><td>Nada. Em 2,5 min sem imagem nova vira Novo</td></tr>
@@ -91,6 +91,7 @@ li{margin:4px 0}
   <tr><td>Pendente</td><td>Imagens há mais de 30 min sem laudo</td><td>Laudar; se já laudou, conferir nome, data e tipo do laudo</td></tr>
   <tr><td>Fora da pasta 2</td><td>O PDF de imagens foi apagado ou movido antes de juntar</td><td>Abrir o exame e clicar em Salvar folha</td></tr>
   <tr><td>Laudo sem imagens</td><td>Laudo há mais de 3 min sem as imagens; o motivo aparece na linha</td><td>Seguir o motivo, ou "Liberar sem imagens" se o exame não teve foto</td></tr>
+  <tr><td>Descartado</td><td>Imagens que nunca terão laudo (teste, envio duplicado, paciente que saiu), tiradas de Pendentes pelo botão <b>Descartar</b> na tela do exame (pede confirmação). Ficam guardadas 6 meses</td><td>Nada. Se o laudo aparecer depois, a linha dele avisa: abra o exame e clique em <b>Restaurar</b>. Imagem nova do aparelho também reativa o exame</td></tr>
   <tr><td>Finalizado</td><td>Laudo + imagens (ou só o laudo, se liberado) na pasta 3</td><td>Subir no prontuário; Imprimir, se precisar</td></tr>
   <tr><td>Subir de novo</td><td>O PDF final foi refeito nos últimos 3 dias (_retificado)</td><td>Subir de novo no prontuário; o selo some sozinho</td></tr>
 </table>
