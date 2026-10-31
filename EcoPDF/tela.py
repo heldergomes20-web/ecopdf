@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pydicom
+from pypdf import PdfReader, PdfWriter
 
 import medidas as med
 
@@ -175,6 +176,7 @@ def detalhe(pasta, tipo, ep, cfg):
         "hora": str(ref.get("StudyTime", "") or "")[:4],
         "sigla": ep.sigla(ref), "aparelho": ep.aparelho(ref, cfg),
         "situacao": situacao, "final": r["final"] if r else "",
+        "impressao": _paginas_impressao(r, ep, cfg) if situacao == "Finalizado" else None,
         "por_pagina": max(1, cfg["colunas"]) * max(1, cfg["linhas"]),
         "imagens": imagens,
         "medidas": med.medidas_do_exame(tipo, ref, srs),
@@ -212,6 +214,50 @@ def previa(pasta, ident, tam, ep, cfg):
     destino.parent.mkdir(exist_ok=True)
     ep.gravar_atomico(destino, lambda p: p.write_bytes(dados))
     return dados
+
+
+def _partes_impressao(r, ep, cfg):
+    """(laudo, folha de fotos) guardados do exame finalizado: os mesmos que formam o final."""
+    laudo = ep._laudo_guardado(r, cfg)
+    foto = Path(r["foto"]) if ep._tem_foto(r) else None
+    return laudo, foto
+
+
+def _paginas_impressao(r, ep, cfg):
+    if not r:
+        return None
+    try:
+        laudo, foto = _partes_impressao(r, ep, cfg)
+        if laudo is None:
+            return None
+        return {"laudo": len(PdfReader(str(laudo)).pages),
+                "folhas": len(PdfReader(str(foto)).pages) if foto else 0}
+    except Exception:
+        ep.log.exception("Tela: nao li as paginas para impressao")
+        return None
+
+
+def pdf_impressao(pasta, tipo, folhas, com_laudo, ep, cfg):
+    """PDF para imprimir num envio so: folhas de fotos escolhidas primeiro (papel
+    fotografico por cima da pilha), depois o laudo (papel comum)."""
+    g = next((x for x in ep._ler_grupos(pasta) if (x["tipo"] or "") == (tipo or "")), None)
+    r = ep.registro_do_grupo(g, ep._ler_registro(cfg)) if g else None
+    if not r:
+        return None
+    laudo, foto = _partes_impressao(r, ep, cfg)
+    w = PdfWriter()
+    if foto and folhas:
+        n = len(PdfReader(str(foto)).pages)
+        for f in sorted(set(folhas)):
+            if 1 <= f <= n:
+                w.append(str(foto), pages=[f - 1])
+    if com_laudo and laudo:
+        w.append(str(laudo))
+    if not w.pages:
+        return None
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
 
 
 def pdf_previa(pasta, tipo, ordem, fora, ep, cfg):
@@ -305,6 +351,12 @@ def _handler(ep, cfg):
                 if u.path == "/api/salvar":
                     ok, msg = ep.salvar_folha(pasta, tipo, ordem, fora, cfg)
                     return self._enviar(200 if ok else 409, {"ok": ok, "mensagem": msg})
+                if u.path == "/api/imprimir":
+                    folhas = [int(x) for x in corpo.get("folhas", []) if str(x).isdigit()]
+                    pdf = pdf_impressao(pasta, tipo, folhas, bool(corpo.get("laudo")), ep, cfg)
+                    if pdf is None:
+                        return self._enviar(404, {"erro": "nada para imprimir"})
+                    return self._enviar(200, pdf, "application/pdf")
                 if u.path == "/api/previa":
                     pdf = pdf_previa(pasta, tipo, ordem, fora, ep, cfg)
                     if pdf is None:
