@@ -34,6 +34,7 @@ BASE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(r"C:\Laudos")
 ENTRADA = BASE / "0 - Entrada PDF24"
 PRONTOS = BASE / "1 - Laudos aguardando imagens"
 REVISAR = BASE / "9 - Revisar"
+AO_REVISAR = None  # o EcoPDF preenche: aviso de impressora errada
 LOG = BASE / "log.txt"
 
 MANTER_ACENTOS = False  # False: "JOAO" em vez de "JOAO" com til (mais seguro p/ upload/e-mail)
@@ -225,6 +226,11 @@ def processar(pdf: Path):
     if not nome or not data:
         alvo = mover(pdf, REVISAR, pdf.name)
         logging.warning("-> REVISAR (nome=%r data=%r): %s", nome, data, alvo.name)
+        if AO_REVISAR:
+            try:
+                AO_REVISAR(alvo.name)  # EcoPDF: avisa que nao saiu em papel
+            except Exception:
+                pass
         return
 
     novo = f"{formatar_data(data)}_{formatar_nome(nome)}_{formatar_tipo(titulo)}.pdf"

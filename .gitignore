@@ -10,3 +10,4 @@ EcoPDF/dicom/
 # chave privada do assinador NUNCA vai para o repositorio
 *.pem
 ferramentas/assinador/publicados/
+EcoPDF/painel.ini

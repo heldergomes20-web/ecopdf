@@ -19,6 +19,7 @@ O estado fica todo em disco, entao reiniciar o PC nao perde nada.
 Configuracao: config.ini na mesma pasta deste arquivo.
 """
 
+import collections
 import configparser
 import io
 import json
@@ -80,8 +81,12 @@ CAMPOS_TIPO = ("TransducerData", "StudyDescription", "SeriesDescription",
 
 GERADO = ".gerado"
 GRUPOS = "grupos.json"
-OCULTAS = "ocultas.json"
-# "..._Ecocardiograma tirar 3 5" / "... voltar todas": pedido do operador pelo nome do arquivo
+OCULTAS = "ocultas.json"   # {tipo: [ids fora da folha]}
+ORDEM = "ordem.json"       # {tipo: [ids na ordem da folha]} (definida na tela)
+DESCARTADOS = "descartados.json"  # {tipo: quando} exames descartados na tela (nunca terao laudo)
+# vigia (thread) e tela (servidor web) mexem nos mesmos arquivos: um de cada vez
+TRAVA = threading.RLock()
+# pedido antigo pelo nome do arquivo ("..._Ecocardiograma tirar 3 5"): hoje so gera aviso (use a tela)
 PEDIDO = re.compile(r"^(?P<base>\d{4}_\d{2}_\d{2}_.+?)\s+(?P<acao>tirar|tira|retirar|remover|voltar|volta|repor)"
                     r"(?:\s+(?P<lista>.*))?$", re.I)  # so com espaco: nomes gerados usam "_"
 # "..._Ecocardiograma sem imagens" na pasta 1: liberar o laudo sozinho
@@ -105,6 +110,40 @@ def area_de_trabalho():
             return Path(os.path.expandvars(winreg.QueryValueEx(k, "Desktop")[0]))
     except (ImportError, OSError):
         return Path.home() / "Desktop"
+
+
+def _modo_abrir(v):
+    """TELA_ABRIR: ao_receber (abre quando chega imagem ou laudo) | sim (ao iniciar) | nao."""
+    v = (v or "").strip().lower()
+    if v in ("nao", "não", "n", "0", "no", "false"):
+        return "nao"
+    if v in ("sim", "s", "1", "yes", "true", "inicio", "ao_iniciar"):
+        return "inicio"
+    return "ao_receber"
+
+
+TEMPOS_FOLHA = collections.deque(maxlen=300)  # (quando, segundos) para gerar a folha: painel
+TELA = None  # modulo da tela, quando ela esta ligada (para abrir ao receber)
+
+
+def _avisar_tela(cfg):
+    if TELA is not None:
+        try:
+            TELA.abrir_se_fechada(cfg)
+        except Exception:
+            log.exception("Tela: nao consegui abrir o navegador")
+
+
+def _painel_ini(chave):
+    """Valor do painel.ini ao lado do ecopdf.py ('' se nao houver). Formato: CHAVE = valor."""
+    try:
+        for linha in (BASE / "painel.ini").read_text("utf-8-sig").splitlines():
+            k, sep, v = linha.partition("=")
+            if sep and k.strip().upper() == chave:
+                return v.strip()
+    except OSError:
+        pass
+    return ""
 
 
 def carregar_config(caminho):
@@ -150,6 +189,15 @@ def carregar_config(caminho):
         "renomeador": c.get("RENOMEADOR", "sim").strip().lower() in ("sim", "s", "1", "yes", "true"),
         "sufixo_refeito": c.get("SUFIXO_REFEITO", "_retificado").strip(),
         "pendentes_minutos": c.getint("PENDENTES_MINUTOS", 30),
+        "qualidade_jpeg": min(95, max(50, c.getint("QUALIDADE_JPEG", 80))),
+        "largura_max": max(0, c.getint("LARGURA_MAX_IMAGEM", 1000)),
+        "porta_tela": c.getint("TELA_PORTA", 8765),
+        # endereco e chave da planilha ficam no painel.ini (copiado a mao em cada PC da clinica,
+        # fora do zip publico); o config.ini so serve de reserva
+        "painel_url": _painel_ini("PAINEL_URL") or c.get("PAINEL_URL", "").strip(),
+        "painel_chave": _painel_ini("PAINEL_CHAVE") or c.get("PAINEL_CHAVE", "").strip(),
+        "painel_horarios": [h.strip() for h in c.get("PAINEL_HORARIOS", "09:00, 15:00").split(",") if h.strip()],
+        "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "tipos": tipos,
     }
 
@@ -257,7 +305,33 @@ def tipo_da_imagem(ds, tipos):
 
 def on_echo(event):
     log.info("Teste de conexao (C-ECHO) de %s", event.assoc.requestor.address)
+    _anotar_conexao(event, "teste (Verify/Echo)")
     return 0x0000
+
+
+def _anotar_conexao(event, tipo):
+    """Ultimo aparelho que falou com este PC (IP, AE Title, quando), para o painel das
+    salas separar 'o aparelho nem conectou' de 'conectou e nao mandou imagem'."""
+    try:
+        req = event.assoc.requestor
+        dados = {"ip": str(req.address), "ae": str(req.ae_title).strip(), "tipo": tipo,
+                 "em": datetime.now().isoformat(timespec="seconds")}
+        arq = BASE_CONEXAO[0]
+        if arq:
+            gravar_atomico(arq, lambda p: p.write_text(json.dumps(dados), "utf-8"))
+    except Exception:
+        pass  # so informativo
+
+
+BASE_CONEXAO = [None]  # log/conexao.json (definido no main)
+
+
+def on_conectou(event, cfg):
+    _anotar_conexao(event, "conexao")
+
+
+def on_recusou(event, cfg):
+    _anotar_conexao(event, "recusada (AE Title/configuracao)")
 
 
 def _sem_perda(ds):
@@ -296,10 +370,16 @@ def on_store(event, cfg):
         # reenvio da mesma imagem sobrescreve o mesmo arquivo
         gravar_atomico(pasta / (limpar_arquivo(sop, 64) + ".dcm"),
                        lambda p: p.write_bytes(dados))
+        _anotar_conexao(event, "imagem")
+        _avisar_tela(cfg)
         log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
                  ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
                  {k: str(ds.get(k)) for k in CAMPOS_TIPO if ds.get(k)})
+        dt = str(ds.get("StudyDate", "") or "")
+        if len(dt) == 8 and (dt > time.strftime("%Y%m%d") or dt < "20100101"):
+            log.warning("Data do aparelho errada? imagem com data %s (PC: %s): acertar data e hora "
+                        "do aparelho", data_br(dt), time.strftime("%d/%m/%Y"))
         return 0x0000
     except Exception:
         log.exception("Falha ao gravar imagem recebida")
@@ -394,17 +474,39 @@ def _ler_estudo(pasta_estudo, cfg):
     return ref, {t: [(n, i) for _, n, i in itens] for t, itens in grupos.items()}
 
 
-def _ler_ocultas(pasta_estudo):
+def _ler_json(arq, padrao):
     try:
-        return json.loads((pasta_estudo / OCULTAS).read_text("utf-8"))
+        return json.loads(arq.read_text("utf-8"))
     except (OSError, ValueError):
-        return {}
+        return padrao
 
 
-def _numeradas(pasta_estudo, tipo, itens):
-    """[(numero, imagem)] sem as que o operador tirou; o numero nao muda."""
-    fora = set(_ler_ocultas(pasta_estudo).get(tipo or "", []))
-    return [(n, img) for n, (i, img) in enumerate(itens, 1) if i not in fora]
+def _ler_ocultas(pasta_estudo):
+    return _ler_json(pasta_estudo / OCULTAS, {})
+
+
+def _ler_ordem(pasta_estudo):
+    return _ler_json(pasta_estudo / ORDEM, {})
+
+
+def ordenar(ids, ordem, fora):
+    """ids na ordem da folha: primeiro os da ordem salva na tela, depois os que
+    chegaram depois (na ordem de chegada). Sem os que estao fora."""
+    pos = {i: k for k, i in enumerate(ordem or [])}
+    seq = sorted(enumerate(ids), key=lambda e: (pos.get(e[1], len(pos)), e[0]))
+    fora = set(fora or [])
+    return [i for _, i in seq if i not in fora]
+
+
+def _numeradas(pasta_estudo, tipo, itens, ordem=None, fora=None):
+    """[(numero, imagem)] na ordem da folha, sem as tiradas; numero = posicao na folha."""
+    t = tipo or ""
+    if ordem is None:
+        ordem = _ler_ordem(pasta_estudo).get(t, [])
+    if fora is None:
+        fora = _ler_ocultas(pasta_estudo).get(t, [])
+    por_id = dict(itens)
+    return [(n, por_id[i]) for n, i in enumerate(ordenar([i for i, _ in itens], ordem, fora), 1)]
 
 
 def gerar_pdfs_do_estudo(pasta_estudo, cfg):
@@ -518,12 +620,15 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
             cy = topo - pad - (lin + 1) * cel_h - lin * esp
             esc = min(cel_w / img.width, cel_h / img.height)
             w, h = img.width * esc, img.height * esc
+            lim = cfg.get("largura_max", 0)
+            if lim and img.width > lim:   # so reduz; ~360 dpi na celula de 7 cm
+                img = img.resize((lim, max(1, round(img.height * lim / img.width))), Image.LANCZOS)
             buf = io.BytesIO()
-            img.save(buf, "JPEG", quality=92)
+            img.save(buf, "JPEG", quality=cfg.get("qualidade_jpeg", 80))
             buf.seek(0)
             ix, iy = cx + (cel_w - w) / 2, cy + (cel_h - h) / 2
             c.drawImage(ImageReader(buf), ix, iy, w, h)
-            # numero discreto no canto: e por ele que se pede "tirar 3"
+            # numero discreto no canto: posicao da imagem na folha (o mesmo da tela)
             c.setFillColorRGB(0.85, 0.85, 0.85)
             c.setFont("Helvetica", 7)
             c.drawRightString(ix + w - 3, iy + 3, str(num))
@@ -539,6 +644,12 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
         c.setFont("Times-Bold", 8.5)
         for k, linha in enumerate(cfg["rodape"]):
             c.drawCentredString(larg / 2, 38 - k * 11, linha)
+        # marca invisivel (branco, 1 pt): se esta folha voltar pela PDF24 (final impresso
+        # na impressora errada), o EcoPDF reconhece e nao junta as imagens de novo
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont("Helvetica", 1)
+        c.drawString(x0, 6, MARCA_FOLHA)
+        c.setFillColorRGB(0, 0, 0)
         c.showPage()
     c.save()
 
@@ -795,13 +906,150 @@ def _corrigir(laudo, laudos, fotos, cfg):
     return True
 
 
+MARCA_FOLHA = "EcoPDF-folha-de-imagens"
+_TRIADOS = {}  # arquivo -> (mtime, tamanho) ja conferidos na triagem
+
+
+def _texto(paginas):
+    return re.sub(r"\s+", " ", " ".join(paginas)).strip()
+
+
+def _paginas_texto(arq):
+    try:
+        return [(pg.extract_text() or "") for pg in PdfReader(str(arq)).pages]
+    except Exception:
+        return None
+
+
+def _finalizado(laudo, cfg):
+    """Registro unico de exame ja finalizado para este laudo (data, tipo, paciente) ou None."""
+    _, data, nome, tipo = laudo
+    cands = [r for r in _ler_registro(cfg) if r["data"] == data and r["tipo"] == tipo
+             and _mesmo_paciente(r["nome"], nome, cfg)]
+    return cands[0] if len(cands) == 1 else None
+
+
+def impressora_papel():
+    """Nome da impressora padrao do Windows ('' fora do Windows ou se falhar)."""
+    if os.name != "nt":
+        return ""
+    try:
+        import ctypes
+        n = ctypes.c_ulong(0)
+        ctypes.windll.winspool.GetDefaultPrinterW(None, ctypes.byref(n))
+        buf = ctypes.create_unicode_buffer(n.value or 1)
+        if ctypes.windll.winspool.GetDefaultPrinterW(buf, ctypes.byref(n)):
+            return buf.value
+    except Exception:
+        pass
+    return ""
+
+
+_AVISO_ABERTO = threading.Event()
+
+
+def avisar_impressora_errada(nome_arquivo, extra=""):
+    """Janela no PC: o documento foi para a PDF24 e NAO saiu em papel. Nao bloqueia o EcoPDF;
+    uma janela por vez."""
+    imp = impressora_papel()
+    if not imp or "pdf24" in imp.lower():
+        qual = "a impressora de papel"
+    else:
+        qual = f"a impressora {imp}"
+    msg = (f"Este documento foi para a impressora PDF24 e NÃO saiu em papel.\n\n"
+           f"Para imprimir em papel, imprima de novo escolhendo {qual}.\n\n"
+           + (extra + "\n\n" if extra else "") + f"Arquivo: {nome_arquivo}")
+    log.warning("Aviso de impressora errada: %s %s", nome_arquivo, extra)
+    if os.name != "nt" or _AVISO_ABERTO.is_set():
+        return
+
+    def janela():
+        _AVISO_ABERTO.set()
+        try:
+            import ctypes
+            # MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL | MB_SETFOREGROUND | MB_TOPMOST
+            ctypes.windll.user32.MessageBoxW(None, msg, "EcoPDF - impressora", 0x0 | 0x30 | 0x1000 | 0x10000 | 0x40000)
+        except Exception:
+            pass
+        finally:
+            _AVISO_ABERTO.clear()
+
+    threading.Thread(target=janela, daemon=True).start()
+
+
+def _copia(arq, cfg, extra=""):
+    _mover(arq, cfg["pasta_processados"] / f"{datetime.now():%Y-%m-%d}" / "copias")
+    avisar_impressora_errada(arq.name, extra)
+
+
+def triagem(laudos, cfg):
+    """Antes de juntar: separa o que veio pela PDF24 por engano.
+    - PDF com folha de imagens (final impresso na PDF24): nunca e correcao. Laudo igual ao
+      guardado (ou so imagens) = copia; diferente = 9 - Revisar.
+    - Laudo igual ao do exame ja finalizado (com o final na pasta 3) = copia, sem 'Subir de novo'.
+      Se o final sumiu da pasta 3, segue como hoje (reimprimir refaz o final).
+    - Laudo igual a outro que ja esta esperando na pasta 1 = copia.
+    Devolve a lista de laudos que seguem."""
+    seguem = []
+    for laudo in laudos:
+        arq = laudo[0]
+        try:
+            st = arq.stat()
+            if _TRIADOS.get(arq) == (st.st_mtime, st.st_size):
+                seguem.append(laudo)
+                continue
+            paginas = _paginas_texto(arq)
+            if paginas is None:
+                seguem.append(laudo)
+                continue
+            marcadas = [i for i, t in enumerate(paginas) if MARCA_FOLHA in t]
+            texto = _texto(t for i, t in enumerate(paginas) if i not in marcadas)
+            r = _finalizado(laudo, cfg)
+            ref = _laudo_guardado(r, cfg) if r else None
+            ref_pg = (_paginas_texto(ref) or []) if ref else []
+            ref_txt = _texto(ref_pg) if ref else None
+            if (not marcadas and ref_pg and len(paginas) > len(ref_pg)
+                    and _texto(paginas[:len(ref_pg)]) == ref_txt):
+                marcadas = list(range(len(ref_pg), len(paginas)))  # final de antes da marca
+                texto = ref_txt
+            if marcadas:
+                if not texto or (ref_txt is not None and texto == ref_txt):
+                    log.info("COPIA (final impresso na PDF24): %s", arq.name)
+                    _copia(arq, cfg)
+                else:
+                    log.warning("PDF com folha de imagens e laudo diferente do guardado -> 9 - Revisar: %s", arq.name)
+                    _mover(arq, cfg["pasta_laudos"].parent / "9 - Revisar")
+                    avisar_impressora_errada(arq.name, "Ele tem imagens e o laudo é diferente do guardado: "
+                                             "o EcoPDF não usou (está em 9 - Revisar). Para corrigir um laudo, "
+                                             "imprima o laudo do Medware, sem as imagens.")
+                continue
+            if (r and ref_txt is not None and texto == ref_txt
+                    and (cfg["pasta_final"] / r["final"]).exists()):
+                log.info("COPIA (laudo igual ao do exame ja finalizado): %s", arq.name)
+                _copia(arq, cfg)
+                continue
+            irmao = next((o for o in laudos if o[0] != arq and o[0].exists() and o[1:] == laudo[1:]
+                          and (o[0].stat().st_mtime, o[0].name) < (st.st_mtime, arq.name)
+                          and _texto(_paginas_texto(o[0]) or []) == texto), None)
+            if irmao and texto:
+                log.info("COPIA (laudo igual a %s na pasta 1): %s", irmao[0].name, arq.name)
+                _copia(arq, cfg)
+                continue
+            _TRIADOS[arq] = (st.st_mtime, st.st_size)
+            seguem.append(laudo)
+        except Exception:
+            log.exception("Falha na triagem de %s", arq.name)
+            seguem.append(laudo)
+    return seguem
+
+
 def juntar_laudos(cfg):
     for chave in ("pasta_laudos", "pasta_imagens", "pasta_final"):
         if not cfg[chave].exists():  # alguem apagou a pasta: recria (o conteudo vai para a Lixeira)
             log.warning("Pasta apagada, recriando: %s", cfg[chave])
             cfg[chave].mkdir(parents=True, exist_ok=True)
     agora = time.time()
-    laudos = _listar(cfg["pasta_laudos"], cfg, agora)
+    laudos = triagem(_listar(cfg["pasta_laudos"], cfg, agora), cfg)
     fotos = _listar(cfg["pasta_imagens"], cfg, agora)
 
     erros = processar_pedidos(cfg)
@@ -871,30 +1119,8 @@ ROTULOS = r"(?:Paciente|Exame|Data de Nasc\.?|Sexo|Data(?! de)|Idade|Conv[eê]ni
 # Tirar / voltar imagem (pedido pelo nome do arquivo, na pasta 2 ou 3)
 # --------------------------------------------------------------------------
 
-AJUDA = "use por exemplo: tirar 3 5 | tirar 3 a 5 | voltar 3 | voltar todas"
 _avisados = set()
-
-
-def ler_numeros(texto):
-    """'3 5', '3,5', '3 e 5', '3 a 5', '3-5', '2, 4 a 6' -> [..]. Qualquer outra coisa: ValueError."""
-    t = (texto or "").lower().replace("até", " a ").replace("ate", " a ")
-    nums = []
-
-    def faixa(m):
-        a, b = int(m[1]), int(m[2])
-        if a > b or b - a > 200:
-            raise ValueError(texto)
-        nums.extend(range(a, b + 1))
-        return " "
-    t = re.sub(r"(\d+)\s*(?:-|\ba\b)\s*(\d+)", faixa, t)
-    for parte in re.split(r"[\s,;.+_]+|\be\b", t):
-        if parte:
-            if not parte.isdigit():
-                raise ValueError(texto)
-            nums.append(int(parte))
-    if not nums:
-        raise ValueError(texto)
-    return sorted(set(nums))
+AVISO_TELA = "tirar/voltar imagem agora e pela tela EcoPDF - Exames (atalho na Area de Trabalho); tire o pedido do nome do arquivo"
 
 
 def _achar_estudo(nome_pdf, cfg):
@@ -905,60 +1131,61 @@ def _achar_estudo(nome_pdf, cfg):
     return None, None
 
 
-def _aplicar_pedido(arq, m, cfg):
-    """Erro (texto) ou None. Arquivo renomeado na pasta 2 (imagens) ou 3 (final)."""
-    acao = "tirar" if m["acao"].lower() in ("tirar", "tira", "retirar", "remover") else "voltar"
-    lista = (m["lista"] or "").strip()
-    base = m["base"] + ".pdf"
-    reg, r = None, None
-    if arq.parent == cfg["pasta_final"]:
-        reg = _ler_registro(cfg)
-        cands = [x for x in reg if x["final"] == base]
-        if len(cands) != 1:
-            return "nao achei o exame deste PDF (o nome antes de '%s' tem que ficar igual)" % m["acao"]
-        r = cands[0]
-        pasta, g = _achar_estudo(Path(r["foto"]).name, cfg)
-    else:
-        pasta, g = _achar_estudo(base, cfg)
-    if pasta is None:
-        return ("nao achei as imagens originais (mais de %d dias ou PDF de outro lugar)"
-                % cfg["manter_dicom_dias"])
-    ref, grupos = _ler_estudo(pasta, cfg)
-    itens = grupos.get(g["tipo"], [])
-    ocultas = _ler_ocultas(pasta)
-    fora = set(ocultas.get(g["tipo"] or "", []))
-    try:
-        if acao == "voltar" and lista.lower() in ("todas", "todos", "tudo"):
-            nums = list(range(1, len(itens) + 1))
+def registro_do_grupo(g, reg):
+    """Entrada do finalizados.json do exame (grupo de um estudo), ou None."""
+    stem = Path(g["pdf"]).stem
+    rx = re.compile(re.escape(stem) + r"(_\d{6})?")
+    cands = [r for r in reg if r.get("foto") and r["data"] == g["data"] and r["tipo"] == g["tipo"]
+             and rx.fullmatch(Path(r["foto"]).stem)]
+    return cands[0] if len(cands) == 1 else None
+
+
+def salvar_folha(pasta, tipo, ordem, fora, cfg):
+    """Ordem e imagens da folha escolhidas na tela. Refaz o PDF da pasta 2 ou, se o
+    exame ja foi finalizado, o final (com _retificado). Devolve (ok, mensagem)."""
+    with TRAVA:
+        g = next((x for x in _ler_grupos(pasta) if (x["tipo"] or "") == (tipo or "")), None)
+        if g is None:
+            return False, "o exame ainda esta sendo recebido; espere a folha ser gerada"
+        ref, grupos = _ler_estudo(pasta, cfg)
+        itens = grupos.get(g["tipo"], [])
+        ids = [i for i, _ in itens]
+        ordem = [i for i in ordem if i in ids]
+        fora = sorted(set(i for i in fora if i in ids))
+        if len(fora) >= len(ids):
+            return False, "nao da para tirar todas as imagens"
+        pdf = Path(g["pdf"])
+        reg, r = None, None
+        if pdf.exists():
+            if not _livre(pdf):
+                return False, "o PDF de imagens esta aberto em outro programa: feche e salve de novo"
         else:
-            nums = ler_numeros(lista)
-    except ValueError:
-        return f"nao entendi '{m['acao']} {lista}': {AJUDA}"
-    if nums[-1] > len(itens):
-        return f"nao existe a imagem {nums[-1]}: a folha vai de 1 a {len(itens)}"
-    ids = {itens[n - 1][0] for n in nums}
-    fora = fora | ids if acao == "tirar" else fora - ids
-    if len(fora) >= len(itens):
-        return "nao da para tirar todas as imagens"
-    ocultas[g["tipo"] or ""] = sorted(fora)
-    gravar_atomico(pasta / OCULTAS,
-                   lambda p: p.write_text(json.dumps(ocultas, ensure_ascii=False, indent=1), "utf-8"))
-    (pasta / GERADO).touch()  # refeito aqui; o vigia nao precisa refazer
-    motivo = "IMAGENS RETIRADAS" if acao == "tirar" else "IMAGENS DEVOLVIDAS"
-    if r is None:
-        destino = cfg["pasta_imagens"] / base
-        imagens = _numeradas(pasta, g["tipo"], itens)
-        gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
-        arq.unlink()
-    else:
-        laudo = _laudo_guardado(r, cfg)
-        if laudo is None:
-            return "nao achei o laudo guardado deste exame em processados"
-        _mover(arq, cfg["pasta_processados"] / "substituidos", f"{datetime.now():%Y-%m-%d_%H%M%S}_{base}")
-        _substituir_final(r, laudo, cfg, motivo)
+            reg = _ler_registro(cfg)
+            r = registro_do_grupo(g, reg)
+            if r is None:
+                pass  # PDF sumiu da pasta 2 sem juntar (apagado/movido): salvar o recria
+            else:
+                antigo = cfg["pasta_final"] / r["final"]
+                if antigo.exists() and not _livre(antigo):
+                    return False, "o PDF final esta aberto em outro programa: feche e salve de novo"
+                if _laudo_guardado(r, cfg) is None:
+                    return False, "nao achei o laudo guardado deste exame em processados"
+        t = g["tipo"] or ""
+        o, f = _ler_ordem(pasta), _ler_ocultas(pasta)
+        o[t], f[t] = ordem, fora
+        gravar_atomico(pasta / ORDEM, lambda p: p.write_text(json.dumps(o, ensure_ascii=False, indent=1), "utf-8"))
+        gravar_atomico(pasta / OCULTAS, lambda p: p.write_text(json.dumps(f, ensure_ascii=False, indent=1), "utf-8"))
+        (pasta / GERADO).touch()  # refeito aqui; o vigia nao precisa refazer
+        n = len(ids) - len(fora)
+        if r is None:
+            imagens = _numeradas(pasta, g["tipo"], itens)
+            gravar_atomico(pdf, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
+            log.info("FOLHA AJUSTADA na tela: %s (%d de %d imagens)", pdf.name, n, len(ids))
+            return True, f"Folha salva: {n} imagens."
+        final = _substituir_final(r, _laudo_guardado(r, cfg), cfg, "FOLHA AJUSTADA")
         _gravar_registro(cfg, reg)
-    log.info("%s: %s (%s %s)", motivo, base, acao, " ".join(map(str, nums)))
-    return None
+        log.info("FOLHA AJUSTADA na tela (exame finalizado): %s (%d de %d imagens)", final.name, n, len(ids))
+        return True, f"Final refeito: {final.name}"
 
 
 def _liberar_sem_imagens(arq, m, cfg):
@@ -989,6 +1216,58 @@ def _liberar_sem_imagens(arq, m, cfg):
     return None
 
 
+def _mtime(f):
+    try:
+        return f.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _ler_descartados(pasta_estudo):
+    return _ler_json(pasta_estudo / DESCARTADOS, {})
+
+
+def descartar(pasta, tipo, cfg):
+    """Botao Descartar da tela: imagens que nunca terao laudo (teste, duplicado, paciente
+    que saiu). O PDF sai da pasta 2 para processados/descartados; o DICOM fica pelo prazo
+    normal. Nao junta sozinho depois: Restaurar devolve a folha. (ok, mensagem)."""
+    with TRAVA:
+        t = tipo or ""
+        g = next((x for x in _ler_grupos(pasta) if (x["tipo"] or "") == t), None)
+        if g is None:
+            return False, "o exame ainda esta sendo recebido"
+        if registro_do_grupo(g, _ler_registro(cfg)):
+            return False, "exame ja finalizado: nao da para descartar"
+        pdf = Path(g["pdf"])
+        if pdf.exists():
+            if not _livre(pdf):
+                return False, "o PDF de imagens esta aberto em outro programa: feche e tente de novo"
+            _mover(pdf, cfg["pasta_processados"] / "descartados", f"{datetime.now():%Y-%m-%d_%H%M%S}_{pdf.name}")
+        d = _ler_descartados(pasta)
+        d[t] = datetime.now().isoformat(timespec="seconds")
+        gravar_atomico(pasta / DESCARTADOS, lambda p: p.write_text(json.dumps(d), "utf-8"))
+        log.info("DESCARTADO na tela: %s", pdf.name)
+        return True, "Exame descartado: saiu de Pendentes. Se precisar, abra e clique em Restaurar."
+
+
+def restaurar(pasta, tipo, cfg):
+    """Desfaz o Descartar: refaz a folha na pasta 2 (junta se o laudo ja estiver na 1)."""
+    t = tipo or ""
+    with TRAVA:
+        d = _ler_descartados(pasta)
+        if t not in d:
+            return False, "este exame nao esta descartado"
+        g = next((x for x in _ler_grupos(pasta) if (x["tipo"] or "") == t), None)
+        ok, msg = salvar_folha(pasta, tipo, _ler_ordem(pasta).get(t, []), _ler_ocultas(pasta).get(t, []), cfg) \
+            if g and not Path(g["pdf"]).exists() else (True, "")
+        if not ok:
+            return False, msg
+        d.pop(t, None)
+        gravar_atomico(pasta / DESCARTADOS, lambda p: p.write_text(json.dumps(d), "utf-8"))
+        log.info("RESTAURADO na tela: %s", Path(g["pdf"]).name if g else pasta.name)
+        return True, "Exame restaurado: a folha voltou para a pasta 2 e junta com o laudo, se ele ja estiver la."
+
+
 def _juntar_tardio(foto, fotos, cfg):
     """PDF de imagens que chegou depois de o laudo ter sido liberado 'sem imagens'."""
     arq, data, nome, tipo = foto
@@ -1012,8 +1291,8 @@ def _juntar_tardio(foto, fotos, cfg):
 
 
 def processar_pedidos(cfg):
-    """Pedidos 'tirar/voltar' nas pastas 2 e 3. Na duvida nao mexe: devolve os erros
-    para o PENDENTES.txt e deixa o arquivo como esta."""
+    """'sem imagens' na pasta 1. Pedido antigo 'tirar/voltar' no nome do arquivo (pastas
+    2 e 3) nao e mais atendido: vira aviso no PENDENTES.txt para usar a tela."""
     erros = []
     for arq in cfg["pasta_laudos"].glob("*.pdf") if cfg["pasta_laudos"].exists() else []:
         m = SEM_IMG.match(arq.stem)
@@ -1027,19 +1306,13 @@ def processar_pedidos(cfg):
                 erros.append((arq, erro))
     for pasta in (cfg["pasta_imagens"], cfg["pasta_final"]):
         for arq in pasta.glob("*.pdf") if pasta.exists() else []:
-            m = PEDIDO.match(arq.stem)
-            if not m:
+            if not PEDIDO.match(arq.stem):
                 continue
-            try:
-                erro = _aplicar_pedido(arq, m, cfg)
-            except Exception:
-                log.exception("Falha no pedido %s", arq.name)
-                erro = "erro ao refazer (veja o log)"
-            if erro:
-                erros.append((arq, erro))
-                if arq.name not in _avisados:
-                    log.warning("Pedido nao atendido: %s -> %s", arq.name, erro)
-                    _avisados.add(arq.name)
+            # o pedido pelo nome do arquivo saiu (2026.10.31.3): so avisa
+            erros.append((arq, AVISO_TELA))
+            if arq.name not in _avisados:
+                log.warning("Pedido pelo nome do arquivo ignorado: %s", arq.name)
+                _avisados.add(arq.name)
     return erros
 
 
@@ -1157,9 +1430,14 @@ def _mesclar(laudo, foto, destino, cfg):
 
 def vigiar(cfg, parar):
     ultima_limpeza = 0.0
+    laudo_visto = time.time()  # laudo que chega na pasta 1 depois disso abre a tela (TELA_ABRIR = ao_receber)
     while not parar.is_set():
         agora = time.time()
         try:
+            novos = [m for m in (_mtime(f) for f in cfg["pasta_laudos"].glob("*.pdf")) if m > laudo_visto]
+            if novos:
+                laudo_visto = max(novos)
+                _avisar_tela(cfg)
             for pasta in cfg["pasta_dicom"].iterdir():
                 dcms = list(pasta.glob("*.dcm")) if pasta.is_dir() else []
                 if not dcms:
@@ -1168,15 +1446,22 @@ def vigiar(cfg, parar):
                 m = pasta / GERADO
                 feito = m.stat().st_mtime if m.exists() else 0
                 if ultima > feito and agora - ultima >= cfg["espera"]:
-                    try:
-                        gerar_pdfs_do_estudo(pasta, cfg)
-                    except Exception:
-                        log.exception("Falha ao gerar PDF do estudo %s", pasta.name)
-                    m.touch()  # nao repete em laco; imagem nova reabre o estudo
-            juntar_laudos(cfg)
-            if agora - ultima_limpeza > 3600:
-                limpar_antigos(cfg)
-                ultima_limpeza = agora
+                    with TRAVA:
+                        if (pasta / DESCARTADOS).exists():  # imagem nova: o exame voltou a valer
+                            (pasta / DESCARTADOS).unlink()
+                            log.info("Imagem nova em exame descartado: volta ao normal (%s)", pasta.name)
+                        try:
+                            t0 = time.monotonic()
+                            gerar_pdfs_do_estudo(pasta, cfg)
+                            TEMPOS_FOLHA.append((time.time(), time.monotonic() - t0))
+                        except Exception:
+                            log.exception("Falha ao gerar PDF do estudo %s", pasta.name)
+                        m.touch()  # nao repete em laco; imagem nova reabre o estudo
+            with TRAVA:
+                juntar_laudos(cfg)
+                if agora - ultima_limpeza > 3600:
+                    limpar_antigos(cfg)
+                    ultima_limpeza = agora
         except Exception:
             log.exception("Erro no vigia")
         parar.wait(10)
@@ -1190,10 +1475,20 @@ def limpar_antigos(cfg):
     for pasta in cfg["pasta_dicom"].iterdir():
         m = pasta / GERADO
         if pasta.is_dir() and m.exists() and m.stat().st_mtime < limite:
-            for f in pasta.iterdir():
-                f.unlink()
-            pasta.rmdir()
+            shutil.rmtree(pasta)  # inclui a subpasta previa/ da tela
             log.info("DICOM antigo removido: %s", pasta.name)
+    # Pasta 3: os medicos nao apagam o que ja subiu; o EcoPDF apaga o final depois do
+    # mesmo prazo (conta da ultima vez que o arquivo foi gerado). So mexe em arquivos que
+    # ele mesmo gerou (estao no registro); laudo e folha guardados em processados ficam.
+    nomes = {r.get("final") for r in _ler_registro(cfg) if r.get("final")}
+    for nome in nomes:
+        arq = cfg["pasta_final"] / nome
+        try:
+            if arq.is_file() and arq.stat().st_mtime < limite:
+                arq.unlink()
+                log.info("Final antigo removido da pasta 3: %s", nome)
+        except OSError:
+            pass  # aberto em outro programa: tenta na proxima limpeza
 
 
 # --------------------------------------------------------------------------
@@ -1236,6 +1531,8 @@ def iniciar_renomeador(cfg):
     mod.PRONTOS = cfg["pasta_laudos"]
     mod.REVISAR = raiz / "9 - Revisar"
     mod.LOG = cfg["pasta_log"] / "renomeador.log"
+    mod.AO_REVISAR = lambda nome: avisar_impressora_errada(
+        nome, "Não parece um laudo (sem nome do paciente ou data): foi para 9 - Revisar.")
 
     def rodar():
         while True:
@@ -1269,11 +1566,25 @@ def main():
 
     parar = threading.Event()
     threading.Thread(target=vigiar, args=(cfg, parar), daemon=True).start()
+    try:
+        global TELA
+        import tela
+        if tela.iniciar(cfg, sys.modules[__name__]):
+            TELA = tela
+    except Exception:
+        log.exception("Tela EcoPDF - Exames nao iniciou (o resto continua funcionando)")
+    try:
+        import painel
+        painel.iniciar(cfg, sys.modules[__name__], parar)
+    except Exception:
+        log.exception("Painel das salas nao iniciou (o resto continua funcionando)")
 
     log.info("EcoPDF %s ouvindo: AE=%s porta=%d | fotos em %s | laudos em %s -> %s",
              versao(), cfg["ae_title"], cfg["porta"], cfg["pasta_imagens"],
              cfg["pasta_laudos"], cfg["pasta_final"])
-    handlers = [(evt.EVT_C_ECHO, on_echo), (evt.EVT_C_STORE, on_store, [cfg])]
+    BASE_CONEXAO[0] = cfg["pasta_log"] / "conexao.json"
+    handlers = [(evt.EVT_C_ECHO, on_echo), (evt.EVT_C_STORE, on_store, [cfg]),
+                (evt.EVT_ACCEPTED, on_conectou, [cfg]), (evt.EVT_REJECTED, on_recusou, [cfg])]
     try:
         ae.start_server(("0.0.0.0", cfg["porta"]), block=True, evt_handlers=handlers)
     except OSError:

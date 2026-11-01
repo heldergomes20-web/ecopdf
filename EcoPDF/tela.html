@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<link rel="icon" href="/favicon.ico">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoPDF – Exames</title>
+<style>
+:root{--vinho:#8b1e2d;--tinta:#1d2433;--quieto:#6b7380;--borda:#d6dbe2;--fundo:#eef1f5;--branco:#fff}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--fundo);color:var(--tinta);font-size:14px}
+button{font:inherit;cursor:pointer}
+.topo{background:var(--branco);border-bottom:1px solid var(--borda);height:52px;display:flex;align-items:center;padding:0 22px;gap:16px}
+.logo{font-weight:700;color:var(--vinho);font-size:17px}.logo span{color:var(--tinta);font-weight:400}
+.quieto{color:var(--quieto)}.pq{font-size:12.5px}
+.btn{border:1px solid #c3c9d2;background:var(--branco);border-radius:7px;padding:7px 14px;color:var(--tinta);text-decoration:none}
+.btn:hover{border-color:#8f97a3}
+.btn.pri{background:var(--vinho);color:#fff;border-color:var(--vinho);font-weight:600}
+.btn.on{background:var(--vinho);color:#fff;border-color:var(--vinho)}
+.btn.alerta{border-color:#a12a2a;color:#a12a2a;font-weight:600}
+.btn.alerta.on{background:#a12a2a;color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.selo{display:inline-block;border-radius:10px;padding:2px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.s-Recebendo{background:#eceff3;color:#4b5563}.s-Novo{background:#e3edff;color:#1f4fb5}.s-Folha{background:#fff2d6;color:#8a5a00}
+.s-Finalizado{background:#dcf3e3;color:#17703a}.s-Pendente{background:#fde2e2;color:#a12a2a}.s-Fora{background:#eceff3;color:#4b5563}
+.cont{background:#fde2e2;color:#a12a2a;border-radius:9px;padding:0 7px;margin-left:6px;font-size:12px}
+.btn.alerta.on .cont{background:#fff;color:#a12a2a}
+/* lista */
+#lista{padding:18px 22px}
+.filtros{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.busca{margin-left:auto;width:300px;border:1px solid #c3c9d2;border-radius:7px;padding:8px 12px;font:inherit}
+.cartao{background:var(--branco);border:1px solid var(--borda);border-radius:10px;overflow:hidden}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:12px;color:var(--quieto);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--borda);text-transform:uppercase;letter-spacing:.03em}
+td{padding:11px 14px;border-bottom:1px solid #e6e9ee}
+tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
+.vazio{padding:40px;text-align:center;color:var(--quieto)}
+/* exame */
+#exame{display:none;height:calc(100% - 52px);flex-direction:column}
+.cab{display:flex;align-items:center;gap:14px;padding:10px 22px;background:var(--branco);border-bottom:1px solid var(--borda)}
+.cab .nome{font-weight:700;font-size:16px}
+.corpo{display:flex;gap:16px;padding:14px 22px;flex:1;min-height:0}
+.esq{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
+.palco{flex:1;background:#000;border-radius:8px;position:relative;overflow:hidden;min-height:200px}
+.palco img{position:absolute;left:50%;top:50%;transform-origin:center;user-select:none;-webkit-user-drag:none}
+.palco .info{position:absolute;top:10px;left:12px;color:#fff;font-size:13px;background:rgba(0,0,0,.55);padding:3px 9px;border-radius:5px}
+.palco .ctrl{position:absolute;top:10px;right:12px;display:flex;gap:6px}
+.palco .ctrl .btn{padding:4px 10px}
+.palco .seta{position:absolute;top:50%;transform:translateY(-50%);color:#fff;font-size:34px;background:none;border:0;padding:10px}
+.palco .fora-aviso{position:absolute;bottom:10px;left:12px;color:#fff;background:#a12a2a;font-size:12.5px;padding:3px 9px;border-radius:5px}
+.tiras{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 8px}
+.mini{width:96px;height:72px;flex:none;border-radius:6px;position:relative;border:3px solid var(--vinho);background:#000;cursor:pointer}
+.mini img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}
+.mini.fora{border:2px dashed #9aa1ab;opacity:.45}
+.mini.atual{outline:3px solid #2f6fe0;outline-offset:2px}
+.mini.arrastando{opacity:.3}
+.mini.alvo{box-shadow:-6px 0 0 #2f6fe0}
+.mini .n{position:absolute;top:3px;left:3px;background:var(--vinho);color:#fff;font-size:11px;font-weight:700;border-radius:9px;padding:0 6px}
+.mini.fora .n{background:#6b7380}
+.mini .ck{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:4px;background:var(--vinho);color:#fff;font-size:13px;text-align:center;line-height:20px;border:0;padding:0}
+.mini.fora .ck{background:#fff;border:1px solid #9aa1ab;color:transparent}
+.painel{width:330px;flex:none;background:var(--branco);border:1px solid var(--borda);border-radius:10px;padding:12px 16px;overflow:auto}
+.grp{font-size:11.5px;font-weight:700;color:var(--vinho);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 2px}
+.lin{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #eef0f3}
+.lin b{font-weight:600;white-space:nowrap}.branco{color:#b0b6bf}
+.sujo{color:#a12a2a;font-weight:600}
+/* modal */
+.fundo{position:fixed;inset:0;background:rgba(20,25,35,.5);display:none;align-items:center;justify-content:center;z-index:10}
+.caixa{background:var(--branco);border-radius:10px;padding:20px 24px;max-width:560px;width:92%}
+.caixa.grande{max-width:none;width:min(1000px,95%);height:92%;display:flex;flex-direction:column;padding:14px 18px}
+.caixa iframe{flex:1;border:1px solid var(--borda);border-radius:6px;width:100%}
+.acoes{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
+#m-conf,#m-sair{z-index:11}
+.opc{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid #eef0f3;cursor:pointer}
+.opc input{width:17px;height:17px}
+.papel{background:#fff6dd;border:1px solid #f0d58a;border-radius:8px;padding:10px 12px;margin-top:12px;line-height:1.45}
+#aviso{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--tinta);color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:20;max-width:80%}
+#aviso.erro{background:#a12a2a}
+tr.sem-img{cursor:default;background:#fff8f8}
+.s-Subir{background:#fde9d7;color:#9a4a12}
+.s-Descartado{background:#eceff3;color:#6b7380}
+.cab .btn{white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="topo">
+  <div class="logo">♥ Clínica Ecocardio <span>· EcoPDF Exames</span></div>
+  <div style="flex:1"></div>
+  <span class="quieto pq" id="atualizado"></span>
+  <button class="btn" id="b-pasta3" title="Abre a pasta 3 - Finalizados (os PDFs para subir no prontuário)">Pasta de prontos</button>
+  <a class="btn" href="/manual" target="_blank" title="Como usar o EcoPDF (manual da versão instalada)">? Manual</a>
+</div>
+
+<div id="lista">
+  <div class="filtros">
+    <button class="btn" data-dias="0">Hoje</button>
+    <button class="btn" data-dias="7">7 dias</button>
+    <button class="btn" data-dias="30">30 dias</button>
+    <button class="btn" data-dias="9999" id="b-tudo">6 meses (tudo)</button>
+    <span style="width:14px"></span>
+    <button class="btn alerta" id="b-semlaudo" title="Imagens sem laudo e laudos sem imagens">Pendentes <span class="cont" id="n-semlaudo">0</span></button>
+    <input class="busca" id="busca" placeholder="Buscar paciente ou código do aparelho…">
+  </div>
+  <div class="cartao">
+    <table>
+      <thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Tipo</th><th>Aparelho</th><th>Imagens</th><th>Medidas</th><th>Situação</th><th></th></tr></thead>
+      <tbody id="linhas"></tbody>
+    </table>
+    <div class="vazio" id="vazio" style="display:none">Nenhum exame neste filtro.</div>
+  </div>
+  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” = imagens ainda sem laudo, laudos ainda sem imagens e finais refeitos para subir de novo no prontuário (3 dias). A lista se atualiza sozinha.</p>
+</div>
+
+<div id="exame">
+  <div class="cab">
+    <button class="btn" id="voltar">← Exames</button>
+    <div><div class="nome" id="e-nome"></div><div class="quieto pq" id="e-sub"></div></div>
+    <div style="flex:1"></div>
+    <span class="quieto pq" id="e-cont"></span>
+    <span class="sujo pq" id="e-sujo" style="display:none">alterações não salvas</span>
+    <button class="btn" id="b-descartar" style="display:none" title="Imagens que nunca terão laudo (teste, duplicado, paciente que saiu)">Descartar</button>
+    <button class="btn" id="b-mostrar" style="display:none" title="Abre a pasta 3 com este PDF já selecionado">Mostrar na pasta</button>
+    <a class="btn" id="b-final" style="display:none" target="_blank" title="Abre o PDF da pasta 3 - Finalizados (o que sobe no prontuário)">Ver final</a>
+    <button class="btn" id="b-imprimir" style="display:none">Imprimir</button>
+    <button class="btn" id="b-previa">Pré-visualizar folha</button>
+    <button class="btn pri" id="b-salvar">Salvar folha</button>
+  </div>
+  <div class="corpo">
+    <div class="esq">
+      <div class="palco" id="palco">
+        <img id="grande" alt="">
+        <div class="info" id="g-info"></div>
+        <div class="ctrl">
+          <button class="btn" id="z-menos">−</button><button class="btn" id="z-100">100%</button><button class="btn" id="z-mais">+</button>
+          <button class="btn" id="b-tirar">Tirar da folha</button>
+        </div>
+        <button class="seta" id="ant" style="left:6px">‹</button>
+        <button class="seta" id="prox" style="right:6px">›</button>
+        <div class="fora-aviso" id="g-fora" style="display:none">fora da folha</div>
+      </div>
+      <div class="tiras" id="tiras"></div>
+      <div class="quieto pq">Clique na miniatura para ver grande · clique no ✓ para tirar/voltar · arraste para mudar a ordem (o número é a posição na folha) · setas ← → trocam a imagem</div>
+    </div>
+    <div class="painel" id="painel"></div>
+  </div>
+</div>
+
+<div class="fundo" id="m-conf"><div class="caixa">
+  <b style="font-size:16px">Este exame já foi finalizado</b>
+  <p style="line-height:1.5">O laudo com imagens já está na pasta <b>3 - Finalizados</b>. Ao salvar, o EcoPDF refaz o arquivo final com as imagens escolhidas e o nome termina em <b>_retificado</b>. O arquivo anterior fica guardado em processados\substituidos.</p>
+  <p class="quieto pq">Se o final já subiu no prontuário, suba o retificado também.</p>
+  <div class="acoes"><button class="btn" id="conf-nao">Cancelar</button><button class="btn pri" id="conf-sim">Salvar e gerar retificado</button></div>
+</div></div>
+
+<div class="fundo" id="m-sair"><div class="caixa">
+  <b style="font-size:16px">Há alterações não salvas</b>
+  <p>As mudanças na folha deste exame ainda não foram salvas.</p>
+  <div class="acoes"><button class="btn" id="sair-nao">Continuar editando</button><button class="btn" id="sair-sim">Sair sem salvar</button></div>
+</div></div>
+
+<div class="fundo" id="m-previa"><div class="caixa grande">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><b style="font-size:16px" id="p-tit">Prévia da folha</b><div style="flex:1"></div>
+  <button class="btn" id="p-voltar">Voltar e ajustar</button><button class="btn pri" id="p-salvar">Salvar folha</button></div>
+  <iframe id="p-quadro" title="Prévia da folha"></iframe>
+  <div class="quieto pq" style="margin-top:6px">Na junção com o laudo, a numeração “Página” continua a do laudo.</div>
+</div></div>
+
+<div class="fundo" id="m-imp"><div class="caixa">
+  <b style="font-size:16px">Imprimir exame</b>
+  <p class="quieto pq" style="margin:4px 0 10px">Sai num envio só, na ordem de entrega: primeiro a folha de fotos, depois o laudo.</p>
+  <div id="i-opcoes"></div>
+  <div class="papel" id="i-papel"></div>
+  <div class="acoes"><button class="btn" id="i-nao">Cancelar</button><button class="btn pri" id="i-sim">Imprimir</button></div>
+</div></div>
+<iframe id="i-quadro" title="Impressão" style="position:fixed;width:1px;height:1px;left:-10px;top:-10px;border:0"></iframe>
+
+<div id="aviso"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const SEM_LAUDO = ["Recebendo","Novo","Folha ajustada","Pendente"];
+let filtro = {dias: 0, semLaudo: false, busca: ""};
+try { const f = JSON.parse(localStorage.getItem("ecopdf-filtro") || "null"); if (f) filtro = Object.assign(filtro, f, {busca: ""}); } catch (e) {}
+let exames = [];
+let laudosSemImg = [];
+let ex = null;          // exame aberto
+let ordem = [], fora = new Set(), atual = 0, sujo = false, zoom = 1, pan = {x: 0, y: 0};
+
+function aviso(txt, erro) {
+  const a = $("aviso"); a.textContent = txt; a.className = erro ? "erro" : ""; a.style.display = "block";
+  clearTimeout(aviso.t); aviso.t = setTimeout(() => a.style.display = "none", erro ? 7000 : 3500);
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function dataBr(d) { return d && d.length === 8 ? `${d.slice(6,8)}/${d.slice(4,6)}/${d.slice(0,4)}` : ""; }
+function hora(h) { return h && h.length >= 4 ? `${h.slice(0,2)}:${h.slice(2,4)}` : ""; }
+function classe(s) { return "s-" + (s || "").split(" ")[0]; }
+
+// ---------------- lista ----------------
+async function carregarLista() {
+  try {
+    const r = await fetch("/api/exames"); const d = await r.json();
+    exames = d.exames || [];
+    laudosSemImg = d.laudos_sem_imagens || [];
+    $("atualizado").textContent = `Atualizado ${d.agora} · atualiza sozinho · EcoPDF ${d.versao}`;
+    $("b-tudo").textContent = `${Math.round((d.dias_guardados || 180) / 30)} meses (tudo)`;
+    desenharLista();
+  } catch (e) { $("atualizado").textContent = "Sem conexão com o EcoPDF (ele está rodando?)"; }
+}
+function desenharLista() {
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const limite = new Date(hoje); limite.setDate(limite.getDate() - (filtro.dias >= 9999 ? 100000 : filtro.dias));
+  const lim = `${limite.getFullYear()}${String(limite.getMonth()+1).padStart(2,"0")}${String(limite.getDate()).padStart(2,"0")}`;
+  const semLaudo = exames.filter(e => SEM_LAUDO.includes(e.situacao) || e.subir_de_novo);
+  const nPend = semLaudo.length + laudosSemImg.length;
+  $("n-semlaudo").textContent = nPend;
+  document.title = (nPend ? `(${nPend}) ` : "") + "EcoPDF – Exames";
+  const b = filtro.busca.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  let lista = filtro.semLaudo ? semLaudo : exames.filter(e => (e.data || "99999999") >= lim);
+  if (b) lista = exames.filter(e => (e.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") + " " + (e.sigla || "").toLowerCase()).includes(b));
+  document.querySelectorAll("[data-dias]").forEach(x => x.classList.toggle("on", !filtro.semLaudo && Number(x.dataset.dias) === filtro.dias));
+  $("b-semlaudo").classList.toggle("on", filtro.semLaudo);
+  $("linhas").innerHTML = lista.map((e, k) => `<tr data-k="${exames.indexOf(e)}">
+    <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td>${esc(e.tipo_nome)}</td>
+    <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
+    <td class="${e.medidas ? "" : "quieto"}">${e.sem_medidas ? "não exibidas" : (e.medidas ? "✓ recebidas" : "— não recebidas")}</td>
+    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${/Fetal/.test(e.tipo) && ["Novo", "Folha ajustada", "Pendente"].includes(e.situacao) ? `<div class="quieto pq">Laudo da plataforma fetal: imprimir pela <b>PDF24</b></div>` : ""}</td>
+    <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
+  let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim);
+  if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
+  $("linhas").insertAdjacentHTML("afterbegin", laudos.map(l => `<tr class="sem-img">
+    <td>${dataBr(l.data)}</td><td class="quieto">—</td><td><b>${esc(l.paciente)}</b></td><td>${esc(l.tipo_nome)}</td>
+    <td class="quieto">—</td><td colspan="2" class="quieto pq">${esc(l.motivo)} · há ${tempo(l.minutos)}</td>
+    <td><span class="selo s-Pendente">Laudo sem imagens</span></td>
+    <td style="text-align:right">${l.liberavel ? `<button class="btn" data-lib="${esc(l.laudo)}">Liberar sem imagens</button>` : ""}</td></tr>`).join(""));
+  $("vazio").style.display = lista.length + laudos.length ? "none" : "block";
+}
+function tempo(m) { return m >= 1440 ? `${Math.floor(m / 1440)} d` : m >= 60 ? `${Math.floor(m / 60)} h` : `${m} min`; }
+async function liberar(bt) {
+  if (bt.dataset.conf !== "1") {
+    bt.dataset.conf = "1"; bt.classList.add("alerta", "on"); bt.textContent = "Confirmar: sem imagens";
+    setTimeout(() => { if (bt.isConnected) { bt.dataset.conf = ""; bt.classList.remove("alerta", "on"); bt.textContent = "Liberar sem imagens"; } }, 5000);
+    return;
+  }
+  bt.disabled = true;
+  try {
+    const r = await fetch("/api/liberar", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({laudo: bt.dataset.lib})});
+    const d = await r.json();
+    aviso(d.ok ? d.mensagem : d.erro, !d.ok);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+  setTimeout(carregarLista, 1500);
+}
+document.querySelectorAll("[data-dias]").forEach(b => b.onclick = () => { filtro.dias = Number(b.dataset.dias); filtro.semLaudo = false; salvarFiltro(); desenharLista(); });
+$("b-semlaudo").onclick = () => { filtro.semLaudo = !filtro.semLaudo; salvarFiltro(); desenharLista(); };
+$("busca").oninput = e => { filtro.busca = e.target.value; desenharLista(); };
+$("linhas").onclick = e => {
+  const bl = e.target.closest("[data-lib]");
+  if (bl) { liberar(bl); return; }
+  if (e.target.closest("tr.sem-img") || e.target.closest("[data-final]")) return;
+  const bi = e.target.closest("[data-imp]");
+  if (bi) { imprimirDaLista(exames[Number(bi.dataset.imp)]); return; }
+  const tr = e.target.closest("tr"); if (!tr) return; const x = exames[Number(tr.dataset.k)]; location.hash = `e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; };
+function salvarFiltro() { try { localStorage.setItem("ecopdf-filtro", JSON.stringify({dias: filtro.dias, semLaudo: filtro.semLaudo})); } catch (e) {} }
+
+// ---------------- exame ----------------
+async function abrirExame(estudo, tipo) {
+  const r = await fetch(`/api/exame?e=${encodeURIComponent(estudo)}&t=${encodeURIComponent(tipo)}`);
+  if (!r.ok) { aviso("Exame não encontrado (pode ter passado do prazo de guarda).", true); location.hash = ""; return; }
+  ex = await r.json();
+  ordem = ex.imagens.map(i => i.id); fora = new Set(ex.imagens.filter(i => i.fora).map(i => i.id));
+  atual = 0; sujo = false;
+  $("e-nome").textContent = ex.paciente;
+  $("e-sub").textContent = `${ex.tipo_nome} · ${ex.data} ${hora(ex.hora)} · aparelho ${ex.sigla || "?"} · ${ex.situacao}`;
+  $("e-sub").title = ex.aparelho || "";
+  botaoImprimir();
+  painel(); desenharTiras(); mostrar(0);
+}
+function horaDe(id) { const i = ex.imagens.find(x => x.id === id); return i ? i.hora : ""; }
+function numero(id) { let n = 0; for (const i of ordem) { if (!fora.has(i)) n++; if (i === id) return fora.has(id) ? "–" : n; } return "–"; }
+function contagem() {
+  const n = ordem.length - fora.size, pg = Math.ceil(n / ex.por_pagina);
+  $("e-cont").innerHTML = `Folha: <b style="color:#1d2433">${n} de ${ordem.length}</b> imagens · ${pg} página(s)`;
+  $("e-sujo").style.display = sujo ? "inline" : "none";
+  if (ex) botaoImprimir();
+}
+function img(id, s) { return `/img?e=${encodeURIComponent(ex.estudo)}&i=${encodeURIComponent(id)}&s=${s}`; }
+function desenharTiras() {
+  $("tiras").innerHTML = ordem.map((id, k) => `<div class="mini ${fora.has(id) ? "fora" : ""} ${k === atual ? "atual" : ""}" draggable="true" data-k="${k}">
+    <img src="${img(id, "m")}" alt="" loading="lazy"><span class="n">${numero(id)}</span><button class="ck" data-ck="${k}" title="Tirar/voltar">✓</button></div>`).join("");
+  contagem();
+}
+function mostrar(k) {
+  if (!ordem.length) return;
+  atual = (k + ordem.length) % ordem.length; zoom = 1; pan = {x: 0, y: 0};
+  const id = ordem[atual], g = $("grande");
+  g.onload = ajustar; g.src = img(id, "g");
+  $("g-info").textContent = `Imagem ${atual + 1} de ${ordem.length}` + (horaDe(id) ? ` · ${horaDe(id)}` : "") + (fora.has(id) ? "" : ` · nº ${numero(id)} na folha`);
+  $("g-fora").style.display = fora.has(id) ? "block" : "none";
+  $("b-tirar").textContent = fora.has(id) ? "Voltar para a folha" : "Tirar da folha";
+  document.querySelectorAll(".mini").forEach(m => m.classList.toggle("atual", Number(m.dataset.k) === atual));
+  const m = document.querySelector(`.mini[data-k="${atual}"]`); if (m) m.scrollIntoView({block: "nearest", inline: "nearest"});
+}
+function ajustar() {
+  const g = $("grande"), p = $("palco");
+  const base = Math.min(p.clientWidth / g.naturalWidth, p.clientHeight / g.naturalHeight, 4);
+  g.style.width = g.naturalWidth * base + "px"; g.style.height = g.naturalHeight * base + "px";
+  g.style.transform = `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`;
+  $("z-100").textContent = Math.round(zoom * 100) + "%";
+}
+function alternar(k) {
+  const id = ordem[k];
+  if (fora.has(id)) fora.delete(id);
+  else { if (ordem.length - fora.size <= 1) { aviso("A folha precisa de pelo menos uma imagem.", true); return; } fora.add(id); }
+  sujo = true; desenharTiras(); mostrar(atual);
+}
+$("tiras").onclick = e => {
+  const ck = e.target.closest("[data-ck]");
+  if (ck) { alternar(Number(ck.dataset.ck)); return; }
+  const m = e.target.closest(".mini"); if (m) mostrar(Number(m.dataset.k));
+};
+let arr = null;
+$("tiras").addEventListener("dragstart", e => { const m = e.target.closest(".mini"); if (!m) return; arr = Number(m.dataset.k); m.classList.add("arrastando"); e.dataTransfer.effectAllowed = "move"; });
+$("tiras").addEventListener("dragover", e => { e.preventDefault(); document.querySelectorAll(".mini.alvo").forEach(x => x.classList.remove("alvo")); const m = e.target.closest(".mini"); if (m) m.classList.add("alvo"); });
+$("tiras").addEventListener("dragend", () => { document.querySelectorAll(".mini").forEach(x => x.classList.remove("alvo", "arrastando")); arr = null; });
+$("tiras").addEventListener("drop", e => {
+  e.preventDefault(); const m = e.target.closest(".mini"); if (arr === null) return;
+  let para = m ? Number(m.dataset.k) : ordem.length;
+  const idAtual = ordem[atual], [x] = ordem.splice(arr, 1);
+  if (para > arr) para--; ordem.splice(para, 0, x);
+  sujo = true; atual = ordem.indexOf(idAtual); desenharTiras(); mostrar(atual);
+});
+$("b-tirar").onclick = () => alternar(atual);
+$("ant").onclick = () => mostrar(atual - 1);
+$("prox").onclick = () => mostrar(atual + 1);
+$("z-mais").onclick = () => { zoom = Math.min(zoom * 1.25, 8); ajustar(); };
+$("z-menos").onclick = () => { zoom = Math.max(zoom / 1.25, 1); if (zoom === 1) pan = {x: 0, y: 0}; ajustar(); };
+$("z-100").onclick = () => { zoom = 1; pan = {x: 0, y: 0}; ajustar(); };
+$("palco").addEventListener("wheel", e => { e.preventDefault(); zoom = e.deltaY < 0 ? Math.min(zoom * 1.15, 8) : Math.max(zoom / 1.15, 1); if (zoom === 1) pan = {x: 0, y: 0}; ajustar(); }, {passive: false});
+let puxa = null;
+$("grande").addEventListener("mousedown", e => { if (zoom > 1) { puxa = {x: e.clientX - pan.x, y: e.clientY - pan.y}; e.preventDefault(); } });
+window.addEventListener("mousemove", e => { if (puxa) { pan = {x: e.clientX - puxa.x, y: e.clientY - puxa.y}; ajustar(); } });
+window.addEventListener("mouseup", () => puxa = null);
+window.addEventListener("resize", () => { if (ex) ajustar(); });
+document.addEventListener("keydown", e => {
+  if (!ex || $("exame").style.display === "none" || e.target.tagName === "INPUT") return;
+  if (document.querySelector(".fundo[style*='flex']")) return;
+  if (e.key === "ArrowLeft") mostrar(atual - 1);
+  if (e.key === "ArrowRight") mostrar(atual + 1);
+});
+
+function painel() {
+  const m = ex.medidas, p = $("painel");
+  if (!m.categoria) { p.innerHTML = `<b>Medidas</b><p class="quieto" style="line-height:1.5">Para este tipo de exame as medidas não são exibidas.</p><p class="quieto pq">Imagens e folha funcionam igual aos outros exames.</p>`; return; }
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Medidas</b><button class="btn" id="b-copiar" ${m.texto ? "" : "disabled"}>Copiar medidas</button></div>`;
+  h += `<div class="quieto pq" style="margin-top:4px">${m.tem_sr ? "do aparelho (relatório estruturado)" : "o aparelho não enviou o relatório de medidas"}</div>`;
+  let grupo = null;
+  for (const l of m.linhas) {
+    if (l.grupo && l.grupo !== grupo) { grupo = l.grupo; h += `<div class="grp">${esc(grupo)}</div>`; }
+    h += `<div class="lin"><span>${esc(l.rotulo)}</span>${l.valor ? `<b>${esc(l.valor)}${l.unidade ? " " + esc(l.unidade) : ""}</b>` : `<span class="branco">em branco</span>`}</div>`;
+  }
+  h += `<p class="quieto pq" style="margin-top:10px">Em branco = não medido com a medida identificada do aparelho, ou valor duvidoso. Medida em branco não entra no texto copiado.</p>`;
+  p.innerHTML = h;
+  const b = $("b-copiar"); if (b) b.onclick = copiar;
+}
+async function copiar() {
+  const t = ex.medidas.texto;
+  try { await navigator.clipboard.writeText(t); }
+  catch (e) { const a = document.createElement("textarea"); a.value = t; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); }
+  aviso(`${t.split("\n").length} medidas copiadas. Cole na página de laudos (Ctrl+V).`);
+}
+
+function estado() { return {e: ex.estudo, t: ex.tipo, ordem: ordem, fora: [...fora]}; }
+async function previa() {
+  const r = await fetch("/api/previa", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(estado())});
+  if (!r.ok) { aviso("Não consegui gerar a prévia.", true); return; }
+  const url = URL.createObjectURL(await r.blob());
+  const n = ordem.length - fora.size;
+  $("p-tit").textContent = `Prévia da folha · ${n} imagens · ${Math.ceil(n / ex.por_pagina)} página(s)`;
+  $("p-quadro").src = url; $("m-previa").style.display = "flex";
+}
+function pedirSalvar() {
+  if (ex.situacao === "Finalizado") { $("m-conf").style.display = "flex"; return; }
+  salvar();
+}
+async function salvar() {
+  $("m-conf").style.display = "none"; $("m-previa").style.display = "none";
+  $("b-salvar").disabled = true;
+  try {
+    const r = await fetch("/api/salvar", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(estado())});
+    const d = await r.json();
+    if (d.ok) { sujo = false; aviso(d.mensagem); await abrirExame(ex.estudo, ex.tipo); carregarLista(); }
+    else aviso("Não salvou: " + (d.mensagem || d.erro), true);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+  $("b-salvar").disabled = false; contagem();
+}
+// ---------------- impressao ----------------
+let imp = null;   // exame a imprimir (da tela do exame ou da lista)
+const DESCARTAVEL = ["Novo", "Folha ajustada", "Pendente", "Fora da pasta 2"];
+function botaoDescartar() {
+  const b = $("b-descartar"); b.dataset.conf = ""; b.classList.remove("alerta", "on"); b.disabled = false;
+  if (ex.situacao === "Descartado") { b.style.display = ""; b.textContent = "Restaurar"; }
+  else if (DESCARTAVEL.includes(ex.situacao)) { b.style.display = ""; b.textContent = "Descartar"; }
+  else b.style.display = "none";
+}
+async function descartarOuRestaurar() {
+  const b = $("b-descartar"), restaurar = ex.situacao === "Descartado";
+  if (!restaurar && b.dataset.conf !== "1") {
+    b.dataset.conf = "1"; b.classList.add("alerta", "on"); b.textContent = "Confirmar: descartar";
+    setTimeout(() => { if (b.dataset.conf === "1") botaoDescartar(); }, 5000);
+    return;
+  }
+  b.disabled = true;
+  try {
+    const r = await fetch(restaurar ? "/api/restaurar" : "/api/descartar", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({e: ex.estudo, t: ex.tipo})});
+    const d = await r.json();
+    aviso(d.ok ? d.mensagem : "Não foi: " + d.erro, !d.ok);
+    if (d.ok) { await abrirExame(ex.estudo, ex.tipo); carregarLista(); }
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+  botaoDescartar();
+}
+$("b-descartar").onclick = descartarOuRestaurar;
+async function abrirPasta(x) {
+  try {
+    const r = await fetch("/api/abrir_pasta", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(x ? {e: x.estudo, t: x.tipo} : {})});
+    const d = await r.json();
+    aviso(d.ok ? d.mensagem : (d.erro || "Não consegui abrir a pasta."), !d.ok);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+}
+$("b-pasta3").onclick = () => abrirPasta(null);
+$("b-mostrar").onclick = () => abrirPasta(ex);
+function urlFinal(x) { return `/final?e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; }
+function botaoImprimir() {
+  botaoDescartar();
+  const f = $("b-final"); f.style.display = ex.situacao === "Finalizado" ? "" : "none"; f.href = urlFinal(ex);
+  $("b-mostrar").style.display = ex.situacao === "Finalizado" ? "" : "none";
+  const b = $("b-imprimir"); b.style.display = "";
+  b.disabled = !ex.impressao;
+  b.textContent = ex.impressao ? "Imprimir" : "Imprimir (aguardando laudo)";
+  b.classList.toggle("pri", !!ex.impressao && !sujo);
+  $("b-salvar").classList.toggle("pri", !ex.impressao || sujo);
+}
+async function imprimirDaLista(x) {
+  try {
+    const r = await fetch(`/api/exame?e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`);
+    const d = await r.json();
+    if (!r.ok || !d.impressao) { aviso("Este exame ainda não tem laudo para imprimir.", true); return; }
+    abrirImpressao(d);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+}
+function abrirImpressao(d) {
+  if (d === ex && sujo) { aviso("Salve a folha antes de imprimir: a impressão usa o exame salvo.", true); return; }
+  imp = d; const p = d.impressao; if (!p) return;
+  const pp = d.por_pagina; let h = "";
+  for (let f = 1; f <= p.folhas; f++)
+    h += `<label class="opc"><input type="checkbox" data-folha="${f}" ${f === 1 ? "checked" : ""}> Folha de fotos ${f}${p.folhas > 1 ? ` <span class="quieto pq">(imagens ${(f - 1) * pp + 1}–${f * pp})</span>` : ""}</label>`;
+  h += `<label class="opc"><input type="checkbox" id="i-laudo" checked> Laudo <span class="quieto pq">(${p.laudo} página${p.laudo > 1 ? "s" : ""}, papel comum)</span></label>`;
+  $("i-opcoes").innerHTML = h;
+  $("i-opcoes").onchange = papelImp;
+  papelImp();
+  $("m-imp").style.display = "flex";
+  $("i-sim").focus();  // Enter ja imprime
+}
+function escolhaImp() {
+  return {folhas: [...document.querySelectorAll("#i-opcoes [data-folha]")].filter(c => c.checked).map(c => +c.dataset.folha),
+          laudo: $("i-laudo").checked};
+}
+function papelImp() {
+  // agil: o proprio botao confirma o papel (sem caixa extra para marcar)
+  const {folhas, laudo} = escolhaImp(); const n = folhas.length;
+  $("i-papel").style.display = n ? "block" : "none";
+  $("i-papel").innerHTML = n ? `Coloque <b>${n} folha${n > 1 ? "s" : ""} de papel fotográfico</b> por cima do papel comum na bandeja.` : "";
+  $("i-sim").textContent = n ? "Papel colocado · Imprimir" : "Imprimir";
+  $("i-sim").disabled = !n && !laudo;
+}
+async function imprimir() {
+  const esc = escolhaImp();
+  $("i-sim").disabled = true;
+  try {
+    const r = await fetch("/api/imprimir", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({e: imp.estudo, t: imp.tipo, folhas: esc.folhas, laudo: esc.laudo})});
+    if (!r.ok) { aviso("Não consegui montar a impressão.", true); $("i-sim").disabled = false; return; }
+    const url = URL.createObjectURL(await r.blob());
+    const q = $("i-quadro");
+    q.onload = () => {
+      try { q.contentWindow.focus(); q.contentWindow.print(); }
+      catch (e) { window.open(url, "_blank"); aviso("Abri o PDF em outra aba: use Ctrl+P para imprimir."); }
+    };
+    q.src = url;
+    $("m-imp").style.display = "none";
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); $("i-sim").disabled = false; }
+}
+$("b-imprimir").onclick = () => abrirImpressao(ex);
+// tela do exame aberta enquanto o laudo e feito: o botao acende sozinho quando o laudo junta
+setInterval(async () => {
+  if (!ex || ex.impressao || document.hidden) return;
+  try {
+    const r = await fetch(`/api/exame?e=${encodeURIComponent(ex.estudo)}&t=${encodeURIComponent(ex.tipo)}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!ex || d.estudo !== ex.estudo || d.tipo !== ex.tipo || !d.impressao) return;
+    ex.impressao = d.impressao; ex.situacao = d.situacao; ex.final = d.final;
+    $("e-sub").textContent = `${ex.tipo_nome} · ${ex.data} ${hora(ex.hora)} · aparelho ${ex.sigla || "?"} · ${ex.situacao}`;
+    botaoImprimir(); aviso("Laudo juntado com as imagens: pronto para imprimir.");
+  } catch (e) {}
+}, 5000);
+$("i-nao").onclick = () => { $("m-imp").style.display = "none"; };
+$("i-sim").onclick = imprimir;
+$("b-previa").onclick = previa;
+$("b-salvar").onclick = pedirSalvar;
+$("p-salvar").onclick = pedirSalvar;
+$("p-voltar").onclick = () => { $("m-previa").style.display = "none"; };
+$("conf-nao").onclick = () => { $("m-conf").style.display = "none"; };
+$("voltar").onclick = () => { if (sujo) $("m-sair").style.display = "flex"; else location.hash = ""; };
+$("sair-nao").onclick = () => { $("m-sair").style.display = "none"; };
+$("sair-sim").onclick = () => { sujo = false; $("m-sair").style.display = "none"; location.hash = ""; };
+$("conf-sim").onclick = salvar;
+window.addEventListener("beforeunload", e => { if (sujo) { e.preventDefault(); e.returnValue = ""; } });
+
+// ---------------- rotas ----------------
+function rota() {
+  document.querySelectorAll(".fundo").forEach(f => f.style.display = "none");
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (q.get("e")) {
+    $("lista").style.display = "none"; $("exame").style.display = "flex";
+    abrirExame(q.get("e"), q.get("t") || "");
+  } else {
+    ex = null; $("exame").style.display = "none"; $("lista").style.display = "block"; carregarLista();
+  }
+}
+window.addEventListener("hashchange", rota);
+setInterval(() => { if (!ex) carregarLista(); else fetch("/api/exames").then(r => r.json()).then(d => { exames = d.exames || []; laudosSemImg = d.laudos_sem_imagens || []; const n = exames.filter(e => SEM_LAUDO.includes(e.situacao) || e.subir_de_novo).length + laudosSemImg.length; document.title = (n ? `(${n}) ` : "") + "EcoPDF – Exames"; }).catch(() => {}); }, 15000);
+rota();
+</script>
+</body>
+</html>

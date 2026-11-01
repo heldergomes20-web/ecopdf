@@ -2,6 +2,30 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.10.31.3
+- Tela "EcoPDF - Exames" no navegador (so neste PC): abre sozinha quando chega imagem ou laudo e ela nao esta aberta (TELA_ABRIR = ao_receber; "sim" abre ao entrar no Windows) e tem atalho na Area de Trabalho.
+- Lista de exames com filtros Hoje / 7 dias / 30 dias / 6 meses e "Pendentes" (com contador, tambem no titulo da aba); busca por nome ou codigo do aparelho.
+- Pendentes inclui laudos sem imagens (pasta 1 ha mais de 3 min), com o motivo e o botao "Liberar sem imagens" (pede confirmacao; faz o mesmo que renomear com " sem imagens").
+- Selo "Subir de novo" (3 dias) nos exames cujo final foi refeito, e motivo "PDF aberto" no laudo que achou as imagens mas nao juntou: a tela passa a mostrar tudo o que o PENDENTES.txt mostrava. O PENDENTES.txt continua sendo gerado, como reserva.
+- Botao "Descartar" na tela do exame (imagens que nunca terao laudo: teste, duplicado, paciente que saiu): sai de Pendentes, PDF vai para processados\descartados, DICOM fica 6 meses. Nao junta sozinho: se o laudo chegar, a linha dele avisa e "Restaurar" devolve a folha (junta em segundos). Imagem nova do aparelho reativa o exame.
+- Tela do exame: imagem grande com zoom, miniaturas para tirar/voltar imagem da folha e arrastar para mudar a ordem, previa da folha e Salvar.
+- Exame ja finalizado: salvar refaz o final com _retificado (versao anterior em processados\substituidos).
+- PDF de imagens apagado ou movido da pasta 2 antes de juntar ("Fora da pasta 2"): Salvar folha na tela recria o PDF.
+- Medidas do aparelho (relatorio estruturado DICOM) ao lado das imagens e botao "Copiar medidas" no formato chave=valor para a pagina de laudos. Eco fetal: sem medidas. Carotidas: leitura das fotos ainda nao ativada.
+- Tirar/voltar imagem pelo nome do arquivo (" tirar 3 5") saiu: o pedido vira aviso no PENDENTES.txt.
+- Botao Imprimir na lista (exames finalizados) e na tela do exame (acende sozinho quando o laudo junta com as imagens): escolhe folha(s) de fotos (a 1a ja marcada) e laudo; sai num envio so, fotos primeiro (papel fotografico por cima do comum na bandeja), depois o laudo. O PDF final nao muda.
+- Icone proprio do EcoPDF (ecopdf.ico) no atalho "EcoPDF - Exames" e na aba do navegador.
+- Tela: botao "Ver final" nos exames Finalizado (na lista e no exame) abre o PDF da pasta 3, o mesmo que sobe no prontuario (ja _retificado, se houver). So mostra. "Mostrar na pasta" abre a pasta 3 com o PDF ja selecionado; "Pasta de prontos" (no alto) abre a pasta 3.
+- Eco fetal: laudo da outra plataforma agora se imprime pela impressora PDF24 (como no Medware); a lista lembra isso nos exames fetais esperando laudo.
+- Data do aparelho errada: o laudo sem imagens avisa quando ha imagens do paciente em outra data; o painel avisa imagem com data no futuro ou zerada.
+- Impressao na PDF24 por engano: janela avisa que nao saiu em papel e indica a impressora; final (laudo + imagens) ou laudo repetido viram copia (nao duplicam imagens nem marcam "Subir de novo"); PDF com imagens e laudo diferente vai para 9 - Revisar.
+- Painel das salas: endereco e chave da planilha ficam no arquivo painel.ini (copiado do pendrive em cada PC), fora do zip publico.
+- PDF cerca de 35-40% menor: fotos em JPEG qualidade 80 e no maximo 1000 px de largura (antes 92 e tamanho original). Sem diferenca visivel na impressao nem no PC; a tela de exames continua usando a imagem original.
+- Pasta 3: ninguem precisa apagar o que ja subiu; o EcoPDF apaga sozinho os PDFs finais com mais de 6 meses (MANTER_DICOM_DIAS). Laudo e folha guardados em processados continuam.
+- Botao "? Manual" no alto da tela de exames: abre o guia do operador da versao instalada (manual.html, vai junto em cada versao; funciona sem internet).
+- Painel das salas: as 9h e as 15h (ou assim que o PC ligar, se estava desligado) o EcoPDF manda a situacao deste PC para a planilha da administracao: versao, IP/AE Title/porta, ultima conexao de aparelho (inclusive teste Verify), ultima imagem e juncao, pendencias, 9 - Revisar, retificados, erros, disco, impressora padrao; e, dos ultimos 7 dias, laudos liberados sem imagens, exames descartados, PDFs que sumiram da pasta 2 e o motivo dos laudos sem imagens (sinais de problema, nao de produtividade); e monitor de desempenho: memoria e CPU do EcoPDF, tempo para a folha de imagens ficar pronta, espaco das imagens guardadas, MB por exame e em quantos dias o disco enche no ritmo atual; impressora padrao com situacao (pronta, offline, sem papel, atolada...) e fila parada, uso do botao Imprimir em 7 dias, e aviso por 24 h quando aparece um modelo de impressora nunca visto; rede do PC (cabo ou Wi-Fi, DHCP ou fixo) com aviso para Wi-Fi, duas redes ativas, regra do firewall sumida, PC que dorme na tomada e reinicio do Windows pendente. Nunca nome de paciente. Desligado enquanto PAINEL_URL estiver vazio. enviar_status.bat manda na hora e mostra o que foi enviado.
+- config.ini: TELA_PORTA, TELA_ABRIR, QUALIDADE_JPEG, LARGURA_MAX_IMAGEM, PAINEL_URL, PAINEL_CHAVE e PAINEL_HORARIOS.
+
 2026.10.31.2
 - Correcao de laudo depois dos 6 meses (imagens originais ja apagadas): a numeracao "Pagina" da folha de imagens e refeita conforme o numero de paginas do laudo novo.
 
