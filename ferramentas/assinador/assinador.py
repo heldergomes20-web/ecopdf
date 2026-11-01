@@ -19,6 +19,12 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+try:  # usa os certificados do Windows (evita CERTIFICATE_VERIFY_FAILED ao baixar do GitHub)
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -146,6 +152,19 @@ def assinar(caminho_zip=None, ao_lado=True):
             if antigo.exists() and hashlib.sha256(antigo.read_bytes()).hexdigest() != sha:
                 falha(f"a versao {versao} ja foi publicada com outro conteudo. "
                       "Aumente o numero em VERSAO.txt (ex.: " + versao + ".2) e gere o zip de novo.")
+
+    try:  # confere tambem no GitHub, para o pendrive reserva (sem o registro local) ter a mesma trava
+        import json
+        st, corpo = baixar(f"https://api.github.com/repos/{repo()}/releases?per_page=30", api=True)
+        tags = [x.get("tag_name", "") for x in json.loads(corpo) if not x.get("draft")] if st == 200 else []
+        tags = [t for t in tags if VERSAO_RE.match(t)]
+        ultima_gh = max(tags, key=chave_versao) if tags else None
+    except Exception:
+        ultima_gh = None
+        print("  (nao consegui conferir a ultima versao no GitHub; segui com o registro do pendrive)")
+    if ultima_gh and chave_versao(versao) < chave_versao(ultima_gh):
+        falha(f"a versao {versao} e MENOR que a ultima publicada no GitHub ({ultima_gh}). "
+              "Para voltar a uma versao antiga use reverter.bat.")
 
     privada = carregar_privada()
     assinatura = privada.sign(dados)
