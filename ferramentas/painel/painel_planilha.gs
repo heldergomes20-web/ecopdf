@@ -69,7 +69,7 @@ function doPost(e) {
     var ultimaImg = img === '' ? 'nenhuma' : fmt(new Date(agora.getTime() - img * 60000));
 
     var v = {};
-    v['Sala'] = '=IFERROR(VLOOKUP(E' + linha + ',' + ABA_PCS + '!A:B,2,FALSE),"sem sala")';
+    v['Sala'] = salaDe_(pc);  // texto (formula daria #ERROR! em planilha pt-BR); conferir_ atualiza
     v['Último envio'] = agora;
     v['PC'] = pc;
     v['Versão'] = limpo(d.versao, 20);
@@ -172,6 +172,11 @@ function conferir_() {
     '   ·   conferido em ' + fmt(new Date()) + '   ·   envios às 9h e 15h');
   if (n <= 0) return;
   var dados = sh.getRange(LIN0, 1, n, COLS.length).getValues();
+  var mapa = mapaSalas_();  // sala escrita na aba PCs aparece na proxima conferencia (ate 1 h)
+  sh.getRange(LIN0, col('Sala'), n, 1).setValues(dados.map(function (r) {
+    var pc = String(r[col('PC') - 1] || '');
+    return [pc ? (mapa[pc] || 'sem sala') : r[col('Sala') - 1]];
+  }));
   var modelos = JSON.parse(PropertiesService.getScriptProperties().getProperty('MODELOS') || '{}');
   var saida = dados.map(function (r) {
     var prob = [], aten = [];
@@ -369,11 +374,14 @@ function limparHistorico_() {
   while (k < datas.length && datas[k][0] instanceof Date && datas[k][0] < limite) k++;
   if (k) h.deleteRows(2, k);
 }
-function salaDe_(pc) {
-  var p = SpreadsheetApp.getActive().getSheetByName(ABA_PCS);
-  if (!p || p.getLastRow() < 2) return 'sem sala';
-  var l = p.getRange(2, 1, p.getLastRow() - 1, 2).getValues();
-  for (var i = 0; i < l.length; i++) if (String(l[i][0]) === String(pc)) return String(l[i][1]);
-  return 'sem sala';
+function mapaSalas_() {
+  var p = SpreadsheetApp.getActive().getSheetByName(ABA_PCS), m = {};
+  if (!p || p.getLastRow() < 2) return m;
+  p.getRange(2, 1, p.getLastRow() - 1, 2).getValues().forEach(function (l) {
+    var k = String(l[0]).trim();
+    if (k && String(l[1]).trim()) m[k] = String(l[1]).trim();
+  });
+  return m;
 }
+function salaDe_(pc) { return mapaSalas_()[String(pc).trim()] || 'sem sala'; }
 function ipPrincipal(s) { return String(s).split(',')[0].trim(); }
