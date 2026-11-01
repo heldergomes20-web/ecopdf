@@ -294,6 +294,60 @@ def _usos_imprimir(cfg, agora):
     return sum(1 for u in usos if _recente(u, agora))
 
 
+PS_REDE = r"""
+$o = @{}
+try {
+  $r = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
+       Sort-Object { ($_.IPv4DefaultGateway | Select-Object -First 1).RouteMetric } | Select-Object -First 1
+  if ($r) {
+    $ad = $r.NetAdapter
+    $o.wifi = [bool](($ad.PhysicalMediaType -match '802\.11') -or ($ad.InterfaceDescription -match 'Wi-?Fi|Wireless'))
+    $o.dhcp = [string](Get-NetIPInterface -InterfaceIndex $r.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).Dhcp
+  }
+  $o.redes = @(Get-NetIPConfiguration | Where-Object { $_.NetAdapter.Status -eq 'Up' -and $_.IPv4Address -and
+             $_.IPv4Address.IPAddress -notlike '169.254.*' } | Where-Object { (Get-NetAdapter -Physical -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue) }).Count
+} catch {}
+try { $o.firewall = [bool](Get-NetFirewallRule -DisplayName 'EcoPDF DICOM' -ErrorAction Stop | Where-Object { $_.Enabled -eq 'True' }) } catch {}
+try {
+  $h = [regex]::Matches((powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE | Out-String), '0x([0-9a-fA-F]{8})')
+  if ($h.Count -ge 2) { $o.dorme_min = [long]([Convert]::ToInt64($h[$h.Count - 2].Groups[1].Value, 16) / 60) }
+} catch {}
+$o.reinicio = Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+$o | ConvertTo-Json -Compress
+"""
+
+
+def _rede():
+    """Riscos de rede e energia deste PC (Windows). Campos ausentes = nao deu para ler (sem aviso)."""
+    if os.name != "nt":
+        return {}
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", PS_REDE], capture_output=True,
+                           text=True, timeout=60, creationflags=0x08000000)
+        return json.loads(r.stdout.strip() or "{}")
+    except Exception:
+        return {}
+
+
+def _texto_rede(r):
+    if not r:
+        return ""
+    partes = []
+    if "wifi" in r:
+        partes.append("Wi-Fi" if r["wifi"] else "cabo")
+    if r.get("dhcp"):
+        partes.append("IP automático (DHCP)" if r["dhcp"].lower() == "enabled" else "IP fixo")
+    if (r.get("redes") or 0) > 1:
+        partes.append(f"{r['redes']} redes ativas")
+    if r.get("firewall") is False:
+        partes.append("SEM regra no firewall")
+    if r.get("dorme_min"):
+        partes.append(f"dorme após {r['dorme_min']} min")
+    if r.get("reinicio"):
+        partes.append("reinício do Windows pendente")
+    return " · ".join(partes)
+
+
 def _ips():
     """IPv4 deste PC: o da rede principal primeiro (rota padrao), depois os outros."""
     ips = []
@@ -394,9 +448,11 @@ def coletar(cfg, ep, manual=False):
     d.update(_desempenho(cfg, ep, manual, agora, disco))
     # campos novos de versoes futuras: {rotulo da coluna: valor}. A planilha cria a coluna
     # sozinha, sem trocar o script. (Os avisos continuam vindo de avaliar(), daqui.)
+    d["rede"] = _rede()
     d["impressora"] = _texto_impressora(d["impressora_info"])
     d["impressora_modelo"] = d["impressora_info"].get("driver", "")
-    d["extras"] = {"Botão Imprimir usado (7 dias)": _usos_imprimir(cfg, agora)}
+    d["extras"] = {"Botão Imprimir usado (7 dias)": _usos_imprimir(cfg, agora),
+                   "Rede (cabo/Wi-Fi, IP, riscos)": _texto_rede(d["rede"])}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
 
@@ -424,6 +480,17 @@ def avaliar(d):
         amar.append(f"EcoPDF usando {d['memoria_mb']} MB de memória: reiniciar o PC")
     if (d.get("folha_s_max") or 0) > FOLHA_MAX_S:
         amar.append(f"folha de imagens demorou {d['folha_s_max']} s para ficar pronta (PC lento?)")
+    rede = d.get("rede") or {}
+    if rede.get("wifi"):
+        amar.append("PC no Wi-Fi: ligar no cabo (Wi-Fi cai e troca de IP)")
+    if (rede.get("redes") or 0) > 1:
+        amar.append(f"{rede['redes']} redes ativas no PC (cabo e Wi-Fi?): o aparelho pode apontar para o IP errado")
+    if rede.get("firewall") is False:
+        amar.append("regra do firewall da porta DICOM sumiu: rodar instalar.bat de novo")
+    if rede.get("dorme_min"):
+        amar.append(f"PC configurado para dormir após {rede['dorme_min']} min na tomada: rodar instalar.bat de novo")
+    if rede.get("reinicio"):
+        amar.append("Windows esperando reiniciar (atualização): reiniciar fora do horário de exames")
     imp = d.get("impressora_info") or {}
     if imp.get("grave"):
         amar.append(f"impressora: {_texto_impressora(imp)}")
