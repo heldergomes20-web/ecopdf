@@ -88,6 +88,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
   <div class="logo">♥ Clínica Ecocardio <span>· EcoPDF Exames</span></div>
   <div style="flex:1"></div>
   <span class="quieto pq" id="atualizado"></span>
+  <button class="btn" id="b-pasta3" title="Abre a pasta 3 - Finalizados (os PDFs para subir no prontuário)">Pasta de prontos</button>
   <a class="btn" href="/manual" target="_blank" title="Como usar o EcoPDF (manual da versão instalada)">? Manual</a>
 </div>
 
@@ -119,6 +120,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
     <span class="quieto pq" id="e-cont"></span>
     <span class="sujo pq" id="e-sujo" style="display:none">alterações não salvas</span>
     <button class="btn" id="b-descartar" style="display:none" title="Imagens que nunca terão laudo (teste, duplicado, paciente que saiu)">Descartar</button>
+    <button class="btn" id="b-mostrar" style="display:none" title="Abre a pasta 3 com este PDF já selecionado">Mostrar na pasta</button>
     <a class="btn" id="b-final" style="display:none" target="_blank" title="Abre o PDF da pasta 3 - Finalizados (o que sobe no prontuário)">Ver final</a>
     <button class="btn" id="b-imprimir" style="display:none">Imprimir</button>
     <button class="btn" id="b-previa">Pré-visualizar folha</button>
@@ -418,10 +420,21 @@ async function descartarOuRestaurar() {
   botaoDescartar();
 }
 $("b-descartar").onclick = descartarOuRestaurar;
+async function abrirPasta(x) {
+  try {
+    const r = await fetch("/api/abrir_pasta", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(x ? {e: x.estudo, t: x.tipo} : {})});
+    const d = await r.json();
+    aviso(d.ok ? d.mensagem : (d.erro || "Não consegui abrir a pasta."), !d.ok);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+}
+$("b-pasta3").onclick = () => abrirPasta(null);
+$("b-mostrar").onclick = () => abrirPasta(ex);
 function urlFinal(x) { return `/final?e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; }
 function botaoImprimir() {
   botaoDescartar();
   const f = $("b-final"); f.style.display = ex.situacao === "Finalizado" ? "" : "none"; f.href = urlFinal(ex);
+  $("b-mostrar").style.display = ex.situacao === "Finalizado" ? "" : "none";
   const b = $("b-imprimir"); b.style.display = "";
   b.disabled = !ex.impressao;
   b.textContent = ex.impressao ? "Imprimir" : "Imprimir (aguardando laudo)";

@@ -460,6 +460,9 @@ def _handler(ep, cfg):
             try:
                 n = int(self.headers.get("Content-Length", 0) or 0)
                 corpo = json.loads(self.rfile.read(n) or b"{}")
+                if u.path == "/api/abrir_pasta":
+                    ok, msg = abrir_pasta_final(str(corpo.get("e", "")), str(corpo.get("t", "")), ep, cfg)
+                    return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
                 if u.path == "/api/liberar":
                     ok, msg = liberar_sem_imagens(str(corpo.get("laudo", "")), ep, cfg)
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
@@ -508,6 +511,30 @@ def abrir_se_fechada(cfg):
         return
     _estado["aberta_em"] = agora
     webbrowser.open(_estado["url"])
+
+
+def abrir_pasta_final(estudo, tipo, ep, cfg):
+    """Abre a pasta 3 no Explorador do Windows; com um exame, ja deixa o arquivo final
+    selecionado (para arrastar para o prontuario). So no proprio PC (a tela so atende 127.0.0.1)."""
+    import os
+    import subprocess
+    pasta3 = cfg["pasta_final"]
+    arq = None
+    if estudo:
+        p = _pasta(estudo, cfg)
+        arq = arquivo_final(p, tipo, ep, cfg) if p else None
+    if os.name != "nt":
+        return False, "so funciona no Windows"
+    try:
+        if arq:
+            subprocess.Popen(["explorer", "/select,", str(arq)])
+        else:
+            pasta3.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(pasta3))
+    except OSError:
+        ep.log.exception("Tela: nao consegui abrir a pasta 3")
+        return False, "nao consegui abrir a pasta"
+    return True, "Pasta aberta (veja na barra de tarefas, se nao aparecer na frente)."
 
 
 def _anotar_impressao(cfg):
