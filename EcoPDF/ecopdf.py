@@ -362,6 +362,10 @@ def on_store(event, cfg):
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
                  ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
                  {k: str(ds.get(k)) for k in CAMPOS_TIPO if ds.get(k)})
+        dt = str(ds.get("StudyDate", "") or "")
+        if len(dt) == 8 and (dt > time.strftime("%Y%m%d") or dt < "20100101"):
+            log.warning("Data do aparelho errada? imagem com data %s (PC: %s): acertar data e hora "
+                        "do aparelho", data_br(dt), time.strftime("%d/%m/%Y"))
         return 0x0000
     except Exception:
         log.exception("Falha ao gravar imagem recebida")

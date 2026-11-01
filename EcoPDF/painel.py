@@ -38,7 +38,9 @@ FOLHA_MAX_S = 60                # folha de imagens demorando mais que isso = PC 
 DISCO_DIAS_ATENCAO, DISCO_DIAS_PROBLEMA = 30, 7  # disco acaba em menos que isso no ritmo atual
 # motivo do laudo sem par (texto da tela) -> categoria curta que vai para a planilha
 MOTIVOS = (("nome fora do padrao", "nome fora do padrão"), ("aberto em outro", "PDF aberto"),
-           ("DESCARTADAS", "imagens descartadas"), ("nenhuma imagem", "nenhuma imagem"))
+           ("DESCARTADAS", "imagens descartadas"), ("confira a data", "data do aparelho"),
+           ("nenhuma imagem", "nenhuma imagem"))
+DATA_MINIMA = "20100101"  # imagem com data anterior: relogio do aparelho zerado
 RE_ERRO = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ (ERROR|CRITICAL) ")
 
 
@@ -88,8 +90,11 @@ def _ultima_imagem(cfg, ep):
         return time.time() - quando, "", None
     data = str(ds.get("StudyDate", "") or ds.get("ContentDate", "") or "")
     ok = None
-    if len(data) == 8:
-        ok = data == datetime.fromtimestamp(quando).strftime("%Y%m%d")
+    if len(data) == 8 and data.isdigit():
+        # Data no futuro ou antes de DATA_MINIMA = relogio do aparelho errado. Data passada
+        # comum NAO alerta: reenvio de exame antigo chega com a data original (legitimo).
+        # Relogio atrasado com data plausivel aparece no motivo do laudo sem imagens.
+        ok = DATA_MINIMA <= data <= datetime.fromtimestamp(quando).strftime("%Y%m%d")
     return time.time() - quando, ep.sigla(ds), ok
 
 
@@ -497,7 +502,11 @@ def avaliar(d):
     elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):
         amar.append(f"impressora com {imp['situacao']}")
     if d["data_aparelho_ok"] is False:
-        amar.append("data do aparelho diferente da do PC")
+        amar.append("última imagem com data no futuro ou zerada: acertar data e hora do aparelho "
+                    "(bateria do relógio fraca se desacerta após falta de energia)")
+    n = (d.get("motivos_laudo_sem_par") or {}).get("data do aparelho", 0)
+    if n:
+        amar.append(f"{n} laudo(s) com imagens do paciente em outra data: conferir data e hora do aparelho")
     if d["revisar"]:
         amar.append(f"{d['revisar']} em 9 - Revisar")
     if d["retificados_3d"]:

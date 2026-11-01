@@ -159,6 +159,15 @@ def listar_exames(ep, cfg):
 LAUDO_ESPERA_MIN = 3  # laudo recem-impresso costuma juntar em segundos: so mostra depois disso
 
 
+def _outra_data(data, nome, tipo, fotos, ep, cfg):
+    """Imagens do mesmo paciente e tipo em OUTRA data na pasta 2 (relogio do aparelho errado).
+    Devolve a data mais proxima (AAAAMMDD) ou ''."""
+    achadas = sorted((d for _a, d, n, t in fotos
+                      if d != data and t == tipo and ep._mesmo_paciente(nome, n, cfg)),
+                     key=lambda d: abs(int(d) - int(data)) if d.isdigit() and data.isdigit() else 0)
+    return achadas[0] if achadas else ""
+
+
 def laudos_sem_imagens(ep, cfg):
     """Laudos parados na pasta 1 (sem par na pasta 2), com o motivo. So leitura."""
     pasta = cfg["pasta_laudos"]
@@ -186,9 +195,14 @@ def laudos_sem_imagens(ep, cfg):
                         motivo = ("as imagens foram achadas, mas um dos PDFs esta aberto em outro "
                                   "programa: feche para juntar")
             if motivo and motivo.startswith("sem PDF de imagens"):
-                motivo = ("ha imagens DESCARTADAS deste paciente nesta data: abra o exame e clique em Restaurar"
-                          if _tem_descartado(data, nome, tipo, ep, cfg) else
-                          "nenhuma imagem deste paciente nesta data (nome diferente no aparelho ou exame sem fotos)")
+                outra = _outra_data(data, nome, tipo, fotos, ep, cfg)
+                if _tem_descartado(data, nome, tipo, ep, cfg):
+                    motivo = "ha imagens DESCARTADAS deste paciente nesta data: abra o exame e clique em Restaurar"
+                elif outra:
+                    motivo = (f"ha imagens deste paciente com data {ep.data_br(outra)}: confira a data e a hora "
+                              "do aparelho (pode ter desacertado depois de falta de energia)")
+                else:
+                    motivo = "nenhuma imagem deste paciente nesta data (nome diferente no aparelho ou exame sem fotos)"
         else:
             data, nome, tipo, motivo = "", arq.stem, "", "nome fora do padrao AAAA_MM_DD_Nome_Tipo"
         out.append({"laudo": arq.name, "paciente": nome.upper(), "data": data,

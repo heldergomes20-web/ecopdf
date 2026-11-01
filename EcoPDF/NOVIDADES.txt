@@ -17,6 +17,7 @@ Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar
 - Icone proprio do EcoPDF (ecopdf.ico) no atalho "EcoPDF - Exames" e na aba do navegador.
 - Tela: botao "Ver final" nos exames Finalizado (na lista e no exame) abre o PDF da pasta 3, o mesmo que sobe no prontuario (ja _retificado, se houver). So mostra. "Mostrar na pasta" abre a pasta 3 com o PDF ja selecionado; "Pasta de prontos" (no alto) abre a pasta 3.
 - Eco fetal: laudo da outra plataforma agora se imprime pela impressora PDF24 (como no Medware); a lista lembra isso nos exames fetais esperando laudo.
+- Data do aparelho errada: o laudo sem imagens avisa quando ha imagens do paciente em outra data; o painel avisa imagem com data no futuro ou zerada.
 - PDF cerca de 35-40% menor: fotos em JPEG qualidade 80 e no maximo 1000 px de largura (antes 92 e tamanho original). Sem diferenca visivel na impressao nem no PC; a tela de exames continua usando a imagem original.
 - Pasta 3: ninguem precisa apagar o que ja subiu; o EcoPDF apaga sozinho os PDFs finais com mais de 6 meses (MANTER_DICOM_DIAS). Laudo e folha guardados em processados continuam.
 - Botao "? Manual" no alto da tela de exames: abre o guia do operador da versao instalada (manual.html, vai junto em cada versao; funciona sem internet).
