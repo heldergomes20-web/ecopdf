@@ -22,6 +22,8 @@ var MODELO_NOVO_HORAS = 24;         // impressora de modelo nunca visto: ATENCAO
 var BASE_MODELOS_DIAS = 3;          // modelos vistos nos 3 primeiros dias = os de hoje, sem aviso               // colunas novas que o EcoPDF pode criar sozinho
 
 var ABA = 'Salas', ABA_PCS = 'PCs', LIN0 = 4; // dados a partir da linha 4
+var ABA_HIST = 'Histórico', HIST_DIAS = 365;  // uma linha por envio (e por SEM SINAL); apaga > 12 meses
+var HIST_COLS = ['Quando', 'Sala', 'PC', 'Versão', 'Situação', 'O que olhar', 'IP do PC', 'Disco livre (GB)', 'Erros (24 h)'];
 var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão',
   'IP do PC', 'AE Title : porta', 'Última conexão de aparelho', 'Última imagem', 'Aparelho (série)',
   'Última junção', 'Imagens sem laudo', 'Laudos sem imagens', 'Motivo do laudo sem imagens',
@@ -106,6 +108,9 @@ function doPost(e) {
     sh.getRange(linha, 1, 1, COLS.length).setValues([COLS.map(function (k) { return v[k] === undefined ? '' : v[k]; })]);
     extras_(sh, linha, d.extras);
     conferir_();
+    var r = sh.getRange(linha, 1, 1, COLS.length).getValues()[0];
+    historico_([agora, salaDe_(pc), pc, v['Versão'], r[col('Situação') - 1], r[col('O que olhar') - 1],
+      ip, v['Disco livre (GB)'], v['Erros (24 h)']]);
   } finally {
     lock.releaseLock();
   }
@@ -172,6 +177,11 @@ function conferir_() {
     var prob = [], aten = [];
     var envio = r[col('Último envio') - 1];
     if (esperado && envio instanceof Date && envio < esperado) {
+      if (r[col('Situação') - 1] !== 'SEM SINAL') {  // so na passagem para SEM SINAL
+        var pcx = String(r[col('PC') - 1]);
+        historico_([new Date(), salaDe_(pcx), pcx, r[col('Versão') - 1], 'SEM SINAL',
+          'nao mandou o envio das ' + Utilities.formatDate(esperado, TZ, 'HH:mm'), r[col('IP do PC') - 1], '', '']);
+      }
       return ['SEM SINAL', 'nao mandou o envio das ' + Utilities.formatDate(esperado, TZ, 'HH:mm') +
         ' (PC desligado, sem internet ou EcoPDF parado). Ultimo: ' + fmt(envio)];
     }
@@ -242,6 +252,7 @@ function compVersao(a, b) {
 
 /** ~9h45 e ~15h45: e-mail so se alguma sala nao estiver OK. */
 function alertar() {
+  limparHistorico_();
   if (Number(Utilities.formatDate(new Date(), TZ, 'u')) === 7) return; // domingo
   conferir();
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(ABA);
@@ -294,6 +305,7 @@ function configurar() {
     pcs.getRange('A1:C1').setValues([['Nome do computador', 'Sala', 'Observação']]).setFontWeight('bold');
     pcs.setFrozenRows(1);
   }
+  abaHistorico_();
   var p = PropertiesService.getScriptProperties();
   if (!p.getProperty('CHAVE')) p.setProperty('CHAVE', Utilities.getUuid().replace(/-/g, '').slice(0, 20));
 
@@ -329,5 +341,39 @@ function dataBr(iso) {
   if (!iso) return '';
   var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   return m ? m[3] + '/' + m[2] + ' ' + m[4] + ':' + m[5] : '';
+}
+// ---------------------------------------------------------------- historico
+
+function abaHistorico_() {
+  var ss = SpreadsheetApp.getActive(), h = ss.getSheetByName(ABA_HIST);
+  if (!h) {
+    h = ss.insertSheet(ABA_HIST);
+    h.getRange(1, 1, 1, HIST_COLS.length).setValues([HIST_COLS]).setFontWeight('bold').setBackground('#eceff1');
+    h.setFrozenRows(1);
+    h.getRange('A:A').setNumberFormat('dd/MM/yyyy HH:mm');
+    h.setColumnWidth(6, 420);
+  }
+  return h;
+}
+function historico_(linha) {
+  try {
+    abaHistorico_().appendRow(linha.map(function (x, i) { return i === 0 ? x : (typeof x === 'string' ? limpo(x, 500) : x); }));
+  } catch (err) { /* historico nunca derruba o envio */ }
+}
+function limparHistorico_() {
+  var h = SpreadsheetApp.getActive().getSheetByName(ABA_HIST);
+  if (!h || h.getLastRow() < 2) return;
+  var limite = new Date(Date.now() - HIST_DIAS * 86400000);
+  var datas = h.getRange(2, 1, h.getLastRow() - 1, 1).getValues();
+  var k = 0;
+  while (k < datas.length && datas[k][0] instanceof Date && datas[k][0] < limite) k++;
+  if (k) h.deleteRows(2, k);
+}
+function salaDe_(pc) {
+  var p = SpreadsheetApp.getActive().getSheetByName(ABA_PCS);
+  if (!p || p.getLastRow() < 2) return 'sem sala';
+  var l = p.getRange(2, 1, p.getLastRow() - 1, 2).getValues();
+  for (var i = 0; i < l.length; i++) if (String(l[i][0]) === String(pc)) return String(l[i][1]);
+  return 'sem sala';
 }
 function ipPrincipal(s) { return String(s).split(',')[0].trim(); }
