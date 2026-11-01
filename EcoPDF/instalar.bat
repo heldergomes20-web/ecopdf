@@ -100,4 +100,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dados.ps1" -Porta %POR
 echo.
 echo  Instalacao concluida. Os dados para o aparelho e para o roteador abriram no
 echo  Bloco de Notas e ficam salvos em "Laudos - Nao Apagar\DADOS DESTE PC.txt".
+if not exist "%~dp0painel.ini" (
+  echo.
+  echo  ATENCAO: falta o arquivo painel.ini nesta pasta. Sem ele este PC nao aparece
+  echo  na planilha das salas. Copie o painel.ini do pendrive para %~dp0
+  echo  e depois rode reiniciar.bat ^(nao precisa instalar de novo^).
+)
 pause

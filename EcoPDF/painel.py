@@ -6,7 +6,7 @@ PC desligado no horario: manda assim que ligar (uma vez por horario).
 Vai so numero, horario, versao e nome do computador. NUNCA nome de paciente,
 nome de arquivo ou texto do registro (log).
 
-PAINEL_URL vazio no config.ini = desligado (nada sai do PC).
+Sem painel.ini (PAINEL_URL e PAINEL_CHAVE) = desligado (nada sai do PC).
 Teste manual: enviar_status.bat (manda agora e mostra o que foi enviado).
 """
 
@@ -626,6 +626,6 @@ if __name__ == "__main__":  # enviar_status.bat: manda agora e mostra o que foi
     dados = coletar(cfg, ep, manual=True)
     print(json.dumps(dados, ensure_ascii=False, indent=1))
     if not cfg.get("painel_url"):
-        print("\nPAINEL_URL vazio no config.ini: nada foi enviado.")
+        print("\nSem painel.ini nesta pasta (copie do pendrive): nada foi enviado.")
     else:
         print("\nEnviado: OK" if enviar(cfg, ep, dados) else "\nNAO ENVIOU (veja internet / link)")

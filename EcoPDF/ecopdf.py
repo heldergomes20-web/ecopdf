@@ -134,6 +134,18 @@ def _avisar_tela(cfg):
             log.exception("Tela: nao consegui abrir o navegador")
 
 
+def _painel_ini(chave):
+    """Valor do painel.ini ao lado do ecopdf.py ('' se nao houver). Formato: CHAVE = valor."""
+    try:
+        for linha in (BASE / "painel.ini").read_text("utf-8-sig").splitlines():
+            k, sep, v = linha.partition("=")
+            if sep and k.strip().upper() == chave:
+                return v.strip()
+    except OSError:
+        pass
+    return ""
+
+
 def carregar_config(caminho):
     cp = configparser.ConfigParser(interpolation=None)
     cp.optionxform = str  # preserva maiusculas dos tipos de exame
@@ -180,8 +192,10 @@ def carregar_config(caminho):
         "qualidade_jpeg": min(95, max(50, c.getint("QUALIDADE_JPEG", 80))),
         "largura_max": max(0, c.getint("LARGURA_MAX_IMAGEM", 1000)),
         "porta_tela": c.getint("TELA_PORTA", 8765),
-        "painel_url": c.get("PAINEL_URL", "").strip(),
-        "painel_chave": c.get("PAINEL_CHAVE", "").strip(),
+        # endereco e chave da planilha ficam no painel.ini (copiado a mao em cada PC da clinica,
+        # fora do zip publico); o config.ini so serve de reserva
+        "painel_url": _painel_ini("PAINEL_URL") or c.get("PAINEL_URL", "").strip(),
+        "painel_chave": _painel_ini("PAINEL_CHAVE") or c.get("PAINEL_CHAVE", "").strip(),
         "painel_horarios": [h.strip() for h in c.get("PAINEL_HORARIOS", "09:00, 15:00").split(",") if h.strip()],
         "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "tipos": tipos,
