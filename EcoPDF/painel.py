@@ -497,6 +497,8 @@ def avaliar(d):
     if rede.get("reinicio"):
         amar.append("Windows esperando reiniciar (atualização): reiniciar fora do horário de exames")
     imp = d.get("impressora_info") or {}
+    if "pdf24" in str(imp.get("nome", "")).lower():
+        amar.append("impressora padrão do Windows é a PDF24: o que se imprime sem escolher não sai em papel")
     if imp.get("grave"):
         amar.append(f"impressora: {_texto_impressora(imp)}")
     elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):

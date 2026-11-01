@@ -630,6 +630,12 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
         c.setFont("Times-Bold", 8.5)
         for k, linha in enumerate(cfg["rodape"]):
             c.drawCentredString(larg / 2, 38 - k * 11, linha)
+        # marca invisivel (branco, 1 pt): se esta folha voltar pela PDF24 (final impresso
+        # na impressora errada), o EcoPDF reconhece e nao junta as imagens de novo
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont("Helvetica", 1)
+        c.drawString(x0, 6, MARCA_FOLHA)
+        c.setFillColorRGB(0, 0, 0)
         c.showPage()
     c.save()
 
@@ -886,13 +892,150 @@ def _corrigir(laudo, laudos, fotos, cfg):
     return True
 
 
+MARCA_FOLHA = "EcoPDF-folha-de-imagens"
+_TRIADOS = {}  # arquivo -> (mtime, tamanho) ja conferidos na triagem
+
+
+def _texto(paginas):
+    return re.sub(r"\s+", " ", " ".join(paginas)).strip()
+
+
+def _paginas_texto(arq):
+    try:
+        return [(pg.extract_text() or "") for pg in PdfReader(str(arq)).pages]
+    except Exception:
+        return None
+
+
+def _finalizado(laudo, cfg):
+    """Registro unico de exame ja finalizado para este laudo (data, tipo, paciente) ou None."""
+    _, data, nome, tipo = laudo
+    cands = [r for r in _ler_registro(cfg) if r["data"] == data and r["tipo"] == tipo
+             and _mesmo_paciente(r["nome"], nome, cfg)]
+    return cands[0] if len(cands) == 1 else None
+
+
+def impressora_papel():
+    """Nome da impressora padrao do Windows ('' fora do Windows ou se falhar)."""
+    if os.name != "nt":
+        return ""
+    try:
+        import ctypes
+        n = ctypes.c_ulong(0)
+        ctypes.windll.winspool.GetDefaultPrinterW(None, ctypes.byref(n))
+        buf = ctypes.create_unicode_buffer(n.value or 1)
+        if ctypes.windll.winspool.GetDefaultPrinterW(buf, ctypes.byref(n)):
+            return buf.value
+    except Exception:
+        pass
+    return ""
+
+
+_AVISO_ABERTO = threading.Event()
+
+
+def avisar_impressora_errada(nome_arquivo, extra=""):
+    """Janela no PC: o documento foi para a PDF24 e NAO saiu em papel. Nao bloqueia o EcoPDF;
+    uma janela por vez."""
+    imp = impressora_papel()
+    if not imp or "pdf24" in imp.lower():
+        qual = "a impressora de papel"
+    else:
+        qual = f"a impressora {imp}"
+    msg = (f"Este documento foi para a impressora PDF24 e NÃO saiu em papel.\n\n"
+           f"Para imprimir em papel, imprima de novo escolhendo {qual}.\n\n"
+           + (extra + "\n\n" if extra else "") + f"Arquivo: {nome_arquivo}")
+    log.warning("Aviso de impressora errada: %s %s", nome_arquivo, extra)
+    if os.name != "nt" or _AVISO_ABERTO.is_set():
+        return
+
+    def janela():
+        _AVISO_ABERTO.set()
+        try:
+            import ctypes
+            # MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL | MB_SETFOREGROUND | MB_TOPMOST
+            ctypes.windll.user32.MessageBoxW(None, msg, "EcoPDF - impressora", 0x0 | 0x30 | 0x1000 | 0x10000 | 0x40000)
+        except Exception:
+            pass
+        finally:
+            _AVISO_ABERTO.clear()
+
+    threading.Thread(target=janela, daemon=True).start()
+
+
+def _copia(arq, cfg, extra=""):
+    _mover(arq, cfg["pasta_processados"] / f"{datetime.now():%Y-%m-%d}" / "copias")
+    avisar_impressora_errada(arq.name, extra)
+
+
+def triagem(laudos, cfg):
+    """Antes de juntar: separa o que veio pela PDF24 por engano.
+    - PDF com folha de imagens (final impresso na PDF24): nunca e correcao. Laudo igual ao
+      guardado (ou so imagens) = copia; diferente = 9 - Revisar.
+    - Laudo igual ao do exame ja finalizado (com o final na pasta 3) = copia, sem 'Subir de novo'.
+      Se o final sumiu da pasta 3, segue como hoje (reimprimir refaz o final).
+    - Laudo igual a outro que ja esta esperando na pasta 1 = copia.
+    Devolve a lista de laudos que seguem."""
+    seguem = []
+    for laudo in laudos:
+        arq = laudo[0]
+        try:
+            st = arq.stat()
+            if _TRIADOS.get(arq) == (st.st_mtime, st.st_size):
+                seguem.append(laudo)
+                continue
+            paginas = _paginas_texto(arq)
+            if paginas is None:
+                seguem.append(laudo)
+                continue
+            marcadas = [i for i, t in enumerate(paginas) if MARCA_FOLHA in t]
+            texto = _texto(t for i, t in enumerate(paginas) if i not in marcadas)
+            r = _finalizado(laudo, cfg)
+            ref = _laudo_guardado(r, cfg) if r else None
+            ref_pg = (_paginas_texto(ref) or []) if ref else []
+            ref_txt = _texto(ref_pg) if ref else None
+            if (not marcadas and ref_pg and len(paginas) > len(ref_pg)
+                    and _texto(paginas[:len(ref_pg)]) == ref_txt):
+                marcadas = list(range(len(ref_pg), len(paginas)))  # final de antes da marca
+                texto = ref_txt
+            if marcadas:
+                if not texto or (ref_txt is not None and texto == ref_txt):
+                    log.info("COPIA (final impresso na PDF24): %s", arq.name)
+                    _copia(arq, cfg)
+                else:
+                    log.warning("PDF com folha de imagens e laudo diferente do guardado -> 9 - Revisar: %s", arq.name)
+                    _mover(arq, cfg["pasta_laudos"].parent / "9 - Revisar")
+                    avisar_impressora_errada(arq.name, "Ele tem imagens e o laudo é diferente do guardado: "
+                                             "o EcoPDF não usou (está em 9 - Revisar). Para corrigir um laudo, "
+                                             "imprima o laudo do Medware, sem as imagens.")
+                continue
+            if (r and ref_txt is not None and texto == ref_txt
+                    and (cfg["pasta_final"] / r["final"]).exists()):
+                log.info("COPIA (laudo igual ao do exame ja finalizado): %s", arq.name)
+                _copia(arq, cfg)
+                continue
+            irmao = next((o for o in laudos if o[0] != arq and o[0].exists() and o[1:] == laudo[1:]
+                          and (o[0].stat().st_mtime, o[0].name) < (st.st_mtime, arq.name)
+                          and _texto(_paginas_texto(o[0]) or []) == texto), None)
+            if irmao and texto:
+                log.info("COPIA (laudo igual a %s na pasta 1): %s", irmao[0].name, arq.name)
+                _copia(arq, cfg)
+                continue
+            _TRIADOS[arq] = (st.st_mtime, st.st_size)
+            seguem.append(laudo)
+        except Exception:
+            log.exception("Falha na triagem de %s", arq.name)
+            seguem.append(laudo)
+    return seguem
+
+
 def juntar_laudos(cfg):
     for chave in ("pasta_laudos", "pasta_imagens", "pasta_final"):
         if not cfg[chave].exists():  # alguem apagou a pasta: recria (o conteudo vai para a Lixeira)
             log.warning("Pasta apagada, recriando: %s", cfg[chave])
             cfg[chave].mkdir(parents=True, exist_ok=True)
     agora = time.time()
-    laudos = _listar(cfg["pasta_laudos"], cfg, agora)
+    laudos = triagem(_listar(cfg["pasta_laudos"], cfg, agora), cfg)
     fotos = _listar(cfg["pasta_imagens"], cfg, agora)
 
     erros = processar_pedidos(cfg)
@@ -1374,6 +1517,8 @@ def iniciar_renomeador(cfg):
     mod.PRONTOS = cfg["pasta_laudos"]
     mod.REVISAR = raiz / "9 - Revisar"
     mod.LOG = cfg["pasta_log"] / "renomeador.log"
+    mod.AO_REVISAR = lambda nome: avisar_impressora_errada(
+        nome, "Não parece um laudo (sem nome do paciente ou data): foi para 9 - Revisar.")
 
     def rodar():
         while True:
