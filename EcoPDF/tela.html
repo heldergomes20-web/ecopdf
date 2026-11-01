@@ -225,7 +225,7 @@ function desenharLista() {
     <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td>${esc(e.tipo_nome)}</td>
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
     <td class="${e.medidas ? "" : "quieto"}">${e.sem_medidas ? "não exibidas" : (e.medidas ? "✓ recebidas" : "— não recebidas")}</td>
-    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}</td>
+    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${/Fetal/.test(e.tipo) && ["Novo", "Folha ajustada", "Pendente"].includes(e.situacao) ? `<div class="quieto pq">Laudo da plataforma fetal: imprimir pela <b>PDF24</b></div>` : ""}</td>
     <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
   let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim);
   if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
