@@ -1,0 +1,16 @@
+Instalador EcoPDF do pendrive
+
+Copie esta pasta inteira para o pendrive, junto com o painel.ini (o painel.ini vai
+DENTRO desta pasta, ao lado do "INSTALAR ECOPDF.bat"). Nao precisa recopiar quando sair
+versao nova: o instalador sempre baixa a versao publicada no GitHub.
+
+No PC da sala (com internet):
+1. Dois cliques em "INSTALAR ECOPDF.bat" e aceite a permissao de administrador.
+2. Digite P (producao) ou T (teste: so o PC de teste, hoje o Bessa).
+3. Ele baixa, confere a assinatura, copia para C:\EcoPDF, copia o painel.ini e roda o
+   instalar.bat. No fim abre o DADOS DESTE PC.txt.
+
+Serve para PC novo e para PC com versao antiga. Os exames e dados do PC nao sao apagados;
+a versao que estava instalada fica em C:\EcoPDF\_anterior (voltar.bat devolve).
+Se aparecer ASSINATURA NAO CONFERE, nada foi instalado: foto da tela para a administracao
+da clinica.
