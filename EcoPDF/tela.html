@@ -176,7 +176,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
 
 <div class="fundo" id="m-imp"><div class="caixa">
   <b style="font-size:16px">Imprimir exame</b>
-  <p class="quieto pq" style="margin:4px 0 10px">Sai num envio só, na ordem de entrega: primeiro a folha de fotos, depois o laudo.</p>
+  <p class="quieto pq" style="margin:4px 0 10px">Sai direto na impressora padrão: primeiro a folha de fotos (papel fotográfico), depois o laudo (papel comum).</p>
   <div id="i-opcoes"></div>
   <div class="papel" id="i-papel"></div>
   <div class="acoes"><button class="btn" id="i-nao">Cancelar</button><button class="btn pri" id="i-sim">Imprimir</button></div>
@@ -196,9 +196,9 @@ let laudosSemImg = [];
 let ex = null;          // exame aberto
 let ordem = [], fora = new Set(), atual = 0, sujo = false, zoom = 1, pan = {x: 0, y: 0};
 
-function aviso(txt, erro) {
+function aviso(txt, erro, fixo) {
   const a = $("aviso"); a.textContent = txt; a.className = erro ? "erro" : ""; a.style.display = "block";
-  clearTimeout(aviso.t); aviso.t = setTimeout(() => a.style.display = "none", erro ? 7000 : 3500);
+  clearTimeout(aviso.t); if (!fixo) aviso.t = setTimeout(() => a.style.display = "none", erro ? 9000 : 4000);
 }
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function dataBr(d) { return d && d.length === 8 ? `${d.slice(6,8)}/${d.slice(4,6)}/${d.slice(0,4)}` : ""; }
@@ -486,9 +486,34 @@ function papelImp() {
   $("i-sim").textContent = n ? "Papel colocado · Imprimir" : "Imprimir";
   $("i-sim").disabled = !n && !laudo;
 }
+let impNavegador = false;  // impressao direta falhou: a proxima usa a janela do navegador
 async function imprimir() {
   const esc = escolhaImp();
   $("i-sim").disabled = true;
+  if (!impNavegador) {
+    try {
+      const r = await fetch("/api/imprimir_direto", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({e: imp.estudo, t: imp.tipo, folhas: esc.folhas, laudo: esc.laudo})});
+      const d = r.ok ? await r.json() : {};
+      if (d.id) { $("m-imp").style.display = "none"; acompanharImpressao(d.id); return; }
+      if (!r.ok) { aviso("Não consegui montar a impressão.", true); $("i-sim").disabled = false; return; }
+      // d.navegador: impressora virtual, fora do Windows ou IMPRESSAO_DIRETA = nao
+    } catch (e) { aviso("Sem conexão com o EcoPDF.", true); $("i-sim").disabled = false; return; }
+  }
+  imprimirNavegador(esc);
+}
+async function acompanharImpressao(id) {
+  aviso("Preparando a impressão...", false, true);
+  for (let i = 0; i < 600; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    let d;
+    try { d = await (await fetch(`/api/imprimir_estado?id=${id}`)).json(); } catch (e) { continue; }
+    if (d.estado === "pronto") { aviso(d.mensagem); return; }
+    if (d.estado === "erro") { if (d.usar_navegador) impNavegador = true; aviso(d.mensagem, true, true); setTimeout(() => $("aviso").style.display = "none", 20000); return; }
+    aviso(d.mensagem, false, true);
+  }
+}
+async function imprimirNavegador(esc) {
   try {
     const r = await fetch("/api/imprimir", {method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({e: imp.estudo, t: imp.tipo, folhas: esc.folhas, laudo: esc.laudo})});
