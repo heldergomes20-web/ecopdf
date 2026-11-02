@@ -103,7 +103,9 @@ call "%~dp0status.bat" nopause
 echo.
 set AET=ECOPDF
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"AE_TITLE" config.ini') do set AET=%%b
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dados.ps1" -Porta %PORTA% -AE %AET% -Abrir
+set ABRIR=-Abrir
+if /i "%~1"=="auto" set ABRIR=
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0dados.ps1" -Porta %PORTA% -AE %AET% %ABRIR%
 echo.
 echo  Instalacao concluida. Os dados para o aparelho e para o roteador abriram no
 echo  Bloco de Notas e ficam salvos em "Laudos - Nao Apagar\DADOS DESTE PC.txt".
@@ -113,4 +115,4 @@ if not exist "%~dp0painel.ini" (
   echo  na planilha das salas. Copie o painel.ini do pendrive para %~dp0
   echo  e depois rode reiniciar.bat ^(nao precisa instalar de novo^).
 )
-pause
+if /i not "%~1"=="auto" pause

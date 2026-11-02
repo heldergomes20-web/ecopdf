@@ -1,3 +1,4 @@
+cryptography==46.0.3
 numpy==2.5.4
 pdfminer.six==20250506
 pdfplumber==0.11.7
@@ -10,4 +11,5 @@ pynetdicom==3.0.4
 pypdf==6.21.4
 pypdfium2==5.14.0
 reportlab==5.1.0
+truststore==0.10.4
 watchdog==6.0.0

@@ -12,7 +12,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 FONTE = RAIZ / "EcoPDF"
-IGNORAR = {"__pycache__", "venv", "log", "processados", "dicom"}
+IGNORAR = {"__pycache__", "venv", "log", "processados", "dicom", "_anterior"}
 DATA_FIXA = (2020, 1, 1, 0, 0, 0)  # zip igual para o mesmo conteudo
 
 

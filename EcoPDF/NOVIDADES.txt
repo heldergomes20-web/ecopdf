@@ -1,6 +1,12 @@
 ﻿EcoPDF - novidades por versao
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
-Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
+Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
+
+2026.11.02.1
+- Atualizar pela tela: clicar no numero da versao (no alto, ao lado do horario) abre "Atualizar EcoPDF": mostra a versao instalada e o canal deste PC, procura versao nova no GitHub e, se houver, o botao "Atualizar para ..." abre o atualizar_agora.bat (pede permissao de administrador).
+- atualizar_agora.bat em C:\EcoPDF: baixa a versao mais nova do canal deste PC, confere a assinatura, guarda a versao atual em _anterior, instala e confere se o EcoPDF voltou a receber imagens; se nao voltar, devolve a anterior sozinho. Nunca instala versao menor.
+- Canal do PC (canal.ini, fica no PC, nao vai no zip): geral = so versoes Latest (padrao); teste = recebe tambem as de teste. "atualizar_agora.bat teste" poe o PC em teste e instala a versao de teste; "atualizar_agora.bat geral" devolve o PC ao canal geral e a versao de producao (Latest), mesmo que seja menor (unico caso em que rebaixa).
+- voltar.bat: devolve a versao guardada em _anterior.
 
 2026.11.02
 - Modo programa: um icone so, "EcoPDF", na Area de Trabalho e no menu Iniciar. Abre a tela numa janela propria (Edge sem barra de endereco nem abas); quando chega exame, a tela abre nessa mesma janela. O atalho antigo "EcoPDF - Exames" e apagado pelo instalar.bat.

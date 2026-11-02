@@ -443,6 +443,8 @@ def _handler(ep, cfg):
                                               "laudos_sem_imagens": laudos_sem_imagens(ep, cfg),
                                               "dias_guardados": cfg["manter_dicom_dias"],
                                               "agora": datetime.now().strftime("%H:%M:%S")})
+                if u.path == "/api/atualizacao":
+                    return self._enviar(200, consultar_atualizacao())
                 if u.path == "/api/exame":
                     pasta = _pasta(q.get("e", ""), cfg)
                     d = detalhe(pasta, q.get("t", ""), ep, cfg) if pasta else None
@@ -476,6 +478,9 @@ def _handler(ep, cfg):
                 corpo = json.loads(self.rfile.read(n) or b"{}")
                 if u.path == "/api/abrir_pasta":
                     ok, msg = abrir_pasta_final(str(corpo.get("e", "")), str(corpo.get("t", "")), ep, cfg)
+                    return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
+                if u.path == "/api/atualizar":
+                    ok, msg = iniciar_atualizacao()
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
                 if u.path == "/api/liberar":
                     ok, msg = liberar_sem_imagens(str(corpo.get("laudo", "")), ep, cfg)
@@ -540,6 +545,38 @@ def abrir_janela(url):
         except OSError:
             pass
     webbrowser.open(url)
+
+
+def consultar_atualizacao():
+    """Botao escondido (clique no numero da versao): diz se ha versao nova no canal deste PC."""
+    import atualizador as at
+    local, canal = at.versao_local(), at.ler_canal()
+    try:
+        validos = at.releases()
+    except Exception:
+        return {"mensagem": f"Versão instalada: {local}. Sem acesso ao GitHub agora; tente mais tarde."}
+    alvo = at.melhor(validos, canal)
+    if alvo and (not at.VERSAO_RE.match(local) or at.chave(alvo["tag"]) > at.chave(local)):
+        return {"mensagem": f"Versão instalada: {local} (canal {canal}). Há versão nova: {alvo['tag']}.",
+                "disponivel": alvo["tag"]}
+    if alvo and canal == "geral" and at.VERSAO_RE.match(local) and at.chave(alvo["tag"]) < at.chave(local):
+        return {"mensagem": f"Versão instalada: {local} (canal {canal}). É uma versão de teste; a de "
+                            f"produção é {alvo['tag']} (volta com atualizar_agora.bat geral)."}
+    return {"mensagem": f"Versão instalada: {local} (canal {canal}). Já é a mais nova; nada a fazer."}
+
+
+def iniciar_atualizacao():
+    """Abre o atualizar_agora.bat (o Windows pede permissao de administrador)."""
+    import os
+    bat = BASE / "atualizar_agora.bat"
+    if os.name != "nt" or not bat.exists():
+        return False, "Atualização só pelo PC da clínica (atualizar_agora.bat em C:\\EcoPDF)."
+    try:
+        os.startfile(str(bat))
+    except OSError as e:
+        return False, f"Não consegui abrir o atualizar_agora.bat ({e})."
+    return True, ("Aceite a permissão de administrador. A janela preta mostra o andamento; "
+                  "esta tela some por 1 a 3 minutos e volta sozinha.")
 
 
 def abrir_se_fechada(cfg):
