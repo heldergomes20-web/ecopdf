@@ -504,9 +504,25 @@ def coletar(cfg, ep, manual=False):
     d["impressora_modelo"] = d["impressora_info"].get("driver", "")
     d["extras"] = {"Botão Imprimir usado (7 dias)": _usos_imprimir(cfg, agora),
                    "Rede (cabo/Wi-Fi, IP, riscos)": _texto_rede(d["rede"]),
-                   "Medidas (relatório do aparelho)": _texto_medidas(d)}
+                   "Medidas (relatório do aparelho)": _texto_medidas(d),
+                   "Fila EcoPDF Foto": _texto_fila_foto(cfg, d["impressora_info"])}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
+
+
+def _texto_fila_foto(cfg, imp):
+    """Como as fotos saem no botao Imprimir (so informativo)."""
+    import impressao
+    if not cfg.get("impressao_direta", True):
+        return "impressão direta desligada"
+    try:
+        if impressao.existe_impressora(impressao.FILA_FOTO):
+            if (imp.get("nome") or "").strip().casefold() == impressao.FILA_FOTO.casefold():
+                return "ERRO: EcoPDF Foto está como impressora padrão"
+            return "sim: fotos pela EcoPDF Foto"
+    except Exception:
+        return "?"
+    return "não: papel foto escolhido pelo EcoPDF"
 
 
 def avaliar(d):
@@ -546,6 +562,8 @@ def avaliar(d):
     imp = d.get("impressora_info") or {}
     if "pdf24" in str(imp.get("nome", "")).lower():
         amar.append("impressora padrão do Windows é a PDF24: o que se imprime sem escolher não sai em papel")
+    if str(d.get("extras", {}).get("Fila EcoPDF Foto", "")).startswith("ERRO"):
+        amar.append("a impressora padrão é a EcoPDF Foto: deixe a impressora normal como padrão (o laudo sairia como foto)")
     if imp.get("grave"):
         amar.append(f"impressora: {_texto_impressora(imp)}")
     elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):
