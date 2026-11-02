@@ -22,6 +22,9 @@ $L.Add('')
 $L.Add('Computador: ' + $env:COMPUTERNAME + '    Usuario do Windows: ' + $env:USERNAME)
 $L.Add('Situacao do EcoPDF: ' + $situacao)
 $L.Add('')
+$L.Add('Pasta de saida do PDF24 (a pasta Laudos fica oculta: copie e cole este caminho no PDF24):')
+$L.Add('  ' + (Join-Path $pasta '0 - Entrada PDF24'))
+$L.Add('')
 
 if ($redes.Count -eq 0) {
     $L.Add('ATENCAO: nao encontrei nenhuma rede ligada neste PC.')
