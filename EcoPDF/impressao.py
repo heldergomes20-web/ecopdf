@@ -9,6 +9,13 @@ comum na bandeja e clica Imprimir. O EcoPDF manda DOIS envios para a impressora 
 Impressora sem modo foto (laser, preto e branco, driver sem papel fotografico): um envio
 so, fotos e depois laudo, como antes.
 
+Fila "EcoPDF Foto" (opcional, a mais estavel): se existir uma impressora com esse nome
+(a mesma impressora fisica adicionada de novo, com papel fotografico e qualidade alta
+salvos nas preferencias do proprio driver; criar com criar_fila_foto.bat), as fotos vao
+para ela com a configuracao salva e o laudo vai para a impressora padrao. Serve para
+drivers (ex.: Epson) que guardam o tipo de papel numa parte propria e nao obedecem ao
+pedido feito por programa.
+
 Generico: nao ha cadastro de impressora. O tipo de papel fotografico e escolhido pelos
 nomes que o proprio driver informa (foto/photo/glossy/brilho...) ou pelo codigo padrao do
 Windows (DMMEDIA_GLOSSY). Impressora virtual (PDF24, Microsoft Print to PDF...) ou qualquer
@@ -27,6 +34,7 @@ from ctypes import wintypes
 VIRTUAIS = re.compile(r"pdf|xps|onenote|fax|send to|enviar para", re.I)
 FOTO = re.compile(r"foto|photo|glossy|brilh|lustr|satin|cetim", re.I)
 FOSCO = re.compile(r"matte|fosc", re.I)
+FILA_FOTO = "EcoPDF Foto"
 DPI_MAX = 300
 ESPERA_FOTOS_S = 15 * 60       # foto em jato de tinta e lenta; depois disso o laudo nao sai
 
@@ -114,6 +122,17 @@ def impressora_padrao():
         return ""
     buf = ctypes.create_unicode_buffer(n.value)
     return buf.value if ws.GetDefaultPrinterW(buf, ctypes.byref(n)) else ""
+
+
+def existe_impressora(nome):
+    if os.name != "nt":
+        return False
+    ws, _ = _api()
+    h = wintypes.HANDLE()
+    if not ws.OpenPrinterW(nome, ctypes.byref(h), None):
+        return False
+    ws.ClosePrinter(h)
+    return True
 
 
 def _tipos_papel(nome):
@@ -291,6 +310,8 @@ def disponivel(cfg):
         return False, "sem impressora padrao"
     if VIRTUAIS.search(nome):
         return False, f"impressora padrao virtual ({nome})"
+    if nome.strip().casefold() == FILA_FOTO.casefold():
+        return False, f"a impressora padrao e a {FILA_FOTO} (deixe a impressora normal como padrao)"
     return True, nome
 
 
@@ -312,6 +333,21 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log):
 
     def rodar():
         try:
+            fila = FILA_FOTO if paginas_fotos and existe_impressora(FILA_FOTO) else None
+            if fila:
+                log.info("Impressao direta: fotos em %s (configuracao salva no driver), laudo em %s", fila, nome)
+                atualizar("fotos", "Imprimindo a folha de fotos (papel fotográfico)...")
+                job = _imprimir_paginas(fila, paginas_fotos, _devmode(fila), "EcoPDF - fotos")
+                if paginas_laudo:
+                    if not esperar_trabalho(fila, job, lambda m: atualizar("fotos", m)):
+                        log.warning("Impressao: fotos canceladas ou sem terminar; laudo nao enviado")
+                        atualizar("erro", "As fotos não terminaram (canceladas ou erro na impressora). "
+                                          "O laudo NÃO foi impresso: confira a impressora e clique em Imprimir de novo.")
+                        return
+                    atualizar("laudo", "Fotos prontas. Imprimindo o laudo (papel comum)...")
+                    _imprimir_paginas(nome, paginas_laudo, _devmode(nome), "EcoPDF - laudo")
+                atualizar("pronto", f"Enviado: fotos em {fila}, laudo em {nome}.")
+                return
             foto, comum, como = modo_foto(nome)
             log.info("Impressao direta em %s (%s)", nome, como)
             if paginas_fotos and paginas_laudo and foto is not None:
