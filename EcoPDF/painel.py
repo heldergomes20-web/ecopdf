@@ -34,7 +34,8 @@ SINAIS_DIAS = 7                 # janela dos sinais de problema abaixo
 LIBERADOS_MAX = 2               # mais que isso em 7 dias = aparelho nao esta enviando?
 DESCARTADOS_MAX = 3             # mais que isso em 7 dias = nome diferente / envio duplicado?
 MEMORIA_MAX_MB = 600            # EcoPDF usando mais que isso = algo acumulando (avisar)
-SEM_MEDIDAS_SEGUIDOS = 3        # ultimos N ecos sem relatorio de medidas = aparelho parou de mandar
+SEM_MEDIDAS_DIAS = 3            # ultimos N dias com eco sem NENHUM relatorio de medidas = aparelho parou de mandar
+                                # (por exame nao serve: quem mede com caliper livre nao gera relatorio)
 FOLHA_MAX_S = 60                # folha de imagens demorando mais que isso = PC lento ou exame enorme
 DISCO_DIAS_ATENCAO, DISCO_DIAS_PROBLEMA = 30, 7  # disco acaba em menos que isso no ritmo atual
 # motivo do laudo sem par (texto da tela) -> categoria curta que vai para a planilha
@@ -159,9 +160,9 @@ def _sinais(cfg, ep, reg, agora):
 
 def _medidas(cfg, ep, agora):
     """Relatorio de medidas (DICOM SR) dos ecos: data do ultimo recebido, ecos de 7 dias
-    sem medidas e quantos dos ultimos ecos seguidos vieram sem. Carotidas e fetal nao contam
+    sem medidas e quantos dias de exame seguidos vieram sem nenhum. Carotidas e fetal nao contam
     (carotidas pode nao ter medida identificada; fetal nao usa)."""
-    out = {"medidas_ultima": "", "ecos_sem_medidas_7d": 0, "ecos_7d": 0, "ecos_sem_medidas_seguidos": 0}
+    out = {"medidas_ultima": "", "ecos_sem_medidas_7d": 0, "ecos_7d": 0, "dias_sem_medidas": 0}
     try:
         import medidas as med
         import tela
@@ -179,10 +180,14 @@ def _medidas(cfg, ep, agora):
     recentes = [e for e in ecos if e["data"] >= desde]
     out["ecos_7d"] = len(recentes)
     out["ecos_sem_medidas_7d"] = sum(1 for e in recentes if not e["medidas"])
+    # dias com eco, do mais novo para o mais velho: conta os seguidos sem nenhum relatorio
+    dias = {}
     for e in ecos:
-        if e["medidas"]:
+        dias[e["data"]] = dias.get(e["data"], False) or bool(e["medidas"])
+    for _d, teve in sorted(dias.items(), reverse=True):
+        if teve:
             break
-        out["ecos_sem_medidas_seguidos"] += 1
+        out["dias_sem_medidas"] += 1
     return out
 
 
@@ -190,7 +195,10 @@ def _texto_medidas(m):
     if not m.get("ecos_7d") and not m.get("medidas_ultima"):
         return ""
     t = f"última {m['medidas_ultima']}" if m.get("medidas_ultima") else "nenhuma recebida"
-    return f"{t} · {m['ecos_sem_medidas_7d']} de {m['ecos_7d']} ecos sem medidas (7 dias)"
+    t += f" · {m['ecos_sem_medidas_7d']} de {m['ecos_7d']} ecos sem medidas (7 dias)"
+    if m.get("dias_sem_medidas"):
+        t += f" · {m['dias_sem_medidas']} dia(s) de exame sem nenhuma"
+    return t
 
 
 def _memoria_mb():
@@ -568,8 +576,8 @@ def avaliar(d):
     if d.get("fora_pasta2_7d", 0):
         amar.append(f"{d['fora_pasta2_7d']} PDF(s) de imagens sumiram da pasta 2 sem juntar: "
                     "alguém apagou ou moveu à mão (Salvar folha recria)")
-    if d.get("ecos_sem_medidas_seguidos", 0) >= SEM_MEDIDAS_SEGUIDOS:
-        amar.append(f"últimos {d['ecos_sem_medidas_seguidos']} ecos sem relatório de medidas: conferir no "
+    if d.get("dias_sem_medidas", 0) >= SEM_MEDIDAS_DIAS:
+        amar.append(f"{d['dias_sem_medidas']} dias de exame seguidos sem nenhum relatório de medidas: conferir no "
                     "aparelho se o relatório (SR) está indo para o ECOPDF junto com as imagens")
     if d["ultima_imagem_min"] is not None and d["ultima_imagem_min"] > SEM_IMAGEM_DIAS * 1440:
         amar.append(f"nenhuma imagem há {d['ultima_imagem_min'] // 1440} dias")

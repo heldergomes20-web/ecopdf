@@ -2,9 +2,13 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.02.5
+- Painel das salas: o aviso de medidas passa a ser por dia, nao por exame (quem mede com caliper livre nao gera relatorio): ATENCAO so depois de 3 dias de exame seguidos sem nenhum relatorio de medidas.
+- Inclui tudo da 2026.11.02.4 e da 2026.11.02.3, que nao chegaram a ser publicadas.
+
 2026.11.02.4
 - Tela: sai a coluna Medidas da lista (dentro do exame continua o aviso quando o aparelho nao envia as medidas).
-- Painel das salas: coluna Medidas (data do ultimo relatorio de medidas e ecos de 7 dias sem medidas) e ATENCAO quando os ultimos 3 ecos chegam sem medidas.
+- Painel das salas: coluna Medidas (data do ultimo relatorio de medidas e ecos de 7 dias sem medidas) (aviso: ver 2026.11.02.5).
 - Inclui tudo da 2026.11.02.3 (visual novo da tela), que nao chegou a ser publicada.
 
 2026.11.02.3
