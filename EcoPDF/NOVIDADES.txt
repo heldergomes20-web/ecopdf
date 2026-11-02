@@ -5,6 +5,7 @@ Para atualizar: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar
 2026.11.02
 - Modo programa: um icone so, "EcoPDF", na Area de Trabalho e no menu Iniciar. Abre a tela numa janela propria (Edge sem barra de endereco nem abas); quando chega exame, a tela abre nessa mesma janela. O atalho antigo "EcoPDF - Exames" e apagado pelo instalar.bat.
 - A pasta "Laudos - Nao Apagar" fica oculta na Area de Trabalho (o caminho nao muda; PDF24 continua igual). A pasta 3 abre pelos botoes "Pasta de prontos" e "Mostrar na pasta" da tela. OCULTAR_PASTAS = nao no config.ini deixa visivel de novo.
+- Atalho "Laudos prontos" na Area de Trabalho e pasta 3 fixada no Acesso rapido do Windows (aparece na lateral da janela de escolher arquivo, para subir o PDF no prontuario/Amigo). O atalho se recria se for apagado.
 
 2026.10.31.3
 - Tela "EcoPDF - Exames" no navegador (so neste PC): abre sozinha quando chega imagem ou laudo e ela nao esta aberta (TELA_ABRIR = ao_receber; "sim" abre ao entrar no Windows) e tem atalho na Area de Trabalho.

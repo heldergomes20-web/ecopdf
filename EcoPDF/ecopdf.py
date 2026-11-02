@@ -1569,6 +1569,42 @@ def ocultar_pasta_laudos(cfg):
         log.warning("Nao consegui ocultar %s", mae)
 
 
+PS_ATALHO_PRONTOS = (
+    "$p=$env:ECOPDF_P3; $d=[Environment]::GetFolderPath('Desktop');"
+    "$w=New-Object -ComObject WScript.Shell; $l=$w.CreateShortcut((Join-Path $d 'Laudos prontos.lnk'));"
+    "$l.TargetPath=$p; $l.Description='Pasta 3 - Finalizados (subir no prontuario)'; $l.Save();"
+    "if ($env:ECOPDF_FIXAR -eq '1') { (New-Object -ComObject Shell.Application).Namespace($p).Self.InvokeVerb('pintohome') }"
+)
+
+
+def atalho_laudos_prontos(cfg):
+    """Com a pasta Laudos oculta, a pasta 3 precisa continuar facil de achar, inclusive na janela
+    'Abrir arquivo' do prontuario: atalho 'Laudos prontos' na Area de Trabalho e pasta 3 fixada
+    no Acesso rapido (aparece na lateral de toda janela de escolher arquivo). Fixa so uma vez,
+    para respeitar quem desafixar de proposito; o atalho e recriado se for apagado."""
+    if os.name != "nt" or not cfg["ocultar_pastas"]:
+        return
+    marca = cfg["pasta_log"] / "acesso_rapido.ok"
+    atalho = area_de_trabalho() / "Laudos prontos.lnk"
+    fixar = not marca.exists()
+    if atalho.exists() and not fixar:
+        return
+    try:
+        import subprocess
+        env = dict(os.environ, ECOPDF_P3=str(cfg["pasta_final"]), ECOPDF_FIXAR="1" if fixar else "0")
+        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", PS_ATALHO_PRONTOS],
+                           env=env, capture_output=True, timeout=60,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if r.returncode == 0:
+            if fixar:
+                marca.write_text(datetime.now().isoformat(timespec="seconds"), "utf-8")
+            log.info("Atalho 'Laudos prontos' na Area de Trabalho%s", " e pasta 3 no Acesso rapido" if fixar else "")
+        else:
+            log.warning("Nao consegui criar o atalho Laudos prontos: %s", r.stderr[-300:])
+    except Exception:
+        log.warning("Nao consegui criar o atalho Laudos prontos")
+
+
 def main():
     cfg = carregar_config(BASE / "config.ini")
     configurar_log(cfg["pasta_log"])
@@ -1581,6 +1617,7 @@ def main():
     for p in [cfg["pasta_dicom"], cfg["pasta_laudos"], cfg["pasta_imagens"], cfg["pasta_final"], *extras]:
         p.mkdir(parents=True, exist_ok=True)
     ocultar_pasta_laudos(cfg)
+    threading.Thread(target=atalho_laudos_prontos, args=(cfg,), daemon=True).start()
     iniciar_renomeador(cfg)
 
     ae = AE(ae_title=cfg["ae_title"])
