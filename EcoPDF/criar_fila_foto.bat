@@ -11,9 +11,20 @@ rem O instalar.bat chama com "instalacao": so cria se a impressora padrao for re
 rem (nao PDF24/XPS/OneNote/Fax) e nao para no fim.
 set "MODO=%~1"
 
-powershell -NoProfile -Command "if (Get-Printer -Name 'EcoPDF Foto' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"
+rem 0 = ja existe e e a mesma impressora da padrao; 2 = existe mas e de outra impressora; 1 = nao existe
+powershell -NoProfile -Command "$f = Get-Printer -Name 'EcoPDF Foto' -ErrorAction SilentlyContinue; if (-not $f) { exit 1 }; $p = Get-CimInstance Win32_Printer -Filter 'Default=True'; if ($p -and $p.Name -ne 'EcoPDF Foto' -and $p.Name -notmatch 'pdf|xps|onenote|fax|send to|enviar para' -and ($f.DriverName -ne $p.DriverName -or $f.PortName -ne $p.PortName)) { exit 2 }; exit 0"
+if errorlevel 2 goto refazer
 if not errorlevel 1 if /i "%MODO%"=="instalacao" exit /b 0
 if not errorlevel 1 goto preferencias
+goto conferir
+
+:refazer
+echo.
+echo  A "EcoPDF Foto" atual e de outra impressora ^(a impressora da sala foi trocada^).
+echo  Apagando e criando de novo para a impressora padrao ^(o Windows pede permissao^)...
+powershell -NoProfile -Command "Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile','-Command','Remove-Printer -Name ''EcoPDF Foto'''"
+
+:conferir
 
 powershell -NoProfile -Command "$p = Get-CimInstance Win32_Printer -Filter 'Default=True'; if ($p -and $p.Name -notmatch 'pdf|xps|onenote|fax|send to|enviar para') { exit 0 } else { exit 1 }"
 if errorlevel 1 (

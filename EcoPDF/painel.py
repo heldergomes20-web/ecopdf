@@ -518,7 +518,9 @@ def _texto_fila_foto(cfg, imp):
     try:
         if impressao.existe_impressora(impressao.FILA_FOTO):
             if (imp.get("nome") or "").strip().casefold() == impressao.FILA_FOTO.casefold():
-                return "ERRO: EcoPDF Foto está como impressora padrão"
+                return "ERRO: EcoPDF Foto está como impressora padrão: deixe a impressora da sala como padrão"
+            if imp.get("nome") and not impressao.fila_foto_valida(imp["nome"]):
+                return "ERRO: EcoPDF Foto é de outra impressora (trocaram a impressora?): rodar criar_fila_foto.bat"
             return "sim: fotos pela EcoPDF Foto"
     except Exception:
         return "?"
@@ -563,7 +565,7 @@ def avaliar(d):
     if "pdf24" in str(imp.get("nome", "")).lower():
         amar.append("impressora padrão do Windows é a PDF24: o que se imprime sem escolher não sai em papel")
     if str(d.get("extras", {}).get("Fila EcoPDF Foto", "")).startswith("ERRO"):
-        amar.append("a impressora padrão é a EcoPDF Foto: deixe a impressora normal como padrão (o laudo sairia como foto)")
+        amar.append(str(d["extras"]["Fila EcoPDF Foto"])[6:])
     if imp.get("grave"):
         amar.append(f"impressora: {_texto_impressora(imp)}")
     elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):
