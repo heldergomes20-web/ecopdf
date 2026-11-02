@@ -198,6 +198,7 @@ def carregar_config(caminho):
         "painel_chave": _painel_ini("PAINEL_CHAVE") or c.get("PAINEL_CHAVE", "").strip(),
         "painel_horarios": [h.strip() for h in c.get("PAINEL_HORARIOS", "09:00, 15:00").split(",") if h.strip()],
         "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
+        "ocultar_pastas": c.get("OCULTAR_PASTAS", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "tipos": tipos,
     }
 
@@ -1120,7 +1121,7 @@ ROTULOS = r"(?:Paciente|Exame|Data de Nasc\.?|Sexo|Data(?! de)|Idade|Conv[eê]ni
 # --------------------------------------------------------------------------
 
 _avisados = set()
-AVISO_TELA = "tirar/voltar imagem agora e pela tela EcoPDF - Exames (atalho na Area de Trabalho); tire o pedido do nome do arquivo"
+AVISO_TELA = "tirar/voltar imagem agora e pela tela do EcoPDF (icone EcoPDF na Area de Trabalho); tire o pedido do nome do arquivo"
 
 
 def _achar_estudo(nome_pdf, cfg):
@@ -1545,6 +1546,65 @@ def iniciar_renomeador(cfg):
     log.info("Renomeador ativo: %s -> %s", mod.ENTRADA, mod.PRONTOS)
 
 
+def ocultar_pasta_laudos(cfg):
+    """Deixa a pasta-mae das pastas 0-9 ("Laudos - Nao Apagar") oculta na Area de Trabalho.
+    O caminho nao muda (PDF24 continua igual); o medico chega na pasta 3 pelo botao
+    Pasta de prontos da tela. OCULTAR_PASTAS = nao deixa visivel de novo. So age quando ela fica direto na Area de Trabalho."""
+    if os.name != "nt":
+        return
+    mae = cfg["pasta_laudos"].parent
+    if mae.parent != area_de_trabalho():  # so a pasta que fica direto na Area de Trabalho
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        atual = k.GetFileAttributesW(str(mae))
+        if atual in (-1, 0xFFFFFFFF):
+            return
+        novo = (atual | 0x2) if cfg["ocultar_pastas"] else (atual & ~0x2)
+        if novo != atual:
+            k.SetFileAttributesW(str(mae), novo)
+            log.info("Pasta dos laudos %s: %s", "oculta" if cfg["ocultar_pastas"] else "visivel de novo", mae)
+    except Exception:
+        log.warning("Nao consegui ocultar %s", mae)
+
+
+PS_ATALHO_PRONTOS = (
+    "$p=$env:ECOPDF_P3; $d=[Environment]::GetFolderPath('Desktop');"
+    "$w=New-Object -ComObject WScript.Shell; $l=$w.CreateShortcut((Join-Path $d 'Laudos prontos.lnk'));"
+    "$l.TargetPath=$p; $l.Description='Pasta 3 - Finalizados (subir no prontuario)'; $l.Save();"
+    "if ($env:ECOPDF_FIXAR -eq '1') { (New-Object -ComObject Shell.Application).Namespace($p).Self.InvokeVerb('pintohome') }"
+)
+
+
+def atalho_laudos_prontos(cfg):
+    """Com a pasta Laudos oculta, a pasta 3 precisa continuar facil de achar, inclusive na janela
+    'Abrir arquivo' do prontuario: atalho 'Laudos prontos' na Area de Trabalho e pasta 3 fixada
+    no Acesso rapido (aparece na lateral de toda janela de escolher arquivo). Fixa so uma vez,
+    para respeitar quem desafixar de proposito; o atalho e recriado se for apagado."""
+    if os.name != "nt" or not cfg["ocultar_pastas"]:
+        return
+    marca = cfg["pasta_log"] / "acesso_rapido.ok"
+    atalho = area_de_trabalho() / "Laudos prontos.lnk"
+    fixar = not marca.exists()
+    if atalho.exists() and not fixar:
+        return
+    try:
+        import subprocess
+        env = dict(os.environ, ECOPDF_P3=str(cfg["pasta_final"]), ECOPDF_FIXAR="1" if fixar else "0")
+        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", PS_ATALHO_PRONTOS],
+                           env=env, capture_output=True, timeout=60,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if r.returncode == 0:
+            if fixar:
+                marca.write_text(datetime.now().isoformat(timespec="seconds"), "utf-8")
+            log.info("Atalho 'Laudos prontos' na Area de Trabalho%s", " e pasta 3 no Acesso rapido" if fixar else "")
+        else:
+            log.warning("Nao consegui criar o atalho Laudos prontos: %s", r.stderr[-300:])
+    except Exception:
+        log.warning("Nao consegui criar o atalho Laudos prontos")
+
+
 def main():
     cfg = carregar_config(BASE / "config.ini")
     configurar_log(cfg["pasta_log"])
@@ -1556,6 +1616,8 @@ def main():
     extras = [cfg["pasta_laudos"].parent / n for n in ("0 - Entrada PDF24", "9 - Revisar")]
     for p in [cfg["pasta_dicom"], cfg["pasta_laudos"], cfg["pasta_imagens"], cfg["pasta_final"], *extras]:
         p.mkdir(parents=True, exist_ok=True)
+    ocultar_pasta_laudos(cfg)
+    threading.Thread(target=atalho_laudos_prontos, args=(cfg,), daemon=True).start()
     iniciar_renomeador(cfg)
 
     ae = AE(ae_title=cfg["ae_title"])
