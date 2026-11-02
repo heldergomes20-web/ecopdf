@@ -2,7 +2,7 @@
 
 atualizar_agora.bat          busca a versao mais nova do canal deste PC no GitHub, confere a
                              assinatura (chave publica abaixo), guarda a versao atual em
-                             _anterior, instala e confere se o EcoPDF voltou a funcionar.
+                             _anterior, instala e confere se o EcoPDF novo iniciou (porta de recepcao aberta).
 atualizar_agora.bat teste    idem, e este PC passa a ser de teste (recebe as pre-releases).
 atualizar_agora.bat geral    este PC volta ao canal geral (so versoes Latest) e, se estiver numa
                              versao de teste, volta para a Latest (unico caso de rebaixar).
@@ -244,7 +244,8 @@ def conferir_depois():
         dizer(f"ATUALIZADO: {info['de']} -> {info['para']}. EcoPDF funcionando.")
         return
     dizer("")
-    dizer("A versao nova nao voltou a receber imagens. Voltando para a anterior...")
+    dizer("O EcoPDF novo nao iniciou (porta de recepcao DICOM fechada depois de 60 s).")
+    dizer("Voltando para a versao anterior...")
     restaurar_anterior()
     sys.exit(VOLTOU)   # o .bat roda instalar.bat de novo e mostra o status
 
