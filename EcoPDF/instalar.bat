@@ -86,9 +86,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 
 set TELA_PORTA=8765
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"TELA_PORTA" config.ini') do set TELA_PORTA=%%b
-echo Criando o atalho "EcoPDF - Exames" na Area de Trabalho...
+echo Criando o icone "EcoPDF" na Area de Trabalho e no menu Iniciar...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$d=[Environment]::GetFolderPath('Desktop'); Set-Content -Path (Join-Path $d 'EcoPDF - Exames.url') -Encoding ASCII -Value ('[InternetShortcut]','URL=http://127.0.0.1:%TELA_PORTA%/','IconFile=%~dp0ecopdf.ico','IconIndex=0')"
+  "$url='http://127.0.0.1:%TELA_PORTA%/'; $ico='%~dp0ecopdf.ico';" ^
+  "$edge=@([Environment]::GetFolderPath('ProgramFilesX86'),[Environment]::GetFolderPath('ProgramFiles')) | ForEach-Object { Join-Path $_ 'Microsoft\Edge\Application\msedge.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1;" ^
+  "$d=[Environment]::GetFolderPath('Desktop'); $m=[Environment]::GetFolderPath('Programs');" ^
+  "Remove-Item (Join-Path $d 'EcoPDF - Exames.url') -Force -ErrorAction SilentlyContinue;" ^
+  "$w=New-Object -ComObject WScript.Shell;" ^
+  "foreach ($pasta in @($d,$m)) { $l=$w.CreateShortcut((Join-Path $pasta 'EcoPDF.lnk'));" ^
+  "  if ($edge) { $l.TargetPath=$edge; $l.Arguments='--app='+$url } else { $l.TargetPath=(Join-Path $env:WINDIR 'explorer.exe'); $l.Arguments=$url };" ^
+  "  $l.IconLocation=$ico+',0'; $l.Description='EcoPDF - exames e imagens'; $l.Save() }"
 
 timeout /t 5 >nul
 echo.

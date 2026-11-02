@@ -516,6 +516,32 @@ _estado = {"contato": 0.0, "aberta_em": 0.0, "url": ""}
 ABERTA_SEG = 120   # pagina aberta consulta a cada 15 s (aba minimizada: ~1 por minuto)
 
 
+def _edge():
+    """msedge.exe (vem em todo Windows 10/11), para abrir a tela numa janela propria."""
+    import os
+    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")):
+        if base:
+            p = Path(base) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+            if p.exists():
+                return p
+    return None
+
+
+def abrir_janela(url):
+    """Abre a tela como programa: janela propria do Edge, sem barra de endereco nem abas.
+    Sem Edge (ou fora do Windows), abre no navegador padrao."""
+    edge = _edge()
+    if edge is not None:
+        try:
+            import subprocess
+            subprocess.Popen([str(edge), f"--app={url}"], close_fds=True,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return
+        except OSError:
+            pass
+    webbrowser.open(url)
+
+
 def abrir_se_fechada(cfg):
     """TELA_ABRIR = ao_receber: abre o navegador quando chega imagem ou laudo, so se a
     tela nao estiver aberta (sem consulta recente) e nao tiver sido aberta agora ha pouco."""
@@ -524,7 +550,7 @@ def abrir_se_fechada(cfg):
             or agora - _estado["contato"] < ABERTA_SEG or agora - _estado["aberta_em"] < ABERTA_SEG):
         return
     _estado["aberta_em"] = agora
-    webbrowser.open(_estado["url"])
+    abrir_janela(_estado["url"])
 
 
 def abrir_pasta_final(estudo, tipo, ep, cfg):
@@ -583,7 +609,7 @@ def iniciar(cfg, ep):
     _estado["url"] = url
     if cfg.get("abrir_tela") == "inicio":
         try:
-            webbrowser.open(url)
+            abrir_janela(url)
         except Exception:
-            ep.log.warning("Nao consegui abrir o navegador; use o atalho EcoPDF - Exames")
+            ep.log.warning("Nao consegui abrir o navegador; use o atalho EcoPDF na Area de Trabalho")
     return srv
