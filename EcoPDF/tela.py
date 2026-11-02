@@ -434,6 +434,8 @@ def _handler(ep, cfg):
                     return self._enviar(200, (BASE / "tela.html").read_bytes(), "text/html; charset=utf-8")
                 if u.path == "/favicon.ico":
                     return self._enviar(200, (BASE / "ecopdf.ico").read_bytes(), "image/x-icon")
+                if u.path == "/simbolo.png":
+                    return self._enviar(200, (BASE / "simbolo.png").read_bytes(), "image/png")
                 if u.path == "/manual":
                     html = (BASE / "manual.html").read_text("utf-8")
                     html = re.sub(r'(<b id="versao">)[^<]*', lambda m: m.group(1) + ep.versao(), html, count=1)
