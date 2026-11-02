@@ -101,6 +101,9 @@ timeout /t 5 >nul
 echo.
 call "%~dp0status.bat" nopause
 echo.
+rem Fila "EcoPDF Foto" para as fotos do botao Imprimir (so na instalacao com pessoa na frente)
+if /i not "%~1"=="auto" call "%~dp0criar_fila_foto.bat" instalacao
+echo.
 set AET=ECOPDF
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"AE_TITLE" config.ini') do set AET=%%b
 set ABRIR=-Abrir
