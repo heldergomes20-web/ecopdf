@@ -79,6 +79,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
 #aviso.erro{background:#a12a2a}
 tr.sem-img{cursor:default;background:#fff8f8}
 .s-Subir{background:#fde9d7;color:#9a4a12}
+.s-Reenvio{background:#e3eefa;color:#1f4f82}
 .s-Descartado{background:#eceff3;color:#6b7380}
 .cab .btn{white-space:nowrap}
 </style>
@@ -225,16 +226,20 @@ function desenharLista() {
   $("n-semlaudo").textContent = nPend;
   document.title = (nPend ? `(${nPend}) ` : "") + "EcoPDF – Exames";
   const b = filtro.busca.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  let lista = filtro.semLaudo ? semLaudo : exames.filter(e => (e.data || "99999999") >= lim);
+  // data do exame no periodo OU imagens chegaram / exame finalizado no periodo (reenvio de exame antigo)
+  const noPeriodo = e => (e.data || "99999999") >= lim || (e.chegou || "") >= lim || (e.finalizado || "") >= lim;
+  const quando = e => e.reenvio ? e.chegou + (e.chegou_hora || "") : e.data + (e.hora || "");  // reenvio: na hora em que chegou
+  let lista = filtro.semLaudo ? semLaudo : exames.filter(noPeriodo).sort((x, y) => quando(y).localeCompare(quando(x)));
   if (b) lista = exames.filter(e => (e.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") + " " + (e.sigla || "").toLowerCase()).includes(b));
   document.querySelectorAll("[data-dias]").forEach(x => x.classList.toggle("on", !filtro.semLaudo && Number(x.dataset.dias) === filtro.dias));
   $("b-semlaudo").classList.toggle("on", filtro.semLaudo);
   $("linhas").innerHTML = lista.map((e, k) => `<tr data-k="${exames.indexOf(e)}">
     <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td title="${esc(e.tipo_nome)}">${esc(tipoCurto(e.tipo_nome))}</td>
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
-    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${/Fetal/.test(e.tipo) && ["Novo", "Folha ajustada", "Pendente"].includes(e.situacao) ? `<div class="quieto pq">Laudo da plataforma fetal: imprimir pela <b>PDF24</b></div>` : ""}</td>
+    <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${e.reenvio ? ` <span class="selo s-Reenvio" title="Exame de ${dataBr(e.data)}, imagens recebidas em ${dataBr(e.chegou)}">Reenvio ${dataBr(e.chegou).slice(0,5)}</span>` : ""}${/Fetal/.test(e.tipo) && ["Novo", "Folha ajustada", "Pendente"].includes(e.situacao) ? `<div class="quieto pq">Laudo da plataforma fetal: imprimir pela <b>PDF24</b></div>` : ""}</td>
     <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
-  let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim);
+  const chegouLaudo = l => { const d = new Date(Date.now() - (l.minutos || 0) * 60000); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; };
+  let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim || chegouLaudo(l) >= lim);
   if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
   $("linhas").insertAdjacentHTML("afterbegin", laudos.map(l => `<tr class="sem-img">
     <td>${dataBr(l.data)}</td><td class="quieto">—</td><td><b>${esc(l.paciente)}</b></td><td title="${esc(l.tipo_nome)}">${esc(tipoCurto(l.tipo_nome))}</td>

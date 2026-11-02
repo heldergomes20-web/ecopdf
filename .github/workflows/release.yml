@@ -1,6 +1,7 @@
 # Gera o EcoPDF.zip a partir da pasta EcoPDF/ e cria um RASCUNHO de release com ele
 # anexado, com o numero de EcoPDF/VERSAO.txt. Dispara pelo botao "Run workflow"
 # (aba Actions) ou ao enviar uma tag com o numero da versao.
+# Rodar de novo com o mesmo numero substitui o rascunho ainda nao publicado.
 # O rascunho nao e visto pelas salas: falta o EcoPDF.zip.sig, que o Helder
 # gera offline com o assinador e anexa antes de publicar.
 name: Rascunho de release
@@ -27,8 +28,15 @@ jobs:
           if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "$V" ]; then
             echo "Tag ${{ github.ref_name }} diferente de VERSAO.txt ($V)"; exit 1
           fi
+          # Rascunho ainda nao assinado com o mesmo numero: e substituido (regra: ajuste entra
+          # na versao em rascunho). Versao ja publicada: nunca e tocada; aumente o numero.
           if gh release view "$V" >/dev/null 2>&1; then
-            echo "Ja existe release $V. Aumente o numero em EcoPDF/VERSAO.txt."; exit 1
+            if [ "$(gh release view "$V" --json isDraft -q .isDraft)" = "true" ]; then
+              echo "Substituindo o rascunho $V (ainda nao publicado)."
+              gh release delete "$V" --yes
+            else
+              echo "A versao $V ja foi publicada. Aumente o numero em EcoPDF/VERSAO.txt."; exit 1
+            fi
           fi
           echo "TAG=$V" >> "$GITHUB_ENV"
         env:

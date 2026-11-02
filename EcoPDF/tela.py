@@ -77,7 +77,12 @@ def _info_estudo(pasta, ep, cfg):
         if c and c[0] == ass:
             return c[1]
     grupos, srs = _cabecalhos(pasta, ep, cfg)
-    info = {"tipos": {}, "srs": len(srs)}
+    # quando a ultima imagem chegou (AAAAMMDD, relogio do PC): reenvio de exame antigo
+    # aparece em "Hoje" mesmo com a data original do exame
+    chegou = max((f.stat().st_mtime for f in pasta.glob("*.dcm")), default=0)
+    info = {"tipos": {}, "srs": len(srs),
+            "chegou": datetime.fromtimestamp(chegou).strftime("%Y%m%d") if chegou else "",
+            "chegou_hora": datetime.fromtimestamp(chegou).strftime("%H%M") if chegou else ""}
     for tipo, itens in grupos.items():
         ds = itens[0][2]
         info["tipos"][tipo] = {
@@ -126,6 +131,15 @@ def _subir_de_novo(g, reg, ep):
     return ""
 
 
+def _reenvio(data, chegou):
+    """Imagens chegaram mais de 1 dia depois da data do exame: reenvio de exame antigo
+    (ou relogio do aparelho errado)."""
+    try:
+        return (datetime.strptime(chegou, "%Y%m%d") - datetime.strptime(data, "%Y%m%d")).days > 1
+    except ValueError:
+        return False
+
+
 def listar_exames(ep, cfg):
     reg = ep._ler_registro(cfg)
     exames = []
@@ -142,6 +156,8 @@ def listar_exames(ep, cfg):
         for tipo, t in info["tipos"].items():
             g = grupos.get(tipo or "")
             fora = len(ep._ler_ocultas(pasta).get(tipo or "", []))
+            r = ep.registro_do_grupo(g, reg) if g else None
+            fin = ((r or {}).get("corrigido_em") or (r or {}).get("em") or "")[:10].replace("-", "")
             exames.append({
                 "estudo": pasta.name, "tipo": tipo or "",
                 "tipo_nome": (tipo or "Exame").replace("_", " "),
@@ -149,6 +165,8 @@ def listar_exames(ep, cfg):
                 "sigla": t["sigla"], "n": t["n"], "na_folha": t["n"] - fora,
                 "medidas": med.categoria(tipo) != "" and info["srs"] > 0,
                 "sem_medidas": med.categoria(tipo) == "",
+                "chegou": info["chegou"], "chegou_hora": info["chegou_hora"], "finalizado": fin,
+                "reenvio": _reenvio(t["data"], info["chegou"]),
                 "situacao": _situacao(pasta, tipo, g, reg, ep, cfg),
                 "subir_de_novo": _subir_de_novo(g, reg, ep),
             })

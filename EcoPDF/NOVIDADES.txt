@@ -4,6 +4,7 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 
 2026.11.02.5
 - Painel das salas: o aviso de medidas passa a ser por dia, nao por exame (quem mede com caliper livre nao gera relatorio): ATENCAO so depois de 3 dias de exame seguidos sem nenhum relatorio de medidas.
+- Tela: exame antigo reenviado (laudo reimpresso e imagens mandadas de novo) aparece em Hoje e em 7 dias com a data original e o selo azul Reenvio; antes so aparecia em 6 meses (tudo) ou na busca.
 - Inclui tudo da 2026.11.02.4 e da 2026.11.02.3, que nao chegaram a ser publicadas.
 
 2026.11.02.4
