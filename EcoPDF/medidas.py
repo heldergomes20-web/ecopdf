@@ -2,14 +2,16 @@
 Medidas do exame para a tela do EcoPDF e para o botao "Copiar medidas".
 
 Fontes:
-  - cabecalho DICOM de qualquer imagem: sexo, altura, peso, FC (se o aparelho mandar)
+  - cabecalho DICOM de qualquer imagem: sexo, nascimento, idade, altura, peso, FC (se o
+    aparelho mandar; nascimento/idade so se digitados no cadastro do aparelho)
   - relatorio estruturado (DICOM SR) que o aparelho manda ao encerrar o exame
 
 Regras (decididas com o Helder em 31/10/2026):
   - valor exibido = valor recebido; so converte unidade (cm->mm, m/s->cm/s...), nunca calcula
   - na duvida (mais de um valor diferente sem "media", unidade desconhecida) fica em branco
   - medida em branco nao gera linha no texto copiado
-  - nunca entra nome ou outro dado de identificacao no texto copiado
+  - nunca entra nome, ID ou outro dado de identificacao no texto copiado; nascimento e idade
+    entram (pedido do Helder em 01/11/2026, para a pagina de laudos)
   - eco fetal: nenhuma medida
 
 Os padroes abaixo sao procurados no nome da medida + contexto do SR (grupo, local,
@@ -25,6 +27,8 @@ I = re.IGNORECASE
 # chave, rotulo na tela, unidade de saida, padrao no SR (None = so cabecalho)
 ECO = [
     ("sexo", "Sexo", "", None),
+    ("nasc", "Nascimento", "", None),
+    ("idade", "Idade", "anos", None),
     ("fc", "FC", "bpm", r"heart rate|\bHR\b|freq.*card"),
     ("alt", "Altura", "cm", None),
     ("peso", "Peso", "kg", None),
@@ -195,6 +199,14 @@ def _do_cabecalho(ref):
     sexo = str(ref.get("PatientSex", "") or "").strip().upper()
     if sexo in ("M", "F"):
         d["sexo"] = sexo
+    nasc = re.sub(r"\D", "", str(ref.get("PatientBirthDate", "") or ""))
+    if len(nasc) == 8 and 1900 <= int(nasc[:4]) <= 2100 and 1 <= int(nasc[4:6]) <= 12 and 1 <= int(nasc[6:]) <= 31:
+        d["nasc"] = f"{nasc[6:]}/{nasc[4:6]}/{nasc[:4]}"
+    m = re.fullmatch(r"0*(\d{1,3})([YMWD])", str(ref.get("PatientAge", "") or "").strip().upper())
+    if m:
+        anos = int(m.group(1)) if m.group(2) == "Y" else 0   # meses/semanas/dias = 0 ano
+        if 0 <= anos <= 99:
+            d["idade"] = str(anos)
     try:
         alt = float(ref.get("PatientSize") or 0)
         if 0.3 < alt < 2.5:  # metros

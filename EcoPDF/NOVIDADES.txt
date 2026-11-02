@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.02.2
+- Copiar medidas: inclui nasc=DD/MM/AAAA e idade=anos, lidos do cadastro do aparelho (so saem se a data de nascimento for digitada no aparelho). Tambem aparecem na lista de medidas da tela.
+
 2026.11.02.1
 - Atualizar pela tela: clicar no numero da versao (no alto, ao lado do horario) abre "Atualizar EcoPDF": mostra a versao instalada e o canal deste PC, procura versao nova no GitHub e, se houver, o botao "Atualizar para ..." abre o atualizar_agora.bat (pede permissao de administrador).
 - atualizar_agora.bat em C:\EcoPDF: baixa a versao mais nova do canal deste PC, confere a assinatura, guarda a versao atual em _anterior, instala e confere se o EcoPDF voltou a receber imagens; se nao voltar, devolve a anterior sozinho. Nunca instala versao menor.
