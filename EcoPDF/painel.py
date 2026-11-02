@@ -34,6 +34,7 @@ SINAIS_DIAS = 7                 # janela dos sinais de problema abaixo
 LIBERADOS_MAX = 2               # mais que isso em 7 dias = aparelho nao esta enviando?
 DESCARTADOS_MAX = 3             # mais que isso em 7 dias = nome diferente / envio duplicado?
 MEMORIA_MAX_MB = 600            # EcoPDF usando mais que isso = algo acumulando (avisar)
+SEM_MEDIDAS_SEGUIDOS = 3        # ultimos N ecos sem relatorio de medidas = aparelho parou de mandar
 FOLHA_MAX_S = 60                # folha de imagens demorando mais que isso = PC lento ou exame enorme
 DISCO_DIAS_ATENCAO, DISCO_DIAS_PROBLEMA = 30, 7  # disco acaba em menos que isso no ritmo atual
 # motivo do laudo sem par (texto da tela) -> categoria curta que vai para a planilha
@@ -154,6 +155,42 @@ def _sinais(cfg, ep, reg, agora):
         ep.log.exception("Painel: nao consegui ler os motivos dos laudos sem imagens")
     return {"liberados_sem_imagens_7d": liberados, "descartados_7d": descartados,
             "fora_pasta2_7d": fora, "motivos_laudo_sem_par": motivos}
+
+
+def _medidas(cfg, ep, agora):
+    """Relatorio de medidas (DICOM SR) dos ecos: data do ultimo recebido, ecos de 7 dias
+    sem medidas e quantos dos ultimos ecos seguidos vieram sem. Carotidas e fetal nao contam
+    (carotidas pode nao ter medida identificada; fetal nao usa)."""
+    out = {"medidas_ultima": "", "ecos_sem_medidas_7d": 0, "ecos_7d": 0, "ecos_sem_medidas_seguidos": 0}
+    try:
+        import medidas as med
+        import tela
+        ecos = [e for e in tela.listar_exames(ep, cfg)
+                if med.categoria(e["tipo"]) == "eco" and e["situacao"] not in ("Recebendo", "Descartado")]
+    except Exception:
+        ep.log.exception("Painel: nao consegui ler as medidas dos exames")
+        return out
+    ecos.sort(key=lambda e: (e["data"], e["hora"]), reverse=True)  # mais novo primeiro
+    com = [e for e in ecos if e["medidas"]]
+    if com:
+        d = com[0]["data"]
+        out["medidas_ultima"] = f"{d[6:8]}/{d[4:6]}/{d[:4]}" if len(d) == 8 else d
+    desde = datetime.fromtimestamp(agora - SINAIS_DIAS * 86400).strftime("%Y%m%d")
+    recentes = [e for e in ecos if e["data"] >= desde]
+    out["ecos_7d"] = len(recentes)
+    out["ecos_sem_medidas_7d"] = sum(1 for e in recentes if not e["medidas"])
+    for e in ecos:
+        if e["medidas"]:
+            break
+        out["ecos_sem_medidas_seguidos"] += 1
+    return out
+
+
+def _texto_medidas(m):
+    if not m.get("ecos_7d") and not m.get("medidas_ultima"):
+        return ""
+    t = f"última {m['medidas_ultima']}" if m.get("medidas_ultima") else "nenhuma recebida"
+    return f"{t} · {m['ecos_sem_medidas_7d']} de {m['ecos_7d']} ecos sem medidas (7 dias)"
 
 
 def _memoria_mb():
@@ -451,13 +488,15 @@ def coletar(cfg, ep, manual=False):
     }
     d.update(_sinais(cfg, ep, reg, agora))
     d.update(_desempenho(cfg, ep, manual, agora, disco))
+    d.update(_medidas(cfg, ep, agora))
     # campos novos de versoes futuras: {rotulo da coluna: valor}. A planilha cria a coluna
     # sozinha, sem trocar o script. (Os avisos continuam vindo de avaliar(), daqui.)
     d["rede"] = _rede()
     d["impressora"] = _texto_impressora(d["impressora_info"])
     d["impressora_modelo"] = d["impressora_info"].get("driver", "")
     d["extras"] = {"Botão Imprimir usado (7 dias)": _usos_imprimir(cfg, agora),
-                   "Rede (cabo/Wi-Fi, IP, riscos)": _texto_rede(d["rede"])}
+                   "Rede (cabo/Wi-Fi, IP, riscos)": _texto_rede(d["rede"]),
+                   "Medidas (relatório do aparelho)": _texto_medidas(d)}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
 
@@ -529,6 +568,9 @@ def avaliar(d):
     if d.get("fora_pasta2_7d", 0):
         amar.append(f"{d['fora_pasta2_7d']} PDF(s) de imagens sumiram da pasta 2 sem juntar: "
                     "alguém apagou ou moveu à mão (Salvar folha recria)")
+    if d.get("ecos_sem_medidas_seguidos", 0) >= SEM_MEDIDAS_SEGUIDOS:
+        amar.append(f"últimos {d['ecos_sem_medidas_seguidos']} ecos sem relatório de medidas: conferir no "
+                    "aparelho se o relatório (SR) está indo para o ECOPDF junto com as imagens")
     if d["ultima_imagem_min"] is not None and d["ultima_imagem_min"] > SEM_IMAGEM_DIAS * 1440:
         amar.append(f"nenhuma imagem há {d['ultima_imagem_min'] // 1440} dias")
     c = d.get("ultima_conexao") or {}
