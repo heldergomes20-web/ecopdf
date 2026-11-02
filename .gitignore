@@ -11,3 +11,5 @@ EcoPDF/dicom/
 *.pem
 ferramentas/assinador/publicados/
 EcoPDF/painel.ini
+EcoPDF/canal.ini
+EcoPDF/_anterior/

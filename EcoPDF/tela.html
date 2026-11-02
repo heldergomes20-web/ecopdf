@@ -87,7 +87,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
 <div class="topo">
   <div class="logo">♥ Clínica Ecocardio <span>· EcoPDF Exames</span></div>
   <div style="flex:1"></div>
-  <span class="quieto pq" id="atualizado"></span>
+  <span class="quieto pq"><span id="atualizado"></span> · <span id="b-versao" title="Atualizar o EcoPDF" style="cursor:pointer">EcoPDF</span></span>
   <button class="btn" id="b-pasta3" title="Abre a pasta 3 - Finalizados (os PDFs para subir no prontuário)">Pasta de prontos</button>
   <a class="btn" href="/manual" target="_blank" title="Como usar o EcoPDF (manual da versão instalada)">? Manual</a>
 </div>
@@ -153,6 +153,13 @@ tr.sem-img{cursor:default;background:#fff8f8}
   <div class="acoes"><button class="btn" id="conf-nao">Cancelar</button><button class="btn pri" id="conf-sim">Salvar e gerar retificado</button></div>
 </div></div>
 
+<div class="fundo" id="m-atu"><div class="caixa">
+  <b style="font-size:16px">Atualizar o EcoPDF</b>
+  <p id="atu-txt" style="line-height:1.5">Procurando versão nova no GitHub...</p>
+  <p class="quieto pq">Não atualize durante um exame: o EcoPDF fica parado por 1 a 3 minutos. O Windows vai pedir permissão de administrador; depois, uma janela preta mostra o andamento e o resultado.</p>
+  <div class="acoes"><button class="btn" id="atu-nao">Fechar</button><button class="btn pri" id="atu-sim" style="display:none">Atualizar agora</button></div>
+</div></div>
+
 <div class="fundo" id="m-sair"><div class="caixa">
   <b style="font-size:16px">Há alterações não salvas</b>
   <p>As mudanças na folha deste exame ainda não foram salvas.</p>
@@ -203,7 +210,7 @@ async function carregarLista() {
     const r = await fetch("/api/exames"); const d = await r.json();
     exames = d.exames || [];
     laudosSemImg = d.laudos_sem_imagens || [];
-    $("atualizado").textContent = `Atualizado ${d.agora} · atualiza sozinho · EcoPDF ${d.versao}`;
+    $("atualizado").textContent = `Atualizado ${d.agora} · atualiza sozinho`; $("b-versao").textContent = `EcoPDF ${d.versao}`;
     $("b-tudo").textContent = `${Math.round((d.dias_guardados || 180) / 30)} meses (tudo)`;
     desenharLista();
   } catch (e) { $("atualizado").textContent = "Sem conexão com o EcoPDF (ele está rodando?)"; }
@@ -514,6 +521,23 @@ $("p-voltar").onclick = () => { $("m-previa").style.display = "none"; };
 $("conf-nao").onclick = () => { $("m-conf").style.display = "none"; };
 $("voltar").onclick = () => { if (sujo) $("m-sair").style.display = "flex"; else location.hash = ""; };
 $("sair-nao").onclick = () => { $("m-sair").style.display = "none"; };
+$("b-versao").onclick = async () => {
+  $("atu-txt").textContent = "Procurando versão nova no GitHub..."; $("atu-sim").style.display = "none";
+  $("m-atu").style.display = "flex";
+  try {
+    const d = await (await fetch("/api/atualizacao")).json();
+    $("atu-txt").textContent = d.mensagem;
+    if (d.disponivel) { $("atu-sim").textContent = `Atualizar para ${d.disponivel}`; $("atu-sim").style.display = ""; }
+  } catch (e) { $("atu-txt").textContent = "Sem conexão com o EcoPDF."; }
+};
+$("atu-nao").onclick = () => { $("m-atu").style.display = "none"; };
+$("atu-sim").onclick = async () => {
+  $("atu-sim").style.display = "none";
+  try {
+    const d = await (await fetch("/api/atualizar", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"})).json();
+    $("atu-txt").textContent = d.mensagem || d.erro;
+  } catch (e) { $("atu-txt").textContent = "Sem conexão com o EcoPDF."; }
+};
 $("sair-sim").onclick = () => { sujo = false; $("m-sair").style.display = "none"; location.hash = ""; };
 $("conf-sim").onclick = salvar;
 window.addEventListener("beforeunload", e => { if (sujo) { e.preventDefault(); e.returnValue = ""; } });
