@@ -1,0 +1,349 @@
+"""
+Impressao direta pelo Windows, sem a janela de impressao do navegador.
+
+Acao do medico nao muda: coloca a(s) folha(s) de papel fotografico por cima do papel
+comum na bandeja e clica Imprimir. O EcoPDF manda DOIS envios para a impressora padrao:
+  1. folhas de fotos com o tipo de papel "fotografico" e qualidade alta do proprio driver;
+  2. o laudo, com papel comum, SO depois que o envio das fotos terminou (fotos com erro
+     ou canceladas = laudo nao sai, para nunca cair na folha de foto).
+Impressora sem modo foto (laser, preto e branco, driver sem papel fotografico): um envio
+so, fotos e depois laudo, como antes.
+
+Generico: nao ha cadastro de impressora. O tipo de papel fotografico e escolhido pelos
+nomes que o proprio driver informa (foto/photo/glossy/brilho...) ou pelo codigo padrao do
+Windows (DMMEDIA_GLOSSY). Impressora virtual (PDF24, Microsoft Print to PDF...) ou qualquer
+falha = a tela volta para o jeito antigo (janela do navegador).
+Desligar: IMPRESSAO_DIRETA = nao no config.ini.
+"""
+
+import ctypes
+import itertools
+import os
+import re
+import threading
+import time
+from ctypes import wintypes
+
+VIRTUAIS = re.compile(r"pdf|xps|onenote|fax|send to|enviar para", re.I)
+FOTO = re.compile(r"foto|photo|glossy|brilh|lustr|satin|cetim", re.I)
+FOSCO = re.compile(r"matte|fosc", re.I)
+DPI_MAX = 300
+ESPERA_FOTOS_S = 15 * 60       # foto em jato de tinta e lenta; depois disso o laudo nao sai
+
+# DEVMODEW (offsets fixos da estrutura publica)
+OFF_FIELDS, OFF_QUALITY, OFF_COLOR, OFF_MEDIA = 72, 90, 92, 196
+DM_PRINTQUALITY, DM_COLOR, DM_MEDIATYPE = 0x400, 0x800, 0x2000000
+DMRES_HIGH, DMCOLOR_COLOR = -4, 2
+DMMEDIA_STANDARD, DMMEDIA_GLOSSY = 1, 3
+DM_OUT_BUFFER, DM_IN_BUFFER = 2, 8
+DC_COLORDEVICE, DC_MEDIATYPENAMES, DC_MEDIATYPES = 32, 34, 35
+HORZRES, VERTRES, LOGPIXELSX, LOGPIXELSY = 8, 10, 88, 90
+PHYSICALWIDTH, PHYSICALHEIGHT, PHYSICALOFFSETX, PHYSICALOFFSETY = 110, 111, 112, 113
+JOB_ERRO = 0x2 | 0x20 | 0x40 | 0x200 | 0x400      # erro, offline, sem papel, bloqueado, pede intervencao
+JOB_CANCELADO = 0x4 | 0x100                         # apagando, apagado
+
+_tarefas = {}
+_ids = itertools.count(1)
+_trava = threading.Lock()
+
+
+# --------------------------------------------------------------------------- Windows
+class DOCINFOW(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_int), ("lpszDocName", wintypes.LPCWSTR),
+                ("lpszOutput", wintypes.LPCWSTR), ("lpszDatatype", wintypes.LPCWSTR),
+                ("fwType", wintypes.DWORD)]
+
+
+class BITMAPINFOHEADER(ctypes.Structure):
+    _fields_ = [("biSize", wintypes.DWORD), ("biWidth", wintypes.LONG), ("biHeight", wintypes.LONG),
+                ("biPlanes", wintypes.WORD), ("biBitCount", wintypes.WORD),
+                ("biCompression", wintypes.DWORD), ("biSizeImage", wintypes.DWORD),
+                ("biXPelsPerMeter", wintypes.LONG), ("biYPelsPerMeter", wintypes.LONG),
+                ("biClrUsed", wintypes.DWORD), ("biClrImportant", wintypes.DWORD)]
+
+
+class SYSTEMTIME(ctypes.Structure):
+    _fields_ = [(n, wintypes.WORD) for n in ("wYear", "wMonth", "wDayOfWeek", "wDay",
+                                             "wHour", "wMinute", "wSecond", "wMilliseconds")]
+
+
+class JOB_INFO_1W(ctypes.Structure):
+    _fields_ = [("JobId", wintypes.DWORD), ("pPrinterName", wintypes.LPWSTR),
+                ("pMachineName", wintypes.LPWSTR), ("pUserName", wintypes.LPWSTR),
+                ("pDocument", wintypes.LPWSTR), ("pDatatype", wintypes.LPWSTR),
+                ("pStatus", wintypes.LPWSTR), ("Status", wintypes.DWORD),
+                ("Priority", wintypes.DWORD), ("Position", wintypes.DWORD),
+                ("TotalPages", wintypes.DWORD), ("PagesPrinted", wintypes.DWORD),
+                ("Submitted", SYSTEMTIME)]
+
+
+def _api():
+    ws = ctypes.WinDLL("winspool.drv", use_last_error=True)
+    gdi = ctypes.WinDLL("gdi32", use_last_error=True)
+    ws.GetDefaultPrinterW.argtypes = [wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    ws.OpenPrinterW.argtypes = [wintypes.LPWSTR, ctypes.POINTER(wintypes.HANDLE), ctypes.c_void_p]
+    ws.ClosePrinter.argtypes = [wintypes.HANDLE]
+    ws.DocumentPropertiesW.argtypes = [wintypes.HWND, wintypes.HANDLE, wintypes.LPWSTR,
+                                       ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD]
+    ws.DocumentPropertiesW.restype = wintypes.LONG
+    ws.DeviceCapabilitiesW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.WORD,
+                                       ctypes.c_void_p, ctypes.c_void_p]
+    ws.DeviceCapabilitiesW.restype = ctypes.c_int
+    ws.GetJobW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+                           wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    gdi.CreateDCW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.c_void_p]
+    gdi.CreateDCW.restype = wintypes.HDC
+    gdi.DeleteDC.argtypes = [wintypes.HDC]
+    gdi.StartDocW.argtypes = [wintypes.HDC, ctypes.POINTER(DOCINFOW)]
+    gdi.EndDoc.argtypes = gdi.StartPage.argtypes = gdi.EndPage.argtypes = gdi.AbortDoc.argtypes = [wintypes.HDC]
+    gdi.GetDeviceCaps.argtypes = [wintypes.HDC, ctypes.c_int]
+    gdi.SetStretchBltMode.argtypes = [wintypes.HDC, ctypes.c_int]
+    gdi.SetBrushOrgEx.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+    gdi.StretchDIBits.argtypes = [wintypes.HDC] + [ctypes.c_int] * 8 + [
+        ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT, wintypes.DWORD]
+    return ws, gdi
+
+
+def impressora_padrao():
+    if os.name != "nt":
+        return ""
+    ws, _ = _api()
+    n = wintypes.DWORD(0)
+    ws.GetDefaultPrinterW(None, ctypes.byref(n))
+    if not n.value:
+        return ""
+    buf = ctypes.create_unicode_buffer(n.value)
+    return buf.value if ws.GetDefaultPrinterW(buf, ctypes.byref(n)) else ""
+
+
+def _tipos_papel(nome):
+    """[(codigo, nome)] dos tipos de papel que o driver informa."""
+    ws, _ = _api()
+    n = ws.DeviceCapabilitiesW(nome, None, DC_MEDIATYPES, None, None)
+    if n <= 0:
+        return []
+    cods = (wintypes.DWORD * n)()
+    ws.DeviceCapabilitiesW(nome, None, DC_MEDIATYPES, cods, None)
+    nomes = [""] * n
+    m = ws.DeviceCapabilitiesW(nome, None, DC_MEDIATYPENAMES, None, None)
+    if m == n:
+        buf = ctypes.create_unicode_buffer(64 * n)
+        ws.DeviceCapabilitiesW(nome, None, DC_MEDIATYPENAMES, buf, None)
+        raw = ctypes.wstring_at(ctypes.addressof(buf), 64 * n)
+        nomes = [raw[i * 64:(i + 1) * 64].split("\0", 1)[0] for i in range(n)]
+    return list(zip(list(cods), nomes))
+
+
+def escolher_papel_foto(tipos):
+    """Codigo do papel fotografico (brilhante de preferencia) ou None."""
+    fotos = [(c, n) for c, n in tipos if FOTO.search(n or "")]
+    if fotos:
+        brilho = [c for c, n in fotos if not FOSCO.search(n)]
+        return (brilho or [fotos[0][0]])[0]
+    if any(c == DMMEDIA_GLOSSY for c, _ in tipos):
+        return DMMEDIA_GLOSSY
+    return None
+
+
+def modo_foto(nome):
+    """(codigo do papel foto ou None, codigo do papel comum ou None, texto para o registro)."""
+    ws, _ = _api()
+    colorida = ws.DeviceCapabilitiesW(nome, None, DC_COLORDEVICE, None, None) == 1
+    tipos = _tipos_papel(nome)
+    comum = DMMEDIA_STANDARD if any(c == DMMEDIA_STANDARD for c, _ in tipos) else None
+    if not colorida:
+        return None, comum, "impressora preto e branco: um envio so"
+    foto = escolher_papel_foto(tipos)
+    if foto is None:
+        return None, comum, "driver sem papel fotografico: um envio so"
+    nome_foto = next((n for c, n in tipos if c == foto), "") or f"codigo {foto}"
+    return foto, comum, f"papel fotografico do driver: {nome_foto}"
+
+
+def _devmode(nome, papel=None, alta=False):
+    """DEVMODE da impressora com tipo de papel/qualidade trocados (ou o padrao dela)."""
+    ws, _ = _api()
+    h = wintypes.HANDLE()
+    if not ws.OpenPrinterW(nome, ctypes.byref(h), None):
+        raise OSError(f"nao abri a impressora {nome}")
+    try:
+        tam = ws.DocumentPropertiesW(None, h, nome, None, None, 0)
+        if tam <= 0:
+            raise OSError("driver nao informou as configuracoes")
+        dm = ctypes.create_string_buffer(tam)
+        if ws.DocumentPropertiesW(None, h, nome, dm, None, DM_OUT_BUFFER) < 0:
+            raise OSError("driver nao entregou as configuracoes")
+        campos = ctypes.c_uint32.from_buffer(dm, OFF_FIELDS)
+        if papel is not None:
+            ctypes.c_uint32.from_buffer(dm, OFF_MEDIA).value = papel
+            campos.value |= DM_MEDIATYPE
+        if alta:
+            ctypes.c_int16.from_buffer(dm, OFF_QUALITY).value = DMRES_HIGH
+            ctypes.c_int16.from_buffer(dm, OFF_COLOR).value = DMCOLOR_COLOR
+            campos.value |= DM_PRINTQUALITY | DM_COLOR
+        # o driver junta a troca com a parte propria dele (qualidade de foto do fabricante)
+        saida = ctypes.create_string_buffer(tam)
+        if ws.DocumentPropertiesW(None, h, nome, saida, dm, DM_IN_BUFFER | DM_OUT_BUFFER) < 0:
+            return dm
+        return saida
+    finally:
+        ws.ClosePrinter(h)
+
+
+def _imprimir_paginas(nome, paginas, devmode, titulo):
+    """Um envio (um trabalho na fila). paginas = [(caminho_pdf, indice)]. Devolve o id do trabalho."""
+    import numpy as np
+    import pypdfium2 as pdfium
+    _, gdi = _api()
+    hdc = gdi.CreateDCW(None, nome, None, devmode)
+    if not hdc:
+        raise OSError("nao consegui preparar a impressora")
+    try:
+        di = DOCINFOW(ctypes.sizeof(DOCINFOW), titulo, None, None, 0)
+        job = gdi.StartDocW(hdc, ctypes.byref(di))
+        if job <= 0:
+            raise OSError("a impressora recusou o envio")
+        dpi = min(gdi.GetDeviceCaps(hdc, LOGPIXELSX) or DPI_MAX, DPI_MAX)
+        fw, fh = gdi.GetDeviceCaps(hdc, PHYSICALWIDTH), gdi.GetDeviceCaps(hdc, PHYSICALHEIGHT)
+        ox, oy = gdi.GetDeviceCaps(hdc, PHYSICALOFFSETX), gdi.GetDeviceCaps(hdc, PHYSICALOFFSETY)
+        docs = {}
+        try:
+            for caminho, i in paginas:
+                doc = docs.get(caminho) or docs.setdefault(caminho, pdfium.PdfDocument(str(caminho)))
+                pag = doc[i]
+                img = pag.render(scale=dpi / 72).to_pil().convert("RGB")
+                w, h = img.size
+                arr = np.asarray(img)[:, :, ::-1]
+                linha = (w * 3 + 3) & ~3
+                if linha != w * 3:
+                    arr = np.pad(arr.reshape(h, w * 3), ((0, 0), (0, linha - w * 3)))
+                bits = np.ascontiguousarray(arr).tobytes()
+                bmi = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), w, -h, 1, 24, 0, 0, 0, 0, 0, 0)
+                # tamanho real (100%): a pagina do PDF ocupa o papel inteiro; a margem que a
+                # impressora nao alcanca fica de fora, como na impressao "tamanho real"
+                esc = min(fw / w, fh / h)
+                dw, dh = int(w * esc), int(h * esc)
+                x, y = (fw - dw) // 2 - ox, (fh - dh) // 2 - oy
+                if gdi.StartPage(hdc) <= 0:
+                    raise OSError("a impressora recusou a pagina")
+                gdi.SetStretchBltMode(hdc, 4)  # HALFTONE
+                gdi.SetBrushOrgEx(hdc, 0, 0, None)
+                gdi.StretchDIBits(hdc, x, y, dw, dh, 0, 0, w, h, bits, ctypes.byref(bmi), 0, 0x00CC0020)
+                gdi.EndPage(hdc)
+        except Exception:
+            gdi.AbortDoc(hdc)
+            raise
+        finally:
+            for d in docs.values():
+                d.close()
+        gdi.EndDoc(hdc)
+        return job
+    finally:
+        gdi.DeleteDC(hdc)
+
+
+def _estado_trabalho(nome, job):
+    """None = saiu da fila; senao o Status do trabalho."""
+    ws, _ = _api()
+    h = wintypes.HANDLE()
+    if not ws.OpenPrinterW(nome, ctypes.byref(h), None):
+        return None
+    try:
+        prec = wintypes.DWORD(0)
+        ws.GetJobW(h, job, 1, None, 0, ctypes.byref(prec))
+        if not prec.value:
+            return None
+        buf = ctypes.create_string_buffer(prec.value)
+        if not ws.GetJobW(h, job, 1, buf, prec.value, ctypes.byref(prec)):
+            return None
+        return JOB_INFO_1W.from_buffer(buf).Status
+    finally:
+        ws.ClosePrinter(h)
+
+
+def esperar_trabalho(nome, job, avisar, limite=ESPERA_FOTOS_S):
+    """True quando o envio saiu da fila sem ser cancelado; False se cancelado ou no limite."""
+    fim = time.time() + limite
+    while time.time() < fim:
+        st = _estado_trabalho(nome, job)
+        if st is None:
+            return True
+        if st & JOB_CANCELADO:
+            return False
+        if st & JOB_ERRO:
+            avisar("A impressora pede atenção (papel, tinta, tampa ou offline). O laudo sai quando as fotos terminarem.")
+        time.sleep(2)
+    return False
+
+
+# --------------------------------------------------------------------------- uso pela tela
+def disponivel(cfg):
+    """(True, impressora) ou (False, motivo) para a tela usar o jeito antigo."""
+    if os.name != "nt":
+        return False, "fora do Windows"
+    if not cfg.get("impressao_direta", True):
+        return False, "IMPRESSAO_DIRETA = nao"
+    try:
+        nome = impressora_padrao()
+    except Exception:
+        return False, "nao li a impressora padrao"
+    if not nome:
+        return False, "sem impressora padrao"
+    if VIRTUAIS.search(nome):
+        return False, f"impressora padrao virtual ({nome})"
+    return True, nome
+
+
+def iniciar(paginas_fotos, paginas_laudo, cfg, log):
+    """Comeca a impressao em segundo plano. Devolve o id para acompanhar ou None (usar o jeito antigo)."""
+    ok, nome = disponivel(cfg)
+    if not ok:
+        log.info("Impressao direta indisponivel: %s", nome)
+        return None
+    tid = next(_ids)
+    with _trava:
+        _tarefas[tid] = {"estado": "preparando", "mensagem": "Preparando a impressão...", "em": time.time()}
+        for k in [k for k, v in _tarefas.items() if time.time() - v["em"] > 3600]:
+            del _tarefas[k]
+
+    def atualizar(estado, msg):
+        with _trava:
+            _tarefas[tid].update(estado=estado, mensagem=msg)
+
+    def rodar():
+        try:
+            foto, comum, como = modo_foto(nome)
+            log.info("Impressao direta em %s (%s)", nome, como)
+            if paginas_fotos and paginas_laudo and foto is not None:
+                atualizar("fotos", "Imprimindo a folha de fotos (papel fotográfico)...")
+                job = _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, alta=True), "EcoPDF - fotos")
+                if not esperar_trabalho(nome, job, lambda m: atualizar("fotos", m)):
+                    log.warning("Impressao: fotos canceladas ou sem terminar; laudo nao enviado")
+                    atualizar("erro", "As fotos não terminaram (canceladas ou erro na impressora). "
+                                      "O laudo NÃO foi impresso: confira a impressora e clique em Imprimir de novo.")
+                    return
+                atualizar("laudo", "Fotos prontas. Imprimindo o laudo (papel comum)...")
+                _imprimir_paginas(nome, paginas_laudo, _devmode(nome, comum), "EcoPDF - laudo")
+            elif paginas_fotos and foto is not None:
+                atualizar("fotos", "Imprimindo a folha de fotos (papel fotográfico)...")
+                _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, alta=True), "EcoPDF - fotos")
+            else:
+                # sem modo foto ou so o laudo: um envio so, na ordem fotos -> laudo
+                atualizar("laudo", "Imprimindo...")
+                _imprimir_paginas(nome, paginas_fotos + paginas_laudo, _devmode(nome, comum), "EcoPDF - exame")
+            atualizar("pronto", f"Enviado para {nome}.")
+        except Exception as e:
+            log.exception("Impressao direta falhou")
+            atualizar("erro", f"Não consegui imprimir direto ({e}). Use Imprimir de novo: "
+                              "vai abrir a janela de impressão do navegador.")
+            with _trava:
+                _tarefas[tid]["usar_navegador"] = True
+
+    threading.Thread(target=rodar, daemon=True, name="impressao").start()
+    return tid
+
+
+def estado(tid):
+    with _trava:
+        t = _tarefas.get(tid)
+        return dict(t) if t else None

@@ -199,6 +199,7 @@ def carregar_config(caminho):
         "painel_horarios": [h.strip() for h in c.get("PAINEL_HORARIOS", "09:00, 15:00").split(",") if h.strip()],
         "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "ocultar_pastas": c.get("OCULTAR_PASTAS", "sim").strip().lower() not in ("nao", "não", "0", "n"),
+        "impressao_direta": c.get("IMPRESSAO_DIRETA", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "tipos": tipos,
     }
 

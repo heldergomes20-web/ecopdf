@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, quote, urlparse
 import pydicom
 from pypdf import PdfReader, PdfWriter
 
+import impressao
 import medidas as med
 
 BASE = Path(__file__).resolve().parent
@@ -370,6 +371,23 @@ def _paginas_impressao(r, ep, cfg):
         return None
 
 
+def paginas_impressao(pasta, tipo, folhas, com_laudo, ep, cfg):
+    """([(pdf, indice)] das folhas de fotos escolhidas, [(pdf, indice)] do laudo) para a
+    impressao direta (dois envios). Listas vazias se nao houver o que imprimir."""
+    g = next((x for x in ep._ler_grupos(pasta) if (x["tipo"] or "") == (tipo or "")), None)
+    r = ep.registro_do_grupo(g, ep._ler_registro(cfg)) if g else None
+    if not r:
+        return [], []
+    laudo, foto = _partes_impressao(r, ep, cfg)
+    fotos, pl = [], []
+    if foto and folhas:
+        n = len(PdfReader(str(foto)).pages)
+        fotos = [(foto, f - 1) for f in sorted(set(folhas)) if 1 <= f <= n]
+    if com_laudo and laudo:
+        pl = [(laudo, i) for i in range(len(PdfReader(str(laudo)).pages))]
+    return fotos, pl
+
+
 def pdf_impressao(pasta, tipo, folhas, com_laudo, ep, cfg):
     """PDF para imprimir num envio so: folhas de fotos escolhidas primeiro (papel
     fotografico por cima da pilha), depois o laudo (papel comum)."""
@@ -465,6 +483,9 @@ def _handler(ep, cfg):
                                               "agora": datetime.now().strftime("%H:%M:%S")})
                 if u.path == "/api/atualizacao":
                     return self._enviar(200, consultar_atualizacao())
+                if u.path == "/api/imprimir_estado":
+                    st = impressao.estado(int(q.get("id", "0") or 0))
+                    return self._enviar(200, st or {"estado": "erro", "mensagem": "impressão não encontrada"})
                 if u.path == "/api/exame":
                     pasta = _pasta(q.get("e", ""), cfg)
                     d = detalhe(pasta, q.get("t", ""), ep, cfg) if pasta else None
@@ -518,6 +539,16 @@ def _handler(ep, cfg):
                     f = ep.descartar if u.path.endswith("descartar") else ep.restaurar
                     ok, msg = f(pasta, tipo, cfg)
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
+                if u.path == "/api/imprimir_direto":
+                    folhas = [int(x) for x in corpo.get("folhas", []) if str(x).isdigit()]
+                    fotos, laudo = paginas_impressao(pasta, tipo, folhas, bool(corpo.get("laudo")), ep, cfg)
+                    if not fotos and not laudo:
+                        return self._enviar(404, {"erro": "nada para imprimir"})
+                    tid = impressao.iniciar(fotos, laudo, cfg, ep.log)
+                    if tid is None:
+                        return self._enviar(200, {"navegador": True})
+                    _anotar_impressao(cfg)
+                    return self._enviar(200, {"id": tid})
                 if u.path == "/api/imprimir":
                     folhas = [int(x) for x in corpo.get("folhas", []) if str(x).isdigit()]
                     pdf = pdf_impressao(pasta, tipo, folhas, bool(corpo.get("laudo")), ep, cfg)
