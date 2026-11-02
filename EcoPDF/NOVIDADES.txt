@@ -2,6 +2,11 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.02.4
+- Tela: sai a coluna Medidas da lista (dentro do exame continua o aviso quando o aparelho nao envia as medidas).
+- Painel das salas: coluna Medidas (data do ultimo relatorio de medidas e ecos de 7 dias sem medidas) e ATENCAO quando os ultimos 3 ecos chegam sem medidas.
+- Inclui tudo da 2026.11.02.3 (visual novo da tela), que nao chegou a ser publicada.
+
 2026.11.02.3
 - Tela com visual novo: Pendente em amarelo (ambar); vermelho so para o que pede acao (Laudo sem imagens e Fora da pasta 2); Folha ajustada em lilas; simbolo da clinica no topo.
 - Tipo curto na lista (Carotidas, Eco fetal; o nome completo aparece ao passar o mouse). Coluna Medidas mostra so o sinal de conferido.
