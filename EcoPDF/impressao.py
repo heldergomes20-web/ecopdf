@@ -135,6 +135,41 @@ def existe_impressora(nome):
     return True
 
 
+def driver_porta(nome):
+    """(driver, porta) da impressora, para conferir se a EcoPDF Foto e a mesma impressora da padrao."""
+    ws, _ = _api()
+    ws.GetPrinterW.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
+                               ctypes.POINTER(wintypes.DWORD)]
+    h = wintypes.HANDLE()
+    if not ws.OpenPrinterW(nome, ctypes.byref(h), None):
+        return None
+    try:
+        prec = wintypes.DWORD(0)
+        ws.GetPrinterW(h, 2, None, 0, ctypes.byref(prec))
+        if not prec.value:
+            return None
+        buf = ctypes.create_string_buffer(prec.value)
+        if not ws.GetPrinterW(h, 2, buf, prec.value, ctypes.byref(prec)):
+            return None
+        ptrs = (ctypes.c_void_p * 5).from_buffer(buf)   # PRINTER_INFO_2W: server, nome, share, porta, driver
+        porta = ctypes.wstring_at(ptrs[3]) if ptrs[3] else ""
+        driver = ctypes.wstring_at(ptrs[4]) if ptrs[4] else ""
+        return driver, porta
+    finally:
+        ws.ClosePrinter(h)
+
+
+def fila_foto_valida(padrao):
+    """True se existe a EcoPDF Foto e ela e a mesma impressora (driver e porta) da padrao."""
+    if not existe_impressora(FILA_FOTO):
+        return False
+    try:
+        a, b = driver_porta(FILA_FOTO), driver_porta(padrao)
+    except Exception:
+        return True    # nao deu para conferir: usa a fila (foi criada de proposito)
+    return not a or not b or a == b
+
+
 def _tipos_papel(nome):
     """[(codigo, nome)] dos tipos de papel que o driver informa."""
     ws, _ = _api()
@@ -333,7 +368,13 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log):
 
     def rodar():
         try:
-            fila = FILA_FOTO if paginas_fotos and existe_impressora(FILA_FOTO) else None
+            fila = None
+            if paginas_fotos and existe_impressora(FILA_FOTO):
+                if fila_foto_valida(nome):
+                    fila = FILA_FOTO
+                else:
+                    log.warning("Impressao: %s nao e a mesma impressora da padrao (%s); ignorada. "
+                                "Rode criar_fila_foto.bat de novo.", FILA_FOTO, nome)
             if fila:
                 log.info("Impressao direta: fotos em %s (configuracao salva no driver), laudo em %s", fila, nome)
                 atualizar("fotos", "Imprimindo a folha de fotos (papel fotográfico)...")
