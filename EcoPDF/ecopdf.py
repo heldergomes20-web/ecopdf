@@ -1467,6 +1467,20 @@ def dados_do_laudo(arq, tipos):
     return dados
 
 
+def nome_completo(do_laudo, do_aparelho):
+    """O Medware corta o nome comprido no laudo. Se o nome do
+    aparelho (worklist = nome inteiro do Medware) comeca igual e e maior, completa com ele
+    (pedido do Helder 03/11/2026). Mantem os acentos do laudo."""
+    laudo = " ".join(str(do_laudo or "").split()).rstrip(". ")
+    aparelho = " ".join(str(do_aparelho or "").upper().split())
+    if not laudo or len(aparelho) <= len(laudo):
+        return do_laudo
+    sem_acento = unicodedata.normalize("NFKD", laudo.upper()).encode("ascii", "ignore").decode()
+    if len(sem_acento) != len(laudo) or not aparelho.startswith(sem_acento):
+        return do_laudo
+    return laudo.upper() + aparelho[len(laudo):]
+
+
 def _folha_do_laudo(laudo, foto, cfg, tmp):
     """Refaz a folha de imagens com os dados do laudo. Se o PDF de imagens nao veio
     do EcoPDF (renomeado a mao, outro aparelho), usa-o como esta."""
@@ -1477,6 +1491,7 @@ def _folha_do_laudo(laudo, foto, cfg, tmp):
                 imagens = _numeradas(pasta, g["tipo"], grupos.get(g["tipo"], []))
                 if imagens:
                     dados = dados_do_laudo(laudo, cfg["tipos"])
+                    dados["paciente"] = nome_completo(dados["paciente"], nome_paciente(ref.get("PatientName")))
                     dados["data"] = data_br(ref.get("StudyDate", ""))  # data das imagens
                     dados["sigla"] = sigla(ref, cfg)
                     _desenhar(tmp, imagens, cfg, dados,

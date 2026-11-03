@@ -3,6 +3,7 @@ Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
 2026.11.03.1
+- Folha de imagens: nome comprido que o Medware corta no laudo sai completo na barra cinza, pelo nome que veio do aparelho/worklist, quando o comeco e igual.
 - Worklist: o exame vai para o aparelho abreviado: ECO, DCV (carotidas) ou ECO + DCV quando o paciente tem os dois (fetal: ECO FETAL).
 - Worklist: o paciente sai da lista do aparelho quando chegam as imagens de todos os exames dele no dia (eco + carotidas: so sai depois dos dois). Vale tambem para cadastro feito a mao no aparelho (pelo nome).
 - Tela: botao Worklist no topo mostra os pacientes de hoje (na lista, imagens recebidas, excluido) com botao Excluir para tirar alguem da lista do aparelho (e Voltar a lista). Zera no dia seguinte.
