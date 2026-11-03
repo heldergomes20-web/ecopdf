@@ -161,7 +161,17 @@ def montar(p, pedido):
 
 
 def ao_consultar(event):
+    try:
+        yield from _consultar(event)
+    except Exception as e:
+        print(f"{_hora()}  ERRO na consulta: {type(e).__name__}: {e}")
+        yield 0xC002, None
+
+
+def _consultar(event):
+    print(f"{_hora()}  C-FIND recebido")
     pedido = event.identifier
+    print("   pedido: " + "; ".join(f"{el.keyword}={el.value if el.VR != 'SQ' else '[...]'}" for el in pedido))
     ip = event.assoc.requestor.address
     ae = str(event.assoc.requestor.ae_title).strip()
     sps = pedido.get("ScheduledProcedureStepSequence")
@@ -195,6 +205,38 @@ def ao_consultar(event):
         yield 0xFF00, montar(p, pedido)
 
 
+def _hora():
+    return datetime.datetime.now().strftime("%H:%M:%S")
+
+
+def ao_conectar(event):
+    print(f"\n{_hora()}  Conexao aberta de {event.address[0]}")
+
+
+def ao_pedir(event):
+    rq = event.assoc.requestor
+    ctx = ", ".join(sorted({f"{c.abstract_syntax.name}" for c in rq.requested_contexts}))
+    print(f"{_hora()}  Pedido de associacao: AE {str(rq.ae_title).strip()} -> {str(event.assoc.acceptor.ae_title).strip()}; servicos: {ctx}")
+
+
+def ao_aceitar(event):
+    ok = ", ".join(c.abstract_syntax.name for c in event.assoc.accepted_contexts)
+    print(f"{_hora()}  Associacao ACEITA: {ok or 'nenhum servico'}")
+
+
+def ao_rejeitar(event):
+    print(f"{_hora()}  Associacao REJEITADA")
+
+
+def ao_abortar(event):
+    print(f"{_hora()}  Associacao ABORTADA")
+
+
+def ao_eco(event):
+    print(f"{_hora()}  Teste de conexao (eco) respondido")
+    return 0x0000
+
+
 def main():
     dia = DIA_TESTE or datetime.date.today()
     try:
@@ -210,7 +252,10 @@ def main():
     print(f"Lista de pacientes (worklist) ouvindo na porta {PORTA}, AE ECOPDF. "
           f"Deixe esta janela aberta. Ctrl+C ou fechar = desliga.")
     ae.start_server(("0.0.0.0", PORTA), block=True,
-                    evt_handlers=[(evt.EVT_C_FIND, ao_consultar)])
+                    evt_handlers=[(evt.EVT_C_FIND, ao_consultar), (evt.EVT_C_ECHO, ao_eco),
+                                  (evt.EVT_CONN_OPEN, ao_conectar), (evt.EVT_REQUESTED, ao_pedir),
+                                  (evt.EVT_ACCEPTED, ao_aceitar), (evt.EVT_REJECTED, ao_rejeitar),
+                                  (evt.EVT_ABORTED, ao_abortar)])
 
 
 if __name__ == "__main__":
