@@ -24,6 +24,7 @@ from pypdf import PdfReader, PdfWriter
 
 import impressao
 import medidas as med
+import ocr_imagem
 
 BASE = Path(__file__).resolve().parent
 SEM_LAUDO = ("Recebendo", "Novo", "Folha ajustada", "Pendente")
@@ -274,6 +275,43 @@ def _pasta(estudo, cfg):
     return p if p.is_dir() else None
 
 
+def _ocr_estudo(pasta, itens, ep):
+    """[(chave, valor, unidade)] lidos das caixas de medida das imagens do grupo.
+    Guarda o resultado por arquivo em dicom/<estudo>/ocr.json (ler pixels e lento)."""
+    arq_cache = pasta / "ocr.json"
+    try:
+        cache = json.loads(arq_cache.read_text(encoding="utf-8"))
+    except Exception:
+        cache = {}
+    mudou, saida = False, []
+    for _, ident, _ in itens:
+        arq = pasta / (ident.split("#")[0] + ".dcm")
+        try:
+            st = arq.stat()
+        except OSError:
+            continue
+        marca = f"{st.st_size}-{int(st.st_mtime)}"
+        c = cache.get(arq.name)
+        if not c or c.get("marca") != marca:
+            try:
+                ds = pydicom.dcmread(arq)
+                lidas = [list(m[:3]) for m in ocr_imagem.medidas_da_imagem(ds.pixel_array)] \
+                    if int(ds.get("NumberOfFrames", 1) or 1) == 1 else []
+            except Exception:
+                ep.log.exception("Tela: OCR falhou em %s", arq.name)
+                lidas = []
+            c = {"marca": marca, "medidas": lidas}
+            cache[arq.name] = c
+            mudou = True
+        saida.extend(tuple(m) for m in c["medidas"])
+    if mudou:
+        try:
+            arq_cache.write_text(json.dumps(cache), encoding="utf-8")
+        except OSError:
+            pass
+    return saida
+
+
 def detalhe(pasta, tipo, ep, cfg):
     grupos, srs = _cabecalhos(pasta, ep, cfg)
     itens = grupos.get(tipo, [])
@@ -305,7 +343,8 @@ def detalhe(pasta, tipo, ep, cfg):
         "impressao": _paginas_impressao(r, ep, cfg) if situacao == "Finalizado" else None,
         "por_pagina": max(1, cfg["colunas"]) * max(1, cfg["linhas"]),
         "imagens": imagens,
-        "medidas": med.medidas_do_exame(tipo, ref, srs),
+        "medidas": med.medidas_do_exame(
+            tipo, ref, srs, _ocr_estudo(pasta, itens, ep) if med.categoria(tipo) == "eco" else None),
     }
 
 

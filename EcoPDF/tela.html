@@ -64,6 +64,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
 .grp{font-size:11.5px;font-weight:700;color:var(--vinho);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 2px}
 .lin{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #eef0f3}
 .lin b{font-weight:600;white-space:nowrap}.branco{color:#b0b6bf}
+.img-tag{display:inline-block;font-size:10px;line-height:1;padding:2px 5px;border-radius:4px;background:#fff4d6;color:#8a5a00;border:1px solid #f0d58a;vertical-align:1px}
 .sujo{color:#a12a2a;font-weight:600}
 /* modal */
 .fundo{position:fixed;inset:0;background:rgba(20,25,35,.5);display:none;align-items:center;justify-content:center;z-index:10}
@@ -369,8 +370,9 @@ function painel() {
   let grupo = null;
   for (const l of m.linhas) {
     if (l.grupo && l.grupo !== grupo) { grupo = l.grupo; h += `<div class="grp">${esc(grupo)}</div>`; }
-    h += `<div class="lin"><span>${esc(l.rotulo)}</span>${l.valor ? `<b>${esc(l.valor)}${l.unidade ? " " + esc(l.unidade) : ""}</b>` : `<span class="branco">em branco</span>`}</div>`;
+    h += `<div class="lin"><span>${esc(l.rotulo)}${l.origem === "imagem" ? ` <span class="img-tag" title="Lido da caixa de medida gravada na imagem. Confira.">imagem</span>` : ""}</span>${l.valor ? `<b>${esc(l.valor)}${l.unidade ? " " + esc(l.unidade) : ""}</b>` : `<span class="branco">em branco</span>`}</div>`;
   }
+  if (m.n_imagem) h += `<p class="quieto pq" style="margin-top:10px"><span class="img-tag">imagem</span> = não veio no relatório do aparelho; lido da caixa de medida gravada na imagem. Confira antes de liberar o laudo.</p>`;
   h += `<p class="quieto pq" style="margin-top:10px">Em branco = não medido com a medida identificada do aparelho, ou valor duvidoso. Medida em branco não entra no texto copiado.</p>`;
   p.innerHTML = h;
   const b = $("b-copiar"); if (b) b.onclick = copiar;

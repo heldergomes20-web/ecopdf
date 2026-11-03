@@ -42,7 +42,7 @@ CHAVE_PUBLICA = "AMnlb2+BTFjFstkWT3MMldMu7Bnfa6Ab0lUKjNWLhFQ="   # chave_publica
 VERSAO_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$")
 ANTERIOR = BASE / "_anterior"
 # nunca copiados para _anterior nem sobrescritos: dados e arquivos locais deste PC
-LOCAIS = {"venv", "processados", "dicom", "log", "_anterior", "__pycache__", "painel.ini", "canal.ini"}
+LOCAIS = {"venv", "processados", "dicom", "log", "_anterior", "__pycache__", "painel.ini", "canal.ini", "fonte_vivid.json"}
 WINDOWS = os.name == "nt"
 INSTALAR, VOLTOU = 10, 11   # codigos de saida lidos pelo .bat
 
