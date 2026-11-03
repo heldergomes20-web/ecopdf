@@ -247,6 +247,10 @@ def _do_cabecalho(ref):
 # Saida
 # --------------------------------------------------------------------------
 
+# diametros do eco em mm inteiros (Helder 03/11/2026); arredonda 0,5 para cima
+INTEIROS = {"raiz", "ae", "ddve", "dsve", "siv", "pp", "asc"}
+
+
 def formatar(valor, unidade):
     """Numero com virgula, sem zeros sobrando: 33, 2,4, 0,85."""
     if isinstance(valor, str):
@@ -293,7 +297,9 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
                 v = _do_ocr(ocr, chave, un)
                 origem = "imagem" if v is not None else ""
             linhas.append({"chave": chave, "rotulo": rotulo, "unidade": un,
-                           "valor": "" if v is None else formatar(v, un), "grupo": "",
+                           "valor": "" if v is None else formatar(
+                               float(int(v + 0.5)) if chave in INTEIROS and isinstance(v, float) else v, un),
+                           "grupo": "",
                            "origem": origem})
     elif cat == "carotidas":
         for suf, nome_lado, lado in LADOS:

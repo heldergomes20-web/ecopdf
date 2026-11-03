@@ -4,6 +4,7 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 
 2026.11.03.1
 - Tela: a roda do mouse troca de imagem (antes dava zoom). Zoom pelos botoes "- zoom / + zoom" no canto da imagem ou Ctrl + roda.
+- Medidas: raiz da aorta, aorta ascendente, AE, DDVE, DSVE, septo e parede posterior em mm inteiros, sem casa decimal (arredondado).
 
 2026.11.03
 - Folha de imagens: o nome do paciente na barra cinza saía como "DATA NASC.:" com o laudo de eco do Medware (dados do paciente em coluna). Agora lê o nome certo. Exame ja finalizado com o nome errado: reimprimir o laudo no Medware (PDF24) refaz o final com o nome certo.
