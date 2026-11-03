@@ -522,6 +522,9 @@ def _handler(ep, cfg):
                                               "laudos_sem_imagens": laudos_sem_imagens(ep, cfg),
                                               "dias_guardados": cfg["manter_dicom_dias"],
                                               "agora": datetime.now().strftime("%H:%M:%S")})
+                if u.path == "/api/worklist":
+                    import worklist
+                    return self._enviar(200, worklist.lista_da_tela(cfg))
                 if u.path == "/api/atualizacao":
                     return self._enviar(200, consultar_atualizacao())
                 if u.path == "/api/imprimir_estado":
@@ -564,6 +567,13 @@ def _handler(ep, cfg):
                 if u.path == "/api/atualizar":
                     ok, msg = iniciar_atualizacao()
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
+                if u.path == "/api/worklist_excluir":
+                    import worklist
+                    cod = str(corpo.get("codpac", ""))
+                    if not cod.isdigit():
+                        return self._enviar(400, {"erro": "paciente invalido"})
+                    worklist.excluir(cfg, cod, bool(corpo.get("voltar")))
+                    return self._enviar(200, {"ok": True})
                 if u.path == "/api/liberar":
                     ok, msg = liberar_sem_imagens(str(corpo.get("laudo", "")), ep, cfg)
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})

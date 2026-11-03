@@ -90,6 +90,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
   <div class="logo"><img src="/simbolo.png" alt="">Clínica Ecocardio <span>· EcoPDF Exames</span></div>
   <div style="flex:1"></div>
   <span class="quieto pq"><span id="atualizado"></span> · <span id="b-versao" title="Atualizar o EcoPDF" style="cursor:pointer">EcoPDF</span></span>
+  <button class="btn" id="b-wl" title="Pacientes de hoje na lista do aparelho (agenda do Medware)">Worklist</button>
   <button class="btn" id="b-pasta3" title="Abre a pasta 3 - Finalizados (os PDFs para subir no prontuário)">Pasta de prontos</button>
   <a class="btn" href="/manual" target="_blank" title="Como usar o EcoPDF (manual da versão instalada)">? Manual</a>
 </div>
@@ -183,6 +184,13 @@ tr.sem-img{cursor:default;background:#fff8f8}
   <div class="acoes"><button class="btn" id="i-nao">Cancelar</button><button class="btn pri" id="i-sim">Imprimir</button></div>
 </div></div>
 <iframe id="i-quadro" title="Impressão" style="position:fixed;width:1px;height:1px;left:-10px;top:-10px;border:0"></iframe>
+
+<div class="fundo" id="m-wl"><div class="caixa" style="max-width:900px;max-height:85vh;overflow:auto">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><b style="font-size:16px">Worklist de hoje</b><div style="flex:1"></div>
+  <button class="btn" id="wl-atu">Atualizar</button><button class="btn" id="wl-fechar">Fechar</button></div>
+  <p class="quieto pq" id="wl-info" style="margin:0 0 10px">O aparelho mostra só quem está “na lista”. Sai sozinho quando chegam as imagens de todos os exames do paciente.</p>
+  <table class="tab" style="width:100%"><thead><tr><th>Hora</th><th>Paciente</th><th>Exames</th><th>Médico</th><th>Situação</th><th></th></tr></thead><tbody id="wl-linhas"></tbody></table>
+</div></div>
 
 <div id="aviso"></div>
 
@@ -577,6 +585,28 @@ $("b-versao").onclick = async () => {
   } catch (e) { $("atu-txt").textContent = "Sem conexão com o EcoPDF."; }
 };
 $("atu-nao").onclick = () => { $("m-atu").style.display = "none"; };
+// ---------------- worklist ----------------
+const WL_SIT = {"na lista": ["Na lista", "s-Pendente"], "atendido": ["Imagens recebidas", "s-Finalizado"], "excluido": ["Excluído", "s-Fora"]};
+async function abrirWorklist() {
+  $("m-wl").style.display = "flex"; $("wl-linhas").innerHTML = `<tr><td colspan="6" class="quieto">Lendo a agenda do Medware...</td></tr>`;
+  try {
+    const d = await (await fetch("/api/worklist")).json();
+    if (!d.ok) { $("wl-linhas").innerHTML = `<tr><td colspan="6">${esc(d.erro)}</td></tr>`; return; }
+    if (!d.pacientes.length) { $("wl-linhas").innerHTML = `<tr><td colspan="6" class="quieto">Nenhum paciente agendado hoje no Medware.</td></tr>`; return; }
+    $("wl-linhas").innerHTML = d.pacientes.map(p => { const [t, c] = WL_SIT[p.situacao] || [p.situacao, ""];
+      return `<tr><td>${esc(p.hora)}</td><td><b>${esc(p.nome)}</b></td><td>${esc(p.exames)}</td><td class="quieto pq">${esc(p.medico)}</td>
+      <td><span class="selo ${c}">${t}</span></td><td style="text-align:right">${p.situacao === "excluido" ? `<button class="btn" data-wlv="${esc(p.codpac)}">Voltar à lista</button>` : p.situacao === "na lista" ? `<button class="btn" data-wlx="${esc(p.codpac)}">Excluir</button>` : ""}</td></tr>`; }).join("");
+  } catch (e) { $("wl-linhas").innerHTML = `<tr><td colspan="6">Sem conexão com o EcoPDF.</td></tr>`; }
+}
+async function excluirWorklist(cod, voltar) {
+  try { await fetch("/api/worklist_excluir", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({codpac: cod, voltar})}); } catch (e) {}
+  abrirWorklist();
+}
+$("b-wl").onclick = abrirWorklist;
+$("wl-atu").onclick = abrirWorklist;
+$("wl-fechar").onclick = () => { $("m-wl").style.display = "none"; };
+$("wl-linhas").onclick = ev => { const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.wlx) excluirWorklist(b.dataset.wlx, false); else if (b.dataset.wlv) excluirWorklist(b.dataset.wlv, true); };
 $("atu-sim").onclick = async () => {
   $("atu-sim").style.display = "none";
   try {
