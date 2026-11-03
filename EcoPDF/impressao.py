@@ -362,6 +362,10 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log):
         for k in [k for k, v in _tarefas.items() if time.time() - v["em"] > 3600]:
             del _tarefas[k]
 
+    nf = len(paginas_fotos)
+    txt_fotos = "a folha de fotos" if nf == 1 else f"as {nf} folhas de fotos"
+    txt_laudo = "o laudo" if len({str(pdf) for pdf, _ in paginas_laudo}) <= 1 else "os laudos"
+
     def atualizar(estado, msg):
         with _trava:
             _tarefas[tid].update(estado=estado, mensagem=msg)
@@ -377,32 +381,32 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log):
                                 "Rode criar_fila_foto.bat de novo.", FILA_FOTO, nome)
             if fila:
                 log.info("Impressao direta: fotos em %s (configuracao salva no driver), laudo em %s", fila, nome)
-                atualizar("fotos", "Imprimindo a folha de fotos (papel fotográfico)...")
+                atualizar("fotos", f"Imprimindo {txt_fotos} (papel fotográfico)...")
                 job = _imprimir_paginas(fila, paginas_fotos, _devmode(fila), "EcoPDF - fotos")
                 if paginas_laudo:
                     if not esperar_trabalho(fila, job, lambda m: atualizar("fotos", m)):
                         log.warning("Impressao: fotos canceladas ou sem terminar; laudo nao enviado")
                         atualizar("erro", "As fotos não terminaram (canceladas ou erro na impressora). "
-                                          "O laudo NÃO foi impresso: confira a impressora e clique em Imprimir de novo.")
+                                          f"{txt_laudo.capitalize()} NÃO foi impresso: confira a impressora e clique em Imprimir de novo.")
                         return
-                    atualizar("laudo", "Fotos prontas. Imprimindo o laudo (papel comum)...")
+                    atualizar("laudo", f"Fotos prontas. Imprimindo {txt_laudo} (papel comum)...")
                     _imprimir_paginas(nome, paginas_laudo, _devmode(nome), "EcoPDF - laudo")
                 atualizar("pronto", f"Enviado: fotos em {fila}, laudo em {nome}.")
                 return
             foto, comum, como = modo_foto(nome)
             log.info("Impressao direta em %s (%s)", nome, como)
             if paginas_fotos and paginas_laudo and foto is not None:
-                atualizar("fotos", "Imprimindo a folha de fotos (papel fotográfico)...")
+                atualizar("fotos", f"Imprimindo {txt_fotos} (papel fotográfico)...")
                 job = _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, alta=True), "EcoPDF - fotos")
                 if not esperar_trabalho(nome, job, lambda m: atualizar("fotos", m)):
                     log.warning("Impressao: fotos canceladas ou sem terminar; laudo nao enviado")
                     atualizar("erro", "As fotos não terminaram (canceladas ou erro na impressora). "
-                                      "O laudo NÃO foi impresso: confira a impressora e clique em Imprimir de novo.")
+                                      f"{txt_laudo.capitalize()} NÃO foi impresso: confira a impressora e clique em Imprimir de novo.")
                     return
-                atualizar("laudo", "Fotos prontas. Imprimindo o laudo (papel comum)...")
+                atualizar("laudo", f"Fotos prontas. Imprimindo {txt_laudo} (papel comum)...")
                 _imprimir_paginas(nome, paginas_laudo, _devmode(nome, comum), "EcoPDF - laudo")
             elif paginas_fotos and foto is not None:
-                atualizar("fotos", "Imprimindo a folha de fotos (papel fotográfico)...")
+                atualizar("fotos", f"Imprimindo {txt_fotos} (papel fotográfico)...")
                 _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, alta=True), "EcoPDF - fotos")
             else:
                 # sem modo foto ou so o laudo: um envio so, na ordem fotos -> laudo
