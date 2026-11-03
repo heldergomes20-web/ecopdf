@@ -1,6 +1,7 @@
 """
 Painel das salas: o EcoPDF manda um resumo da situacao deste PC para a planilha
-da administracao (Google Apps Script), nos horarios de PAINEL_HORARIOS (9h e 15h).
+da administracao (Google Apps Script) a cada PAINEL_INTERVALO_MIN minutos (15);
+com PAINEL_INTERVALO_MIN = 0, nos horarios de PAINEL_HORARIOS (9h e 15h).
 PC desligado no horario: manda assim que ligar (uma vez por horario).
 
 Vai so numero, horario, versao e nome do computador. NUNCA nome de paciente,
@@ -703,10 +704,22 @@ def _rodar(cfg, ep, parar):
     while not parar.is_set():
         try:
             agora = datetime.now()
-            alvo = _ultimo_horario(cfg, agora)
-            feito = _ler_estado(cfg).get("horario", "")
-            if alvo and feito < alvo.isoformat() and time.time() - tentou > 600:
-                tentou = time.time()  # falhou: tenta de novo em 10 min
+            intervalo = cfg.get("painel_intervalo_min", 0)
+            if intervalo:
+                # a cada N minutos (Helder 03/11: 15 min); o 1o envio sai 2 min depois de ligar
+                alvo = agora
+                try:
+                    ult = datetime.fromisoformat(_ler_estado(cfg).get("enviado", ""))
+                    precisa = (agora - ult).total_seconds() >= intervalo * 60 - 30
+                except ValueError:
+                    precisa = True
+                pausa = 300   # falhou: tenta de novo em 5 min
+            else:
+                alvo = _ultimo_horario(cfg, agora)
+                precisa = bool(alvo) and _ler_estado(cfg).get("horario", "") < alvo.isoformat()
+                pausa = 600   # falhou: tenta de novo em 10 min
+            if precisa and time.time() - tentou > pausa:
+                tentou = time.time()
                 if enviar(cfg, ep):
                     (cfg["pasta_log"] / ESTADO).write_text(
                         json.dumps({"horario": alvo.isoformat(), "enviado": agora.isoformat()}), "utf-8")
@@ -723,8 +736,11 @@ def iniciar(cfg, ep, parar):
     if not cfg.get("painel_url"):
         return
     threading.Thread(target=_rodar, args=(cfg, ep, parar), daemon=True, name="painel").start()
-    ep.log.info("Painel ativo: envio as %s",
-                " e ".join(f"{h:02d}:{m:02d}" for h, m in _horarios(cfg)))
+    if cfg.get("painel_intervalo_min"):
+        ep.log.info("Painel ativo: envio a cada %s min", cfg["painel_intervalo_min"])
+    else:
+        ep.log.info("Painel ativo: envio as %s",
+                    " e ".join(f"{h:02d}:{m:02d}" for h, m in _horarios(cfg)))
 
 
 if __name__ == "__main__":  # enviar_status.bat: manda agora e mostra o que foi

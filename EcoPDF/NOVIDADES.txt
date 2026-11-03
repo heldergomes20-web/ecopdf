@@ -3,6 +3,7 @@ Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
 2026.11.03.3
+- Painel das salas: o EcoPDF volta a mandar a situacao do PC para a planilha a cada 15 minutos enquanto o PC esta ligado (antes: so as 9h e as 15h). A planilha continua marcando SEM SINAL se faltar o envio das 9h ou das 15h. PAINEL_INTERVALO_MIN no config.ini (0 = volta aos horarios de PAINEL_HORARIOS).
 - Tela: nao abre mais uma segunda janela quando chega exame com a tela ja aberta e minimizada (o Edge congelava a janela minimizada e o EcoPDF achava que ela estava fechada). Agora procura a janela "EcoPDF - Exames" no Windows; se existir, restaura e traz para a frente.
 - Medidas das carotidas (Vivid): nome do vaso com letras grudadas ou desenhadas um pouco diferente (AVD, ACCE, ACIE, AVE) passa a ser reconhecido. So aceita quando o nome mais parecido e um vaso conhecido e o segundo mais parecido fica bem atras (lado D x E nunca no chute).
 

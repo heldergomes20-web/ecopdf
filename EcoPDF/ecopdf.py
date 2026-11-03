@@ -198,6 +198,7 @@ def carregar_config(caminho):
         "painel_url": _painel_ini("PAINEL_URL") or c.get("PAINEL_URL", "").strip(),
         "painel_chave": _painel_ini("PAINEL_CHAVE") or c.get("PAINEL_CHAVE", "").strip(),
         "painel_horarios": [h.strip() for h in c.get("PAINEL_HORARIOS", "09:00, 15:00").split(",") if h.strip()],
+        "painel_intervalo_min": max(0, c.getint("PAINEL_INTERVALO_MIN", fallback=15)),
         "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "ocultar_pastas": c.get("OCULTAR_PASTAS", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "impressao_direta": c.get("IMPRESSAO_DIRETA", "sim").strip().lower() not in ("nao", "não", "0", "n"),
