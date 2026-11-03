@@ -1,5 +1,7 @@
 cryptography==46.0.3
+firebirdsql==1.5.0
 numpy==2.5.4
+passlib==1.7.4
 pdfminer.six==20250506
 pdfplumber==0.11.7
 pillow==13.0.0

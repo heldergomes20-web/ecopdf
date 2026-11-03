@@ -1,0 +1,292 @@
+"""
+Lista de pacientes (worklist DICOM / MWL) do EcoPDF, lida da agenda do Medware.
+
+O aparelho consulta (C-FIND) o mesmo AE/porta das imagens. A cada consulta o EcoPDF LE o
+banco do Medware (Firebird; nunca grava) e devolve os pacientes do dia, um por paciente.
+Sem polling: encaixe aparece na proxima consulta.
+
+Onde fica o banco: MEDWARE_SERVIDORES (config.ini ou painel.ini), em ordem; o primeiro que
+responder e usado (127.0.0.1 = este PC e o servidor do Medware). Cada item pode ser
+"servidor" ou "servidor:C:\\caminho\\Clinicas.fdb". Senha: MEDWARE_SENHA no painel.ini
+(fora do zip publico); sem ela, a padrao do Firebird.
+Ultima consulta e ultimo erro vao para log/worklist.json (tela/painel). Nada de paciente
+vai para o painel: so hora, IP do aparelho e quantidade.
+"""
+
+import datetime
+import json
+import logging
+import socket
+import threading
+import time
+import unicodedata
+
+from pydicom.dataset import Dataset
+from pydicom.uid import generate_uid
+
+log = logging.getLogger("ecopdf")
+
+BANCO_PADRAO = r"C:\Medware LaudosFlex\BD\Clinicas.fdb"
+SENHA_PADRAO_FIREBIRD = "masterkey"
+PORTA_FIREBIRD = 3050
+MAX_DIAS = 7
+_TRAVA = threading.Lock()
+_SERVIDOR_OK = {"item": None, "em": 0.0}   # ultimo servidor que respondeu (cache 10 min)
+
+
+# ---------------------------------------------------------------- configuracao
+
+def configurar(cfg, painel_ini):
+    """Completa cfg com as chaves da worklist. painel_ini(chave) -> '' se nao houver."""
+    servidores = painel_ini("MEDWARE_SERVIDORES") or cfg.get("medware_servidores_txt", "") or "127.0.0.1"
+    cfg["medware_servidores"] = [s.strip() for s in servidores.split(",") if s.strip()]
+    cfg["medware_senha"] = painel_ini("MEDWARE_SENHA") or SENHA_PADRAO_FIREBIRD
+    cfg.setdefault("medware_banco", BANCO_PADRAO)
+    return cfg
+
+
+def _alvos(cfg):
+    for item in cfg.get("medware_servidores") or ["127.0.0.1"]:
+        host, banco = item, cfg.get("medware_banco") or BANCO_PADRAO
+        # "servidor:C:\..." (o ":" da letra do disco nao conta)
+        if ":" in item and not (len(item) > 1 and item[1] == ":"):
+            h, _, b = item.partition(":")
+            if b:
+                host, banco = h.strip(), b.strip()
+        yield item, host, banco
+
+
+def _porta_responde(host, segundos=2.0):
+    try:
+        with socket.create_connection((host, PORTA_FIREBIRD), timeout=segundos):
+            return True
+    except OSError:
+        return False
+
+
+def _conectar(cfg):
+    """(conexao, item). Tenta primeiro o ultimo que funcionou."""
+    import firebirdsql
+    alvos = list(_alvos(cfg))
+    ok = _SERVIDOR_OK["item"]
+    if ok and time.time() - _SERVIDOR_OK["em"] < 600:
+        alvos.sort(key=lambda a: a[0] != ok)
+    erros = []
+    for item, host, banco in alvos:
+        if not _porta_responde(host):
+            erros.append(f"{host}: sem resposta na porta {PORTA_FIREBIRD}")
+            continue
+        try:
+            con = firebirdsql.connect(host=host, port=PORTA_FIREBIRD, database=banco, user="SYSDBA",
+                                      password=cfg["medware_senha"], charset="WIN1252", timeout=10)
+            _SERVIDOR_OK.update(item=item, em=time.time())
+            return con, item
+        except Exception as e:
+            erros.append(f"{host}: {type(e).__name__}: {str(e)[:120]}")
+    raise ConnectionError("; ".join(erros) or "nenhum servidor do Medware configurado")
+
+
+# ---------------------------------------------------------------- leitura
+
+def ascii_maiusculo(s):
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
+    return " ".join(s.upper().split())
+
+
+def peso_kg(bruto):
+    """Medware: PESO em kg (BIGINT com 4 casas, chega como 84.0000)."""
+    try:
+        v = float(bruto or 0)
+    except (TypeError, ValueError):
+        return None
+    return round(v, 1) if 1 <= v <= 300 else None
+
+
+def altura_m(bruto):
+    """Medware: ALTURA em cm (172.0000). DICOM quer metros."""
+    try:
+        v = float(bruto or 0)
+    except (TypeError, ValueError):
+        return None
+    if 30 <= v <= 230:
+        return round(v / 100, 2)
+    if 0.3 <= v <= 2.3:
+        return round(v, 2)
+    return None
+
+
+def buscar(cfg, ini, fim):
+    """[{paciente}], um por paciente e dia, e o servidor usado. So leitura."""
+    con, item = _conectar(cfg)
+    try:
+        cur = con.cursor()
+        cur.execute("""
+            select a.datahoraagendada, a.datahorachegada, p.codpaciente, p.nome, p.datanasc,
+                   p.sexo, p.peso, p.altura, m.nomeagenda, m.nome, pr.descricaoagenda, pr.descricao
+            from agendamento a
+            join paciente p on p.codpaciente = a.codpaciente
+            left join medico m on m.codmedico = a.codmedico
+            left join procedimento pr on pr.codprocedimento = a.codprocedimento
+            where a.datahoraagendada >= ? and a.datahoraagendada < ?
+              and a.datahoracancelado is null and a.datahorafalta is null
+              and a.datahorasuspensao is null
+            order by a.datahoraagendada""", (ini, fim + datetime.timedelta(days=1)))
+        linhas = cur.fetchall()
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+    pacientes = {}
+    for ag, cheg, codpac, nome, nasc, sexo, peso, alt, med_ag, med, proc_ag, proc in linhas:
+        chave = (codpac, ag.date())
+        procedimento = ascii_maiusculo(proc_ag or proc)
+        if chave in pacientes:
+            if procedimento and procedimento not in pacientes[chave]["procs"]:
+                pacientes[chave]["procs"].append(procedimento)
+            continue
+        s = (sexo or "").strip().upper()[:1]
+        pacientes[chave] = {
+            "codpac": codpac, "dia": ag.date(), "hora": ag, "nome": ascii_maiusculo(nome),
+            "nasc": nasc.strftime("%Y%m%d") if nasc else "", "sexo": s if s in ("M", "F") else "",
+            "peso": peso_kg(peso), "altura": altura_m(alt), "medico": ascii_maiusculo(med_ag or med),
+            "procs": [procedimento] if procedimento else [],
+        }
+    return list(pacientes.values()), item
+
+
+# ---------------------------------------------------------------- resposta DICOM
+
+def _intervalo(valor):
+    hoje = datetime.date.today()
+    s = str(valor or "").strip()
+
+    def d(t):
+        return datetime.datetime.strptime(t, "%Y%m%d").date()
+    try:
+        if not s:
+            return hoje, hoje
+        if "-" not in s:
+            return d(s), d(s)
+        a, b = s.split("-", 1)
+        ini, fim = (d(a) if a else hoje), (d(b) if b else hoje)
+    except ValueError:
+        return hoje, hoje
+    if fim < ini:
+        ini, fim = fim, ini
+    if (fim - ini).days > MAX_DIAS:
+        ini = fim - datetime.timedelta(days=MAX_DIAS)
+    return ini, fim
+
+
+def _filtro(valor):
+    return ascii_maiusculo(str(valor or "").replace("*", " ").replace("?", " ").replace("^", " "))
+
+
+def montar(p, pedido):
+    """Dataset de resposta. Nome inteiro como 'sobrenome' (sem ^): chega ao PDF igual ao Medware."""
+    ds = Dataset()
+    ds.SpecificCharacterSet = "ISO_IR 100"
+    ds.PatientName = p["nome"]
+    ds.PatientID = str(p["codpac"])
+    ds.PatientBirthDate = p["nasc"]
+    ds.PatientSex = p["sexo"]
+    if p["peso"]:
+        ds.PatientWeight = str(p["peso"])
+    if p["altura"]:
+        ds.PatientSize = str(p["altura"])
+    ds.AccessionNumber = ""
+    ds.ReferringPhysicianName = ""
+    # mesmo paciente no mesmo dia = mesmo estudo (eco + carotidas viram 2 folhas do mesmo estudo)
+    ds.StudyInstanceUID = generate_uid(entropy_srcs=["ecopdf-mwl", str(p["codpac"]), p["dia"].isoformat()])
+    ds.RequestedProcedureID = f"{p['codpac']}{p['dia']:%m%d}"[-16:]
+    descricao = " + ".join(p["procs"])[:64]
+    ds.RequestedProcedureDescription = descricao
+    sps = Dataset()
+    sps.Modality = "US"
+    sps.ScheduledStationAETitle = ""
+    sps.ScheduledProcedureStepStartDate = p["dia"].strftime("%Y%m%d")
+    sps.ScheduledProcedureStepStartTime = p["hora"].strftime("%H%M%S")
+    sps.ScheduledPerformingPhysicianName = p["medico"][:64]
+    sps.ScheduledProcedureStepDescription = descricao
+    sps.ScheduledProcedureStepID = ds.RequestedProcedureID
+    ds.ScheduledProcedureStepSequence = [sps]
+    for el in pedido:   # chave pedida e sem valor vai vazia (alguns aparelhos exigem)
+        if el.keyword and el.keyword not in ds and el.keyword != "QueryRetrieveLevel":
+            try:
+                setattr(ds, el.keyword, None if el.VR != "SQ" else [])
+            except Exception:
+                pass
+    return ds
+
+
+def _anotar(cfg, **dados):
+    """log/worklist.json: ultima consulta (hora, IP, n) e ultimo erro. Sem nome de paciente."""
+    arq = cfg["pasta_log"] / "worklist.json"
+    with _TRAVA:
+        try:
+            atual = json.loads(arq.read_text("utf-8"))
+        except (OSError, ValueError):
+            atual = {}
+        atual.update(dados)
+        try:
+            arq.write_text(json.dumps(atual, ensure_ascii=False), "utf-8")
+        except OSError:
+            pass
+
+
+def ler_situacao(cfg):
+    try:
+        return json.loads((cfg["pasta_log"] / "worklist.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def on_find(event, cfg):
+    """Handler EVT_C_FIND (Modality Worklist)."""
+    try:
+        yield from _consultar(event, cfg)
+    except Exception as e:
+        log.exception("Worklist: erro na consulta")
+        _anotar(cfg, erro=f"{type(e).__name__}: {e}"[:200], erro_em=datetime.datetime.now().isoformat(timespec="seconds"))
+        yield 0xC002, None
+
+
+def _consultar(event, cfg):
+    pedido = event.identifier
+    ip = event.assoc.requestor.address
+    ae = str(event.assoc.requestor.ae_title).strip()
+    sps = pedido.get("ScheduledProcedureStepSequence")
+    ini, fim = _intervalo(sps[0].get("ScheduledProcedureStepStartDate", "") if sps else "")
+    nome, pid = _filtro(pedido.get("PatientName", "")), _filtro(pedido.get("PatientID", ""))
+    agora = datetime.datetime.now().isoformat(timespec="seconds")
+    try:
+        lista, servidor = buscar(cfg, ini, fim)
+    except Exception as e:
+        log.warning("Worklist: nao li o Medware (%s)", e)
+        _anotar(cfg, erro=str(e)[:200], erro_em=agora, ultima_consulta=agora, ip=ip, ae=ae, n=None)
+        yield 0xC001, None
+        return
+    if nome:
+        lista = [p for p in lista if all(t in p["nome"] for t in nome.split())]
+    if pid:
+        lista = [p for p in lista if str(p["codpac"]).startswith(pid)]
+    log.info("Worklist: consulta de %s (%s), %s a %s%s -> %d paciente(s) [Medware %s]", ae, ip,
+             ini, fim, " com filtro" if nome or pid else "", len(lista), servidor)
+    _anotar(cfg, ultima_consulta=agora, ip=ip, ae=ae, n=len(lista), servidor=servidor,
+            erro="", **({"primeira_consulta": agora} if not ler_situacao(cfg).get("primeira_consulta") else {}))
+    for p in lista:
+        if event.is_cancelled:
+            yield 0xFE00, None
+            return
+        yield 0xFF00, montar(p, pedido)
+
+
+def testar_banco(cfg):
+    """Para o painel: (True, servidor, n de hoje) ou (False, None, erro)."""
+    hoje = datetime.date.today()
+    try:
+        lista, servidor = buscar(cfg, hoje, hoje)
+        return True, servidor, len(lista)
+    except Exception as e:
+        return False, None, str(e)[:150]

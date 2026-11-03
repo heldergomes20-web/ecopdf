@@ -42,7 +42,7 @@ from PIL import Image
 from pydicom.pixels import apply_voi_lut, convert_color_space
 from pydicom.uid import JPEG2000Lossless
 from pynetdicom import AE, AllStoragePresentationContexts, evt
-from pynetdicom.sop_class import Verification
+from pynetdicom.sop_class import ModalityWorklistInformationFind, Verification
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -200,6 +200,9 @@ def carregar_config(caminho):
         "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "ocultar_pastas": c.get("OCULTAR_PASTAS", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "impressao_direta": c.get("IMPRESSAO_DIRETA", "sim").strip().lower() not in ("nao", "não", "0", "n"),
+        "worklist": c.get("WORKLIST", "sim").strip().lower() not in ("nao", "não", "0", "n"),
+        "medware_servidores_txt": c.get("MEDWARE_SERVIDORES", "127.0.0.1").strip(),
+        "medware_banco": c.get("MEDWARE_BANCO", r"C:\Medware LaudosFlex\BD\Clinicas.fdb").strip(),
         "tipos": tipos,
     }
 
@@ -1648,6 +1651,16 @@ def main():
     BASE_CONEXAO[0] = cfg["pasta_log"] / "conexao.json"
     handlers = [(evt.EVT_C_ECHO, on_echo), (evt.EVT_C_STORE, on_store, [cfg]),
                 (evt.EVT_ACCEPTED, on_conectou, [cfg]), (evt.EVT_REJECTED, on_recusou, [cfg])]
+    if cfg["worklist"]:
+        try:
+            import worklist
+            import firebirdsql  # noqa: F401  (confere que o componente do Medware esta instalado)
+            worklist.configurar(cfg, _painel_ini)
+            ae.add_supported_context(ModalityWorklistInformationFind)
+            handlers.append((evt.EVT_C_FIND, worklist.on_find, [cfg]))
+            log.info("Lista de pacientes (worklist) ligada: Medware em %s", ", ".join(cfg["medware_servidores"]))
+        except Exception:
+            log.exception("Lista de pacientes (worklist) nao iniciou (o resto continua funcionando)")
     try:
         ae.start_server(("0.0.0.0", cfg["porta"]), block=True, evt_handlers=handlers)
     except OSError:
