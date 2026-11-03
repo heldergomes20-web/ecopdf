@@ -134,7 +134,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
         <img id="grande" alt="">
         <div class="info" id="g-info"></div>
         <div class="ctrl">
-          <button class="btn" id="z-menos">−</button><button class="btn" id="z-100">100%</button><button class="btn" id="z-mais">+</button>
+          <button class="btn" id="z-menos" title="Diminuir zoom">− zoom</button><button class="btn" id="z-100" title="Tamanho normal">100%</button><button class="btn" id="z-mais" title="Aumentar zoom">+ zoom</button>
           <button class="btn" id="b-tirar">Tirar da folha</button>
         </div>
         <button class="seta" id="ant" style="left:6px">‹</button>
@@ -349,7 +349,16 @@ $("prox").onclick = () => mostrar(atual + 1);
 $("z-mais").onclick = () => { zoom = Math.min(zoom * 1.25, 8); ajustar(); };
 $("z-menos").onclick = () => { zoom = Math.max(zoom / 1.25, 1); if (zoom === 1) pan = {x: 0, y: 0}; ajustar(); };
 $("z-100").onclick = () => { zoom = 1; pan = {x: 0, y: 0}; ajustar(); };
-$("palco").addEventListener("wheel", e => { e.preventDefault(); zoom = e.deltaY < 0 ? Math.min(zoom * 1.15, 8) : Math.max(zoom / 1.15, 1); if (zoom === 1) pan = {x: 0, y: 0}; ajustar(); }, {passive: false});
+// roda do mouse troca de imagem (pedido do Helder 03/11); Ctrl + roda = zoom
+let rodaAte = 0;
+$("palco").addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.ctrlKey) { zoom = e.deltaY < 0 ? Math.min(zoom * 1.15, 8) : Math.max(zoom / 1.15, 1); if (zoom === 1) pan = {x: 0, y: 0}; ajustar(); return; }
+  const agora = Date.now();
+  if (agora < rodaAte || Math.abs(e.deltaY) < 4) return;   // um passo por giro (touchpad manda varios eventos)
+  rodaAte = agora + 250;
+  mostrar(atual + (e.deltaY > 0 ? 1 : -1));
+}, {passive: false});
 let puxa = null;
 $("grande").addEventListener("mousedown", e => { if (zoom > 1) { puxa = {x: e.clientX - pan.x, y: e.clientY - pan.y}; e.preventDefault(); } });
 window.addEventListener("mousemove", e => { if (puxa) { pan = {x: e.clientX - puxa.x, y: e.clientY - puxa.y}; ajustar(); } });
