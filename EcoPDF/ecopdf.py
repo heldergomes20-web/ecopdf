@@ -83,6 +83,7 @@ GERADO = ".gerado"
 GRUPOS = "grupos.json"
 OCULTAS = "ocultas.json"   # {tipo: [ids fora da folha]}
 ORDEM = "ordem.json"       # {tipo: [ids na ordem da folha]} (definida na tela)
+TIPO_FREQ = ".tipo_freq"   # estudo iniciado com a regra da frequencia (ver regra_freq)
 DESCARTADOS = "descartados.json"  # {tipo: quando} exames descartados na tela (nunca terao laudo)
 # vigia (thread) e tela (servidor web) mexem nos mesmos arquivos: um de cada vez
 TRAVA = threading.RLock()
@@ -204,7 +205,23 @@ def carregar_config(caminho):
         "medware_servidores_txt": c.get("MEDWARE_SERVIDORES", "127.0.0.1").strip(),
         "medware_banco": c.get("MEDWARE_BANCO", r"C:\Medware LaudosFlex\BD\Clinicas.fdb").strip(),
         "tipos": tipos,
+        "tipo_freq": _tipo_freq(c, tipos),
     }
+
+
+def _tipo_freq(c, tipos):
+    """TIPO_POR_FREQUENCIA = sim: sem nome da sonda, a frequencia separa eco de carotidas."""
+    if c.get("TIPO_POR_FREQUENCIA", "sim").strip().lower() in ("nao", "não", "0", "n"):
+        return None
+    try:
+        corte = int(float(c.get("FREQ_CORTE_MHZ", "6").replace(",", ".")) * 1000)
+    except ValueError:
+        corte = 6000
+    alta = c.get("TIPO_FREQ_ALTA", "Duplex_Scan_Vascular_Carotidas").strip()
+    baixa = c.get("TIPO_FREQ_BAIXA", "Ecocardiograma").strip()
+    if alta not in tipos and baixa not in tipos:
+        return None
+    return {"corte": corte, "alta": alta, "baixa": baixa}
 
 
 def configurar_log(pasta):
@@ -296,16 +313,57 @@ def gravar_atomico(destino, escrever):
 # Recepcao DICOM
 # --------------------------------------------------------------------------
 
-def tipo_da_imagem(ds, tipos):
-    """Campo a campo, na ordem de CAMPOS_TIPO: a sonda decide antes da descricao."""
-    for campo in CAMPOS_TIPO:
+def _tipo_por_campos(ds, tipos, campos, exceto=None):
+    for campo in campos:
         texto = str(ds.get(campo, "") or "")
         if not texto:
             continue
         for nome, regex in tipos.items():
-            if regex.search(texto):
+            if nome != exceto and regex.search(texto):
                 return nome
     return ""
+
+
+def frequencia_khz(ds):
+    """Frequencia da sonda (kHz) da 1a regiao da imagem, ou 0. O Vivid S6 nao manda o nome
+    da sonda, mas manda isto: setorial do eco ~1700, linear das carotidas ~8900."""
+    for r in ds.get("SequenceOfUltrasoundRegions", None) or []:
+        try:
+            f = int(r.get("TransducerFrequency", 0) or 0)
+        except (TypeError, ValueError):
+            f = 0
+        if f > 0:
+            return f
+    return 0
+
+
+def regra_freq(pasta_estudo, cfg):
+    """Regra da frequencia so vale para estudos iniciados nesta versao (marca TIPO_FREQ na
+    pasta): exames que ja estavam aguardando seguem com o tipo que tinham."""
+    if cfg.get("tipo_freq") and (pasta_estudo / TIPO_FREQ).exists():
+        return cfg["tipo_freq"]
+    return None
+
+
+def tipo_da_imagem(ds, tipos, freq=None):
+    """1) nome da sonda (TransducerData); 2) sem ele, a frequencia da sonda (freq): alta =
+    carotidas; baixa = eco, ou o que a descricao disser (ex.: fetal, vindo da lista de pacientes),
+    menos o tipo da frequencia alta; 3) sem nada disso, as descricoes (CAMPOS_TIPO)."""
+    t = _tipo_por_campos(ds, tipos, CAMPOS_TIPO[:1])
+    if t:
+        return t
+    khz = frequencia_khz(ds) if freq else 0
+    if khz:
+        if khz >= freq["corte"]:
+            if freq["alta"] in tipos:
+                return freq["alta"]
+        else:
+            d = _tipo_por_campos(ds, tipos, CAMPOS_TIPO[1:], exceto=freq["alta"])
+            if d:
+                return d
+            if freq["baixa"] in tipos:
+                return freq["baixa"]
+    return _tipo_por_campos(ds, tipos, CAMPOS_TIPO[1:])
 
 
 def on_echo(event):
@@ -369,7 +427,10 @@ def on_store(event, cfg):
         estudo = str(ds.get("StudyInstanceUID", "")).strip() or "sem-estudo"
         sop = str(ds.get("SOPInstanceUID", "")).strip() or str(time.time_ns())
         pasta = cfg["pasta_dicom"] / limpar_arquivo(estudo, 64)
+        novo = not pasta.exists() or not any(pasta.glob("*.dcm"))
         pasta.mkdir(parents=True, exist_ok=True)
+        if novo and cfg.get("tipo_freq"):
+            (pasta / TIPO_FREQ).touch()
         ds.file_meta = event.file_meta
         dados = _sem_perda(ds) or event.encoded_dataset()
         # reenvio da mesma imagem sobrescreve o mesmo arquivo
@@ -380,7 +441,8 @@ def on_store(event, cfg):
         log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
                  ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
-                 {k: str(ds.get(k)) for k in CAMPOS_TIPO if ds.get(k)})
+                 {**{k: str(ds.get(k)) for k in CAMPOS_TIPO if ds.get(k)},
+                  "kHz": frequencia_khz(ds)})
         dt = str(ds.get("StudyDate", "") or "")
         if len(dt) == 8 and (dt > time.strftime("%Y%m%d") or dt < "20100101"):
             log.warning("Data do aparelho errada? imagem com data %s (PC: %s): acertar data e hora "
@@ -457,6 +519,7 @@ def _ler_estudo(pasta_estudo, cfg):
     estavel mesmo se chegarem imagens novas (usado para tirar/voltar imagem)."""
     grupos = {}  # tipo -> lista de (chave, id, imagem)
     ref = None
+    freq = regra_freq(pasta_estudo, cfg)
     for arq in sorted(pasta_estudo.glob("*.dcm")):
         try:
             ds = pydicom.dcmread(arq)
@@ -472,7 +535,7 @@ def _ler_estudo(pasta_estudo, cfg):
             log.exception("Nao consegui decodificar %s", arq.name)
             continue
         chave = momento(ds, arq)
-        grupos.setdefault(tipo_da_imagem(ds, cfg["tipos"]), []).extend(
+        grupos.setdefault(tipo_da_imagem(ds, cfg["tipos"], freq), []).extend(
             (chave, f"{arq.stem}#{k}", i) for k, i in enumerate(imgs))
     for itens in grupos.values():
         itens.sort(key=lambda x: x[:2])

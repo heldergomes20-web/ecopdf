@@ -39,6 +39,7 @@ def _cabecalhos(pasta, ep, cfg):
     """{tipo: [(chave_ordem, id, ds)]} das imagens que vao para a folha + lista de SR.
     Mesmos ids e mesma ordem que o EcoPDF usa (_ler_estudo)."""
     grupos, srs = {}, []
+    freq = ep.regra_freq(pasta, cfg)
     for arq in sorted(pasta.glob("*.dcm")):
         try:
             ds = pydicom.dcmread(arq, stop_before_pixels=True)
@@ -52,7 +53,7 @@ def _cabecalhos(pasta, ep, cfg):
             continue
         if ds.get("Rows") is None:  # sem imagem
             continue
-        grupos.setdefault(ep.tipo_da_imagem(ds, cfg["tipos"]), []).append(
+        grupos.setdefault(ep.tipo_da_imagem(ds, cfg["tipos"], freq), []).append(
             (ep.momento(ds, arq), f"{arq.stem}#0", ds))
     for itens in grupos.values():
         itens.sort(key=lambda x: x[:2])
