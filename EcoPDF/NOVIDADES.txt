@@ -2,6 +2,10 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.03
+- Folha de imagens: o nome do paciente na barra cinza saía como "DATA NASC.:" com o laudo de eco do Medware (dados do paciente em coluna). Agora lê o nome certo. Exame ja finalizado com o nome errado: reimprimir o laudo no Medware (PDF24) refaz o final com o nome certo.
+- Medidas (Vivid S6): VE diastolico e sistolico (DDVE/DSVE) passam a ser reconhecidos. O "AE (diametro)" deixa de pegar o comprimento do AE no 4 camaras (superior-inferior), que nao e o diametro; fica em branco quando so houver essa medida.
+
 2026.11.02.5
 - Painel das salas: o aviso de medidas passa a ser por dia, nao por exame (quem mede com caliper livre nao gera relatorio): ATENCAO so depois de 3 dias de exame seguidos sem nenhum relatorio de medidas.
 - Tela: exame antigo reenviado (laudo reimpresso e imagens mandadas de novo) aparece em Hoje e em 7 dias com a data original e o selo azul Reenvio; antes so aparecia em 6 meses (tudo) ou na busca.
