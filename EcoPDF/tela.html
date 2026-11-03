@@ -111,7 +111,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
     </table>
     <div class="vazio" id="vazio" style="display:none">Nenhum exame neste filtro.</div>
   </div>
-  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” = imagens ainda sem laudo, laudos ainda sem imagens e finais refeitos para subir de novo no prontuário (3 dias). A lista se atualiza sozinha.</p>
+  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” liga e desliga e soma com o período (Hoje + Pendentes = o que falta de hoje; o número no botão conta todas) = imagens ainda sem laudo, laudos ainda sem imagens e finais refeitos para subir de novo no prontuário (3 dias). A lista se atualiza sozinha.</p>
 </div>
 
 <div id="exame">
@@ -230,9 +230,12 @@ function desenharLista() {
   // data do exame no periodo OU imagens chegaram / exame finalizado no periodo (reenvio de exame antigo)
   const noPeriodo = e => (e.data || "99999999") >= lim || (e.chegou || "") >= lim || (e.finalizado || "") >= lim;
   const quando = e => e.reenvio ? e.chegou + (e.chegou_hora || "") : e.data + (e.hora || "");  // reenvio: na hora em que chegou
-  let lista = filtro.semLaudo ? semLaudo : exames.filter(noPeriodo).sort((x, y) => quando(y).localeCompare(quando(x)));
+  // Pendentes soma com o periodo (Helder 03/11): Hoje + Pendentes = pendencias de hoje
+  // Descartado (teste, duplicado) some de Hoje/7/30 dias; continua em 6 meses (tudo) e na busca
+  const visivel = e => e.situacao !== "Descartado" || filtro.dias >= 9999;
+  let lista = (filtro.semLaudo ? semLaudo : exames).filter(e => noPeriodo(e) && visivel(e)).sort((x, y) => quando(y).localeCompare(quando(x)));
   if (b) lista = exames.filter(e => (e.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") + " " + (e.sigla || "").toLowerCase()).includes(b));
-  document.querySelectorAll("[data-dias]").forEach(x => x.classList.toggle("on", !filtro.semLaudo && Number(x.dataset.dias) === filtro.dias));
+  document.querySelectorAll("[data-dias]").forEach(x => x.classList.toggle("on", Number(x.dataset.dias) === filtro.dias));
   $("b-semlaudo").classList.toggle("on", filtro.semLaudo);
   $("linhas").innerHTML = lista.map((e, k) => `<tr data-k="${exames.indexOf(e)}">
     <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td title="${esc(e.tipo_nome)}">${esc(tipoCurto(e.tipo_nome))}</td>
@@ -240,7 +243,7 @@ function desenharLista() {
     <td><span class="selo ${classe(e.situacao)}">${esc(e.situacao)}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${e.reenvio ? ` <span class="selo s-Reenvio" title="Exame de ${dataBr(e.data)}, imagens recebidas em ${dataBr(e.chegou)}">Reenvio ${dataBr(e.chegou).slice(0,5)}</span>` : ""}${/Fetal/.test(e.tipo) && ["Novo", "Folha ajustada", "Pendente"].includes(e.situacao) ? `<div class="quieto pq">Laudo da plataforma fetal: imprimir pela <b>PDF24</b></div>` : ""}</td>
     <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
   const chegouLaudo = l => { const d = new Date(Date.now() - (l.minutos || 0) * 60000); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; };
-  let laudos = filtro.semLaudo ? laudosSemImg : laudosSemImg.filter(l => (l.data || "99999999") >= lim || chegouLaudo(l) >= lim);
+  let laudos = laudosSemImg.filter(l => (l.data || "99999999") >= lim || chegouLaudo(l) >= lim);
   if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
   $("linhas").insertAdjacentHTML("afterbegin", laudos.map(l => `<tr class="sem-img">
     <td>${dataBr(l.data)}</td><td class="quieto">—</td><td><b>${esc(l.paciente)}</b></td><td title="${esc(l.tipo_nome)}">${esc(tipoCurto(l.tipo_nome))}</td>
@@ -248,6 +251,7 @@ function desenharLista() {
     <td><span class="selo s-Alerta">Laudo sem imagens</span></td>
     <td style="text-align:right">${l.liberavel ? `<button class="btn" data-lib="${esc(l.laudo)}">Liberar sem imagens</button>` : ""}</td></tr>`).join(""));
   $("vazio").style.display = lista.length + laudos.length ? "none" : "block";
+  $("vazio").textContent = filtro.semLaudo && filtro.dias < 9999 ? "Nenhuma pendência neste período (veja as mais antigas em 6 meses)." : "Nenhum exame neste filtro.";
 }
 function tempo(m) { return m >= 1440 ? `${Math.floor(m / 1440)} d` : m >= 60 ? `${Math.floor(m / 60)} h` : `${m} min`; }
 async function liberar(bt) {
@@ -264,7 +268,7 @@ async function liberar(bt) {
   } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
   setTimeout(carregarLista, 1500);
 }
-document.querySelectorAll("[data-dias]").forEach(b => b.onclick = () => { filtro.dias = Number(b.dataset.dias); filtro.semLaudo = false; salvarFiltro(); desenharLista(); });
+document.querySelectorAll("[data-dias]").forEach(b => b.onclick = () => { filtro.dias = Number(b.dataset.dias); salvarFiltro(); desenharLista(); });
 $("b-semlaudo").onclick = () => { filtro.semLaudo = !filtro.semLaudo; salvarFiltro(); desenharLista(); };
 $("busca").oninput = e => { filtro.busca = e.target.value; desenharLista(); };
 $("linhas").onclick = e => {

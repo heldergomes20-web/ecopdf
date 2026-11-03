@@ -3,6 +3,8 @@ Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
 2026.11.03.1
+- Tela: exame Descartado (teste, envio duplicado) some de Hoje, 7 e 30 dias; continua em 6 meses (tudo) e na busca, onde da para Restaurar.
+- Tela: o botao Pendentes passa a somar com o periodo (liga e desliga): Hoje + Pendentes = so o que falta de hoje; 6 meses + Pendentes = todas. O numero no botao continua contando todas.
 - Tela: a roda do mouse troca de imagem (antes dava zoom). Zoom pelos botoes "- zoom / + zoom" no canto da imagem ou Ctrl + roda.
 - Medidas: raiz da aorta, aorta ascendente, AE, DDVE, DSVE, septo e parede posterior em mm inteiros, sem casa decimal (arredondado).
 - Medidas das carotidas (Vivid): as velocidades passam a vir da imagem, pelo nome do vaso digitado (ACCD, ACCE, ACID, ACIE, ACED, ACEE, AVD, AVE) e pela caixa PS/ED gravada na mesma imagem. Motivo: no Vivid o medico mede todos os vasos com a ferramenta PS/ED ou com o mesmo item "Rt Prox ACC", e o relatorio do aparelho guarda tudo como ACC direita (o painel mostrava como VPS ACC direita a velocidade de outro vaso, ex.: 113,3 que era da ACE esquerda). Mais de uma medida na mesma caixa: vale a ultima feita (maior numero). ED 0,00 (segundo cursor nao colocado) e ignorado. Imagem sem nome de vaso reconhecido nao entra; mesmo vaso com valores diferentes em duas imagens = em branco. Valor com etiqueta "imagem": conferir. Nomes por extenso (ex.: "art. vert. dir.") ainda nao sao reconhecidos.
