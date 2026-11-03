@@ -10,6 +10,7 @@ Fontes:
 
 Regras (decididas com o Helder em 31/10/2026):
   - valor exibido = valor recebido; so converte unidade (cm->mm, m/s->cm/s...), nunca calcula
+    (excecao: idade pelo nascimento e a data do exame quando o aparelho nao manda a idade)
   - na duvida (mais de um valor diferente sem "media", unidade desconhecida) fica em branco
   - medida em branco nao gera linha no texto copiado
   - nunca entra nome, ID ou outro dado de identificacao no texto copiado; nascimento e idade
@@ -214,6 +215,13 @@ def _do_cabecalho(ref):
         anos = int(m.group(1)) if m.group(2) == "Y" else 0   # meses/semanas/dias = 0 ano
         if 0 <= anos <= 99:
             d["idade"] = str(anos)
+    elif "nasc" in d:
+        # o Vivid nao manda PatientAge: idade na data do exame, pelo nascimento do cadastro
+        exame = re.sub(r"\D", "", str(ref.get("StudyDate", "") or ref.get("ContentDate", "") or ""))
+        if len(exame) == 8:
+            anos = int(exame[:4]) - int(nasc[:4]) - (exame[4:8] < nasc[4:8])
+            if 0 <= anos <= 120:
+                d["idade"] = str(anos)
     try:
         alt = float(ref.get("PatientSize") or 0)
         if 0.3 < alt < 2.5:  # metros
