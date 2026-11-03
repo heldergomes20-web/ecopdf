@@ -11,6 +11,9 @@
 html,body{height:100%}
 body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--fundo);color:var(--tinta);font-size:14px}
 button{font:inherit;cursor:pointer}
+.wl-sel{display:flex;align-items:center;gap:8px}.wl-rot{border:0;background:none;font-weight:600;color:var(--tinta);padding:4px 2px;text-decoration:underline dotted;text-underline-offset:3px}
+.wl-sel select{font:inherit;font-weight:600;border:1px solid #c3c9d2;border-radius:7px;padding:6px 10px;background:var(--branco);color:var(--tinta);max-width:260px}
+.wl-sel.on .wl-rot{color:var(--vinho)}.wl-sel.on select{border-color:var(--vinho);color:var(--vinho);background:#f9ecee}
 .topo{background:var(--branco);border-bottom:1px solid var(--borda);height:52px;display:flex;align-items:center;padding:0 22px;gap:16px}
 .logo{font-weight:700;color:var(--vinho);font-size:17px;display:flex;align-items:center;gap:8px}.logo img{height:26px;width:auto}.logo span{color:var(--tinta);font-weight:400}
 .quieto{color:var(--quieto)}.pq{font-size:12.5px}
@@ -90,7 +93,9 @@ tr.sem-img{cursor:default;background:#fff8f8}
   <div class="logo"><img src="/simbolo.png" alt="">Clínica Ecocardio <span>· EcoPDF Exames</span></div>
   <div style="flex:1"></div>
   <span class="quieto pq"><span id="atualizado"></span> · <span id="b-versao" title="Atualizar o EcoPDF" style="cursor:pointer">EcoPDF</span></span>
-  <button class="btn" id="b-wl" title="Pacientes de hoje na lista do aparelho (agenda do Medware)">Worklist</button>
+  <span class="wl-sel" id="wl-sel" title="Com um médico escolhido, o aparelho desta sala recebe só os pacientes dele (e os sem médico). Volta para Todos à meia-noite e quando esta tela fica fechada por mais de 1 minuto.">
+    <button class="wl-rot" id="b-wl" title="Ver a lista de hoje (excluir paciente)">Worklist</button>
+    <select id="wl-medico"><option value="">Todos os médicos</option></select></span>
   <button class="btn" id="b-pasta3" title="Abre a pasta 3 - Finalizados (os PDFs para subir no prontuário)">Pasta de prontos</button>
   <a class="btn" href="/manual" target="_blank" title="Como usar o EcoPDF (manual da versão instalada)">? Manual</a>
 </div>
@@ -603,6 +608,26 @@ async function excluirWorklist(cod, voltar) {
   abrirWorklist();
 }
 $("b-wl").onclick = abrirWorklist;
+async function carregarMedicos() {
+  try {
+    const d = await (await fetch("/api/worklist_medicos")).json();
+    const sel = $("wl-medico"), lista = d.medicos || [];
+    if (d.atual && !lista.includes(d.atual)) lista.push(d.atual);
+    sel.innerHTML = `<option value="">Todos os médicos</option>` + lista.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+    sel.value = d.atual || ""; $("wl-sel").classList.toggle("on", !!d.atual);
+  } catch (e) {}
+}
+$("wl-medico").onfocus = () => { if ($("wl-medico").options.length <= 1) carregarMedicos(); };
+$("wl-medico").onchange = async () => {
+  const m = $("wl-medico").value;
+  try {
+    const d = await (await fetch("/api/worklist_medico", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({medico: m})})).json();
+    $("wl-sel").classList.toggle("on", !!d.atual);
+    aviso(d.atual ? `Worklist desta sala: só ${d.atual}. No aparelho, clique em Query de novo.` : "Worklist desta sala: todos os médicos. No aparelho, clique em Query de novo.");
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+};
+carregarMedicos();
+setInterval(carregarMedicos, 300000);
 $("wl-atu").onclick = abrirWorklist;
 $("wl-fechar").onclick = () => { $("m-wl").style.display = "none"; };
 $("wl-linhas").onclick = ev => { const b = ev.target.closest("button"); if (!b) return;
