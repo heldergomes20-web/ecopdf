@@ -503,7 +503,7 @@ def _handler(ep, cfg):
         def do_GET(self):
             if not self._ok_host():
                 return
-            _estado["contato"] = time.time()
+            _estado["contato"] = cfg["_tela_contato"] = time.time()
             u = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             try:
@@ -522,6 +522,9 @@ def _handler(ep, cfg):
                                               "laudos_sem_imagens": laudos_sem_imagens(ep, cfg),
                                               "dias_guardados": cfg["manter_dicom_dias"],
                                               "agora": datetime.now().strftime("%H:%M:%S")})
+                if u.path == "/api/worklist_medicos":
+                    import worklist
+                    return self._enviar(200, worklist.medicos_de_hoje(cfg))
                 if u.path == "/api/worklist":
                     import worklist
                     return self._enviar(200, worklist.lista_da_tela(cfg))
@@ -567,6 +570,10 @@ def _handler(ep, cfg):
                 if u.path == "/api/atualizar":
                     ok, msg = iniciar_atualizacao()
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
+                if u.path == "/api/worklist_medico":
+                    import worklist
+                    cfg["_tela_contato"] = time.time()
+                    return self._enviar(200, {"ok": True, "atual": worklist.escolher_medico(cfg, str(corpo.get("medico", "")))})
                 if u.path == "/api/worklist_excluir":
                     import worklist
                     cod = str(corpo.get("codpac", ""))

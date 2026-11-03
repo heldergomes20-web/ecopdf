@@ -339,6 +339,46 @@ def lista_da_tela(cfg):
     return {"ok": True, "pacientes": saida, "consulta": ler_situacao(cfg)}
 
 
+# ---------------------------------------------------------------- filtro por medico
+# Seletor "Worklist [Todos os medicos]" na tela (Helder 02/11 e 03/11/2026): com um medico
+# escolhido, ESTE PC so devolve ao aparelho os pacientes do dia daquele executante (e os sem
+# executante, para ninguem sumir). Volta para Todos sozinho: a meia-noite e quando a tela
+# fica mais de 1 minuto sem falar com o EcoPDF (fechada). Fica so na memoria.
+SEM_TELA_SEG = 60
+
+
+def medico_ativo(cfg):
+    f = cfg.get("_wl_filtro") or {}
+    if not f.get("medico"):
+        return ""
+    if f.get("dia") != datetime.date.today().isoformat() or \
+            time.time() - cfg.get("_tela_contato", 0) > SEM_TELA_SEG:
+        cfg["_wl_filtro"] = {}
+        log.info("Worklist: filtro por medico voltou para Todos")
+        return ""
+    return f["medico"]
+
+
+def escolher_medico(cfg, medico):
+    medico = ascii_maiusculo(medico)
+    cfg["_wl_filtro"] = {"medico": medico, "dia": datetime.date.today().isoformat()} if medico else {}
+    log.info("Worklist: filtro por medico = %s", medico or "Todos")
+    return medico
+
+
+def medicos_de_hoje(cfg):
+    """Para o seletor: medicos executantes da agenda de hoje e o filtro atual."""
+    if not cfg.get("worklist") or "medware_servidores" not in cfg:
+        return {"ok": False, "medicos": [], "atual": ""}
+    hoje = datetime.date.today()
+    try:
+        lista, _ = buscar(cfg, hoje, hoje)
+    except Exception as e:
+        return {"ok": False, "medicos": [], "atual": medico_ativo(cfg), "erro": str(e)[:150]}
+    return {"ok": True, "medicos": sorted({p["medico"] for p in lista if p["medico"]}),
+            "atual": medico_ativo(cfg)}
+
+
 def _anotar(cfg, **dados):
     """log/worklist.json: ultima consulta (hora, IP, n) e ultimo erro. Sem nome de paciente."""
     arq = cfg["pasta_log"] / "worklist.json"
@@ -391,12 +431,16 @@ def _consultar(event, cfg):
     feitos = _recebidos(cfg, hoje)
     fora = ler_excluidos(cfg, hoje)
     lista = [p for p in lista if p["dia"] != hoje or (str(p["codpac"]) not in fora and not _atendido(p, feitos))]
+    medico = medico_ativo(cfg)
+    if medico:
+        lista = [p for p in lista if not p["medico"] or p["medico"] == medico]
     if nome:
         lista = [p for p in lista if all(t in p["nome"] for t in nome.split())]
     if pid:
         lista = [p for p in lista if str(p["codpac"]).startswith(pid)]
-    log.info("Worklist: consulta de %s (%s), %s a %s%s -> %d paciente(s) [Medware %s]", ae, ip,
-             ini, fim, " com filtro" if nome or pid else "", len(lista), servidor)
+    log.info("Worklist: consulta de %s (%s), %s a %s%s%s -> %d paciente(s) [Medware %s]", ae, ip,
+             ini, fim, " com filtro" if nome or pid else "", f" medico {medico}" if medico else "",
+             len(lista), servidor)
     _anotar(cfg, ultima_consulta=agora, ip=ip, ae=ae, n=len(lista), servidor=servidor,
             erro="", **({"primeira_consulta": agora} if not ler_situacao(cfg).get("primeira_consulta") else {}))
     for p in lista:
