@@ -343,8 +343,8 @@ def lista_da_tela(cfg):
 # Seletor "Worklist [Todos os medicos]" na tela (Helder 02/11 e 03/11/2026): com um medico
 # escolhido, ESTE PC so devolve ao aparelho os pacientes do dia daquele executante (e os sem
 # executante, para ninguem sumir). Volta para Todos sozinho: a meia-noite e quando a tela
-# fica mais de 1 minuto sem falar com o EcoPDF (fechada). Fica so na memoria.
-SEM_TELA_SEG = 60
+# fica mais de 3 minutos sem falar com o EcoPDF (fechada). Fica so na memoria.
+SEM_TELA_SEG = 180   # janela minimizada: o navegador espaça o polling para ate 1 por minuto
 
 
 def medico_ativo(cfg):
