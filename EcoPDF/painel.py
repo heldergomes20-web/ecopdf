@@ -505,9 +505,42 @@ def coletar(cfg, ep, manual=False):
     d["extras"] = {"Botão Imprimir usado (7 dias)": _usos_imprimir(cfg, agora),
                    "Rede (cabo/Wi-Fi, IP, riscos)": _texto_rede(d["rede"]),
                    "Medidas (relatório do aparelho)": _texto_medidas(d),
-                   "Fila EcoPDF Foto": _texto_fila_foto(cfg, d["impressora_info"])}
+                   "Fila EcoPDF Foto": _texto_fila_foto(cfg, d["impressora_info"]),
+                   "Lista de pacientes (worklist)": _texto_worklist(cfg, d, ep)}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
+
+
+def _texto_worklist(cfg, d, ep):
+    """Ultima consulta do aparelho + teste de leitura do Medware. So hora, IP e quantidade."""
+    if not cfg.get("worklist", True):
+        return "desligada"
+    try:
+        import worklist
+        if "medware_servidores" not in cfg:
+            worklist.configurar(cfg, getattr(ep, "_painel_ini", lambda k: ""))
+        s = worklist.ler_situacao(cfg)
+        ok, servidor, info = worklist.testar_banco(cfg)
+    except ImportError:
+        return "ERRO: componente do Medware não instalado: rodar instalar.bat de novo"
+    except Exception as e:
+        return f"? ({str(e)[:80]})"
+    if not ok:
+        return f"ERRO: não li o banco do Medware ({info})"
+    ult = s.get("ultima_consulta", "")
+    if ult:
+        quando = ult[:16].replace("T", " ")
+        txt = f"Medware {servidor}: {info} paciente(s) hoje; última consulta {quando} do {s.get('ip', '?')} ({'erro' if s.get('n') is None else s.get('n')})"
+    else:
+        txt = f"Medware {servidor}: {info} paciente(s) hoje; aparelho ainda não consultou (Worklist não configurada no aparelho?)"
+    hoje = datetime.now().date().isoformat()
+    img_hoje = d.get("ultima_imagem_min") is not None and d["ultima_imagem_min"] < (
+        datetime.now().hour * 60 + datetime.now().minute)
+    if s.get("primeira_consulta") and img_hoje and not ult.startswith(hoje):
+        txt = "ATENÇÃO: imagens hoje sem nenhuma consulta à lista (cadastro à mão?) · " + txt
+    elif info == 0 and img_hoje:
+        txt = "ATENÇÃO: Medware sem pacientes hoje, mas chegaram imagens · " + txt
+    return txt
 
 
 def _texto_fila_foto(cfg, imp):
@@ -566,6 +599,11 @@ def avaliar(d):
         amar.append("impressora padrão do Windows é a PDF24: o que se imprime sem escolher não sai em papel")
     if str(d.get("extras", {}).get("Fila EcoPDF Foto", "")).startswith("ERRO"):
         amar.append(str(d["extras"]["Fila EcoPDF Foto"])[6:])
+    wl = str(d.get("extras", {}).get("Lista de pacientes (worklist)", ""))
+    if wl.startswith("ERRO: "):
+        amar.append("lista de pacientes: " + wl[6:])
+    elif wl.startswith("ATENÇÃO: "):
+        amar.append("lista de pacientes: " + wl[9:].split(" · ")[0])
     if imp.get("grave"):
         amar.append(f"impressora: {_texto_impressora(imp)}")
     elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):
