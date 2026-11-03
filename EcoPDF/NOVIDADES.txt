@@ -5,6 +5,8 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 2026.11.03
 - Folha de imagens: o nome do paciente na barra cinza saía como "DATA NASC.:" com o laudo de eco do Medware (dados do paciente em coluna). Agora lê o nome certo. Exame ja finalizado com o nome errado: reimprimir o laudo no Medware (PDF24) refaz o final com o nome certo.
 - Medidas (Vivid S6): VE diastolico e sistolico (DDVE/DSVE) passam a ser reconhecidos. O "AE (diametro)" deixa de pegar o comprimento do AE no 4 camaras (superior-inferior), que nao e o diametro; fica em branco quando so houver essa medida.
+- Medidas das carotidas (relatorio vascular do Vivid): passam a aparecer quando a medida e feita escolhendo o vaso (ex.: VPS da ACC direita). Varias medidas do mesmo vaso: vale a que o aparelho marcou como escolhida. Texto escrito na tela (sem escolher o vaso) continua sem entrar.
+- Velocidades sempre sem sinal (o Vivid manda negativo quando o fluxo se afasta da sonda): ex.: refluxo tricuspide 2,48 m/s, antes saia -2,48.
 
 2026.11.02.5
 - Painel das salas: o aviso de medidas passa a ser por dia, nao por exame (quem mede com caliper livre nao gera relatorio): ATENCAO so depois de 3 dias de exame seguidos sem nenhum relatorio de medidas.
