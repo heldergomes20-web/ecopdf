@@ -115,10 +115,10 @@ def _situacao(pasta, tipo, g, reg, ep, cfg):
         if t in ep._ler_ordem(pasta) or ep._ler_ocultas(pasta).get(t):
             return "Folha ajustada"
         return "Novo"
+    if (tipo or "") in ep._ler_descartados(pasta):
+        return "Descartado"    # inclui teste finalizado tirado da lista (Helder 03/11)
     if ep.registro_do_grupo(g, reg):
         return "Finalizado"
-    if (tipo or "") in ep._ler_descartados(pasta):
-        return "Descartado"
     return "Fora da pasta 2"
 
 

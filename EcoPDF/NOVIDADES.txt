@@ -3,7 +3,7 @@ Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
 2026.11.03.1
-- Tela: exame Descartado (teste, envio duplicado) some de Hoje, 7 e 30 dias; continua em 6 meses (tudo) e na busca, onde da para Restaurar.
+- Tela: exame Descartado (teste, envio duplicado) some de Hoje, 7 e 30 dias; continua em 6 meses (tudo) e na busca, onde da para Restaurar. Exame ja Finalizado (teste que juntou com laudo) tambem pode ser descartado: sai da lista; o PDF final fica na pasta 3 (apagar a mao se for teste).
 - Tela: o botao Pendentes passa a somar com o periodo (liga e desliga): Hoje + Pendentes = so o que falta de hoje; 6 meses + Pendentes = todas. O numero no botao continua contando todas.
 - Tela: a roda do mouse troca de imagem (antes dava zoom). Zoom pelos botoes "- zoom / + zoom" no canto da imagem ou Ctrl + roda.
 - Medidas: raiz da aorta, aorta ascendente, AE, DDVE, DSVE, septo e parede posterior em mm inteiros, sem casa decimal (arredondado).
