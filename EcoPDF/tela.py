@@ -649,6 +649,48 @@ _estado = {"contato": 0.0, "aberta_em": 0.0, "url": ""}
 ABERTA_SEG = 120   # pagina aberta consulta a cada 15 s (aba minimizada: ~1 por minuto)
 
 
+def _janelas_da_tela():
+    """Janelas abertas da tela no Windows (titulo "EcoPDF – Exames", com ou sem o numero
+    de pendencias na frente). Nao depende da pagina responder: o Edge congela pagina de
+    janela minimizada (modo eficiencia) e a tela abria duplicada (visto no Bessa em 03/11).
+    Fora do Windows: None."""
+    import sys
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u32 = ctypes.windll.user32
+        achadas = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def cada(hwnd, _):
+            n = u32.GetWindowTextLengthW(hwnd)
+            if n and u32.IsWindowVisible(hwnd):
+                buf = ctypes.create_unicode_buffer(n + 1)
+                u32.GetWindowTextW(hwnd, buf, n + 1)
+                t = buf.value
+                if "EcoPDF" in t and "Exames" in t:
+                    achadas.append(hwnd)
+            return True
+        u32.EnumWindows(cada, 0)
+        return achadas
+    except Exception:
+        return None
+
+
+def _trazer_para_frente(hwnd):
+    """Restaura a janela minimizada e tenta pô-la na frente (o Windows pode só piscar na barra)."""
+    try:
+        import ctypes
+        u32 = ctypes.windll.user32
+        if u32.IsIconic(hwnd):
+            u32.ShowWindow(hwnd, 9)   # SW_RESTORE
+        u32.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+
+
 def _edge():
     """msedge.exe (vem em todo Windows 10/11), para abrir a tela numa janela propria."""
     import os
@@ -715,6 +757,10 @@ def abrir_se_fechada(cfg):
             or agora - _estado["contato"] < ABERTA_SEG or agora - _estado["aberta_em"] < ABERTA_SEG):
         return
     _estado["aberta_em"] = agora
+    janelas = _janelas_da_tela()
+    if janelas:
+        _trazer_para_frente(janelas[0])
+        return
     abrir_janela(_estado["url"])
 
 
