@@ -169,8 +169,11 @@ def _escolher(cands):
     """Um valor so, ou None na duvida. cands = [(valor convertido, derivacao)]."""
     if not cands:
         return None
+    # 1) o valor que o aparelho marcou como escolhido (Selection Status: "Mean value chosen",
+    # "User chosen value"); 2) a media; 3) todos (na duvida = em branco)
+    escolhidos = [v for v, d in cands if re.search(r"chosen|escolhid", d, I)]
     medias = [v for v, d in cands if re.search(r"mean|average|m[eé]dia", d, I)]
-    usar = medias or [v for v, _ in cands]
+    usar = escolhidos or medias or [v for v, _ in cands]
     distintos = {round(v, 3) for v in usar}
     return usar[0] if len(distintos) == 1 else None
 
@@ -183,6 +186,8 @@ def _procurar(itens, padrao, unidade, lado=None):
         if not rx.search(desc) or (lrx and not lrx.search(desc)):
             continue
         v = _converter(valor, un, unidade)
+        if v is not None and unidade in ("cm/s", "m/s"):
+            v = abs(v)  # o sinal so diz o sentido do fluxo (Vivid manda negativo)
         if v is not None:
             cands.append((v, deriv))
     return _escolher(cands)
