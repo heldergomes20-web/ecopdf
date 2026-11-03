@@ -36,25 +36,24 @@ def ascii_maiusculo(s):
 
 
 def peso_kg(bruto):
-    """Medware guarda PESO como BIGINT; escala ainda nao confirmada. Aceita so valor plausivel."""
-    if not bruto:
+    """Medware: PESO em kg (BIGINT com 4 casas, chega como 84.0000)."""
+    try:
+        v = float(bruto or 0)
+    except (TypeError, ValueError):
         return None
-    for div in (10000, 1000, 100, 10, 1):
-        v = bruto / div
-        if 1 <= v <= 300:
-            return round(v, 1)
-    return None
+    return round(v, 1) if 1 <= v <= 300 else None
 
 
 def altura_m(bruto):
-    if not bruto:
+    """Medware: ALTURA em cm (172.0000). DICOM quer metros."""
+    try:
+        v = float(bruto or 0)
+    except (TypeError, ValueError):
         return None
-    for div in (10000, 1000, 100, 10, 1):
-        v = bruto / div
-        if 0.3 <= v <= 2.3:
-            return round(v, 2)
-        if 30 <= v <= 230:
-            return round(v / 100, 2)
+    if 30 <= v <= 230:
+        return round(v / 100, 2)
+    if 0.3 <= v <= 2.3:
+        return round(v, 2)
     return None
 
 
@@ -154,7 +153,7 @@ def montar(p, pedido):
     for el in pedido:
         if el.keyword and el.keyword not in ds and el.keyword != "QueryRetrieveLevel":
             try:
-                setattr(ds, el.keyword, "" if el.VR != "SQ" else [])
+                setattr(ds, el.keyword, None if el.VR != "SQ" else [])
             except Exception:
                 pass
     return ds
