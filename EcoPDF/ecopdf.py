@@ -1307,15 +1307,25 @@ def descartar(pasta, tipo, cfg):
         g = next((x for x in _ler_grupos(pasta) if (x["tipo"] or "") == t), None)
         if g is None:
             return False, "o exame ainda esta sendo recebido"
-        if registro_do_grupo(g, _ler_registro(cfg)):
-            # teste que chegou a juntar (Helder 03/11): so sai da lista; o final da pasta 3
-            # e o registro ficam como estao, e Restaurar devolve
+        reg = _ler_registro(cfg)
+        r = registro_do_grupo(g, reg)
+        if r:
+            # teste que chegou a juntar (Helder 03/11): o final sai da pasta 3 e do registro.
+            # Para ter o exame de novo: reimprimir o laudo (PDF24) e reenviar as imagens.
+            final = cfg["pasta_final"] / r["final"]
+            if final.exists():
+                if not _livre(final):
+                    return False, "o PDF final esta aberto em outro programa: feche e tente de novo"
+                _mover(final, cfg["pasta_processados"] / "descartados",
+                       f"{datetime.now():%Y-%m-%d_%H%M%S}_{final.name}")
+            reg.remove(r)
+            _gravar_registro(cfg, reg)
             d = _ler_descartados(pasta)
             d[t] = datetime.now().isoformat(timespec="seconds")
             gravar_atomico(pasta / DESCARTADOS, lambda p: p.write_text(json.dumps(d), "utf-8"))
-            log.info("DESCARTADO na tela (finalizado, so da lista): %s %s", pasta.name, t)
-            return True, ("Exame descartado: saiu da lista. O PDF final continua na pasta 3; "
-                          "se for teste, apague-o de la. Restaurar devolve o exame a lista.")
+            log.info("DESCARTADO na tela (finalizado): %s saiu da pasta 3", r["final"])
+            return True, ("Exame descartado e PDF final retirado da pasta 3. Se precisar dele de novo, "
+                          "reimprima o laudo no Medware pela PDF24 e reenvie as imagens do aparelho.")
         pdf = Path(g["pdf"])
         if pdf.exists():
             if not _livre(pdf):
@@ -1336,11 +1346,6 @@ def restaurar(pasta, tipo, cfg):
         if t not in d:
             return False, "este exame nao esta descartado"
         g = next((x for x in _ler_grupos(pasta) if (x["tipo"] or "") == t), None)
-        if g and registro_do_grupo(g, _ler_registro(cfg)):   # finalizado: so volta a lista
-            d.pop(t, None)
-            gravar_atomico(pasta / DESCARTADOS, lambda p: p.write_text(json.dumps(d), "utf-8"))
-            log.info("RESTAURADO na tela (finalizado): %s %s", pasta.name, t)
-            return True, "Exame restaurado: voltou para a lista como Finalizado."
         ok, msg = salvar_folha(pasta, tipo, _ler_ordem(pasta).get(t, []), _ler_ocultas(pasta).get(t, []), cfg) \
             if g and not Path(g["pdf"]).exists() else (True, "")
         if not ok:
