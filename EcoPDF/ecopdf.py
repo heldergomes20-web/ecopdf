@@ -725,10 +725,13 @@ def _desenhar(caminho, imagens, cfg, dados, primeira_pagina=1):
 def sigla(ds, cfg=None):
     """Final (4 ultimos caracteres) do numero de serie de fabrica que o proprio
     aparelho manda no DICOM. Identifica o aparelho onde quer que ele esteja,
-    sem tabela para manter. '' se o aparelho nao mandar a serie."""
+    sem tabela para manter. Sem serie (o Vivid S6 nao manda): final do nome da estacao
+    (ex.: VIVID_S6-008046 -> 8046). '' se nao houver nenhum dos dois."""
     if ds is None:
         return ""
     serie = re.sub(r"\s", "", str(ds.get("DeviceSerialNumber", "") or ""))
+    if not serie:
+        serie = re.sub(r"[^0-9A-Za-z]", "", str(ds.get("StationName", "") or ""))
     return serie[-4:].upper()
 
 
