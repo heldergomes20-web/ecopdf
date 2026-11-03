@@ -3,6 +3,7 @@ Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
 2026.11.03.2
+- Tela: imprimir varios exames de uma vez. Na lista, marcar a caixinha ao lado de "Ver final" e clicar em "Imprimir selecionados": saem as folhas de fotos de todos num envio so (o modo foto, que e lento, roda uma vez) e depois os laudos, na mesma ordem. A janela diz quantas folhas de papel fotografico colocar (ex.: ECO 2 + DCV 1). Paciente com eco e carotidas no mesmo dia: o Imprimir de um ja traz o outro marcado.
 - Tela: seletor "Worklist [Todos os medicos]" no topo. Com um medico escolhido, o aparelho desta sala recebe so os pacientes do dia daquele medico (e os sem medico no Medware). Volta sozinho para Todos a meia-noite e quando a tela fica fechada por mais de 3 minutos. Depois de trocar, clicar em Query de novo no aparelho. Clicar na palavra Worklist abre a lista de hoje (Excluir).
 
 2026.11.03.1

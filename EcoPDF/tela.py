@@ -429,24 +429,44 @@ def paginas_impressao(pasta, tipo, folhas, com_laudo, ep, cfg):
     return fotos, pl
 
 
-def pdf_impressao(pasta, tipo, folhas, com_laudo, ep, cfg):
-    """PDF para imprimir num envio so: folhas de fotos escolhidas primeiro (papel
-    fotografico por cima da pilha), depois o laudo (papel comum)."""
-    g = next((x for x in ep._ler_grupos(pasta) if (x["tipo"] or "") == (tipo or "")), None)
-    r = ep.registro_do_grupo(g, ep._ler_registro(cfg)) if g else None
-    if not r:
+MAX_LOTE = 10
+
+
+def itens_impressao(corpo, cfg):
+    """Exames de um pedido de impressao: {itens: [{e, t, folhas, laudo}, ...]} (varios exames,
+    Helder 03/11) ou o pedido antigo de um exame so {e, t, folhas, laudo}. Ordem preservada."""
+    itens = corpo.get("itens") if isinstance(corpo.get("itens"), list) else [corpo]
+    out = []
+    for it in itens[:MAX_LOTE]:
+        if not isinstance(it, dict):
+            continue
+        pasta = _pasta(str(it.get("e", "")), cfg)
+        if pasta is None:
+            continue
+        folhas = [int(x) for x in it.get("folhas", []) if str(x).isdigit()]
+        out.append((pasta, str(it.get("t", "")), folhas, bool(it.get("laudo"))))
+    return out
+
+
+def paginas_lote(itens, ep, cfg):
+    """Todas as folhas de fotos dos exames, na ordem, e depois todos os laudos na mesma ordem:
+    um envio de fotos (modo foto, lento, uma vez so) e um envio de laudos."""
+    fotos, laudos = [], []
+    for pasta, tipo, folhas, com_laudo in itens:
+        f, l = paginas_impressao(pasta, tipo, folhas, com_laudo, ep, cfg)
+        fotos += f
+        laudos += l
+    return fotos, laudos
+
+
+def pdf_lote(itens, ep, cfg):
+    """PDF unico para a janela do navegador: todas as fotos, depois todos os laudos."""
+    fotos, laudos = paginas_lote(itens, ep, cfg)
+    if not fotos and not laudos:
         return None
-    laudo, foto = _partes_impressao(r, ep, cfg)
     w = PdfWriter()
-    if foto and folhas:
-        n = len(PdfReader(str(foto)).pages)
-        for f in sorted(set(folhas)):
-            if 1 <= f <= n:
-                w.append(str(foto), pages=[f - 1])
-    if com_laudo and laudo:
-        w.append(str(laudo))
-    if not w.pages:
-        return None
+    for pdf, i in fotos + laudos:
+        w.append(str(pdf), pages=[i])
     buf = io.BytesIO()
     w.write(buf)
     return buf.getvalue()
@@ -581,6 +601,22 @@ def _handler(ep, cfg):
                         return self._enviar(400, {"erro": "paciente invalido"})
                     worklist.excluir(cfg, cod, bool(corpo.get("voltar")))
                     return self._enviar(200, {"ok": True})
+                if u.path in ("/api/imprimir_direto", "/api/imprimir"):
+                    itens = itens_impressao(corpo, cfg)
+                    if u.path == "/api/imprimir":
+                        pdf = pdf_lote(itens, ep, cfg)
+                        if pdf is None:
+                            return self._enviar(404, {"erro": "nada para imprimir"})
+                        _anotar_impressao(cfg)
+                        return self._enviar(200, pdf, "application/pdf")
+                    fotos, laudo = paginas_lote(itens, ep, cfg)
+                    if not fotos and not laudo:
+                        return self._enviar(404, {"erro": "nada para imprimir"})
+                    tid = impressao.iniciar(fotos, laudo, cfg, ep.log)
+                    if tid is None:
+                        return self._enviar(200, {"navegador": True})
+                    _anotar_impressao(cfg)
+                    return self._enviar(200, {"id": tid})
                 if u.path == "/api/liberar":
                     ok, msg = liberar_sem_imagens(str(corpo.get("laudo", "")), ep, cfg)
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
@@ -597,23 +633,6 @@ def _handler(ep, cfg):
                     f = ep.descartar if u.path.endswith("descartar") else ep.restaurar
                     ok, msg = f(pasta, tipo, cfg)
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
-                if u.path == "/api/imprimir_direto":
-                    folhas = [int(x) for x in corpo.get("folhas", []) if str(x).isdigit()]
-                    fotos, laudo = paginas_impressao(pasta, tipo, folhas, bool(corpo.get("laudo")), ep, cfg)
-                    if not fotos and not laudo:
-                        return self._enviar(404, {"erro": "nada para imprimir"})
-                    tid = impressao.iniciar(fotos, laudo, cfg, ep.log)
-                    if tid is None:
-                        return self._enviar(200, {"navegador": True})
-                    _anotar_impressao(cfg)
-                    return self._enviar(200, {"id": tid})
-                if u.path == "/api/imprimir":
-                    folhas = [int(x) for x in corpo.get("folhas", []) if str(x).isdigit()]
-                    pdf = pdf_impressao(pasta, tipo, folhas, bool(corpo.get("laudo")), ep, cfg)
-                    if pdf is None:
-                        return self._enviar(404, {"erro": "nada para imprimir"})
-                    _anotar_impressao(cfg)
-                    return self._enviar(200, pdf, "application/pdf")
                 if u.path == "/api/previa":
                     pdf = pdf_previa(pasta, tipo, ordem, fora, ep, cfg)
                     if pdf is None:
