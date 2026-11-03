@@ -183,6 +183,29 @@ def _filtro(valor):
     return ascii_maiusculo(str(valor or "").replace("*", " ").replace("?", " ").replace("^", " "))
 
 
+# procedimento do Medware -> sigla curta no aparelho (Helder 03/11/2026: "ECO", "DCV",
+# eco + carotidas = "ECO + DCV"). Procedimento sem sigla conhecida vai como esta.
+SIGLAS = (("FETAL", "ECO FETAL"), ("CAROT", "DCV"), ("DUPLEX", "DCV"), ("VASCULAR", "DCV"),
+          ("ECO", "ECO"))
+ORDEM_SIGLAS = ("ECO", "ECO FETAL", "DCV")
+
+
+def sigla(procedimento):
+    p = ascii_maiusculo(procedimento)
+    return next((s for chave, s in SIGLAS if chave in p), p)
+
+
+def descricao(procs):
+    """['ECODOPPLERCARDIOGRAMA...', 'DUPLEX SCAN...'] -> 'ECO + DCV'."""
+    vistas = []
+    for pr in procs:
+        s = sigla(pr)
+        if s and s not in vistas:
+            vistas.append(s)
+    vistas.sort(key=lambda s: ORDEM_SIGLAS.index(s) if s in ORDEM_SIGLAS else len(ORDEM_SIGLAS))
+    return " + ".join(vistas)
+
+
 def montar(p, pedido):
     """Dataset de resposta. Nome inteiro como 'sobrenome' (sem ^): chega ao PDF igual ao Medware."""
     ds = Dataset()
@@ -198,17 +221,17 @@ def montar(p, pedido):
     ds.AccessionNumber = ""
     ds.ReferringPhysicianName = ""
     # mesmo paciente no mesmo dia = mesmo estudo (eco + carotidas viram 2 folhas do mesmo estudo)
-    ds.StudyInstanceUID = generate_uid(entropy_srcs=["ecopdf-mwl", str(p["codpac"]), p["dia"].isoformat()])
+    ds.StudyInstanceUID = uid_do_estudo(p)
     ds.RequestedProcedureID = f"{p['codpac']}{p['dia']:%m%d}"[-16:]
-    descricao = " + ".join(p["procs"])[:64]
-    ds.RequestedProcedureDescription = descricao
+    desc = descricao(p["procs"])[:64]
+    ds.RequestedProcedureDescription = desc
     sps = Dataset()
     sps.Modality = "US"
     sps.ScheduledStationAETitle = ""
     sps.ScheduledProcedureStepStartDate = p["dia"].strftime("%Y%m%d")
     sps.ScheduledProcedureStepStartTime = p["hora"].strftime("%H%M%S")
     sps.ScheduledPerformingPhysicianName = p["medico"][:64]
-    sps.ScheduledProcedureStepDescription = descricao
+    sps.ScheduledProcedureStepDescription = desc
     sps.ScheduledProcedureStepID = ds.RequestedProcedureID
     ds.ScheduledProcedureStepSequence = [sps]
     for el in pedido:   # chave pedida e sem valor vai vazia (alguns aparelhos exigem)
@@ -218,6 +241,102 @@ def montar(p, pedido):
             except Exception:
                 pass
     return ds
+
+
+# ---------------------------------------------------------------- quem ja foi atendido
+
+def uid_do_estudo(p):
+    """Mesmo paciente no mesmo dia = mesmo estudo (eco + carotidas viram 2 folhas)."""
+    return generate_uid(entropy_srcs=["ecopdf-mwl", str(p["codpac"]), p["dia"].isoformat()])
+
+
+def _sigla_do_tipo(tipo):
+    t = str(tipo or "").lower()
+    if "fetal" in t:
+        return "ECO FETAL"
+    if "carot" in t or "vascular" in t or "duplex" in t:
+        return "DCV"
+    if "eco" in t:
+        return "ECO"
+    return ""   # tipo desconhecido (sem sonda/frequencia): vale para qualquer exame
+
+
+def _recebidos(cfg, dia):
+    """{(chave, sigla)} das imagens que ja chegaram no dia. chave = UID do estudo ou nome."""
+    feitos = set()
+    inicio = datetime.datetime.combine(dia, datetime.time()).timestamp()
+    raiz = cfg.get("pasta_dicom")
+    if not raiz or not raiz.is_dir():
+        return feitos
+    for pasta in raiz.iterdir():
+        try:
+            if not pasta.is_dir() or pasta.stat().st_mtime < inicio:
+                continue
+            grupos = json.loads((pasta / "grupos.json").read_text("utf-8"))
+        except (OSError, ValueError):
+            continue
+        for g in grupos:
+            if str(g.get("data", "")) != dia.strftime("%Y%m%d"):
+                continue
+            sg = _sigla_do_tipo(g.get("tipo"))
+            feitos.add((pasta.name, sg))
+            feitos.add((ascii_maiusculo(g.get("paciente", "")), sg))
+    return feitos
+
+
+def _atendido(p, feitos):
+    """Todas as siglas do paciente ja tem imagens (pelo estudo da worklist ou pelo nome,
+    se o cadastro foi feito a mao no aparelho)."""
+    chaves = (uid_do_estudo(p), p["nome"])
+    siglas = [sigla(x) for x in p["procs"]] or [""]
+    return all(any((c, sg) in feitos or (c, "") in feitos for c in chaves) for sg in siglas)
+
+
+def _arq_excluidos(cfg):
+    return cfg["pasta_log"] / "worklist_excluidos.json"
+
+
+def ler_excluidos(cfg, dia):
+    """Codigos de paciente tirados da lista na tela, no dia (zera sozinho no dia seguinte)."""
+    try:
+        d = json.loads(_arq_excluidos(cfg).read_text("utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return set(d.get(dia.isoformat(), []))
+
+
+def excluir(cfg, codpac, voltar=False):
+    dia = datetime.date.today().isoformat()
+    with _TRAVA:
+        try:
+            d = json.loads(_arq_excluidos(cfg).read_text("utf-8"))
+        except (OSError, ValueError):
+            d = {}
+        d = {dia: d.get(dia, [])}           # so o dia de hoje
+        lista = set(d[dia])
+        (lista.discard if voltar else lista.add)(str(codpac))
+        d[dia] = sorted(lista)
+        _arq_excluidos(cfg).write_text(json.dumps(d), "utf-8")
+    log.info("Worklist: paciente %s %s na tela", codpac, "devolvido" if voltar else "tirado da lista")
+
+
+def lista_da_tela(cfg):
+    """Pacientes de hoje para a janela Worklist da tela: quem esta na lista do aparelho,
+    quem ja tem imagens e quem foi tirado a mao."""
+    if not cfg.get("worklist") or "medware_servidores" not in cfg:
+        return {"ok": False, "erro": "Worklist desligada neste PC (WORKLIST = nao ou componente do Medware ausente)."}
+    hoje = datetime.date.today()
+    try:
+        lista, _ = buscar(cfg, hoje, hoje)
+    except Exception as e:
+        return {"ok": False, "erro": f"Não consegui ler a agenda do Medware: {str(e)[:150]}"}
+    feitos, fora = _recebidos(cfg, hoje), ler_excluidos(cfg, hoje)
+    saida = []
+    for p in sorted(lista, key=lambda x: x["hora"]):
+        sit = "excluido" if str(p["codpac"]) in fora else ("atendido" if _atendido(p, feitos) else "na lista")
+        saida.append({"codpac": str(p["codpac"]), "hora": p["hora"].strftime("%H:%M"), "nome": p["nome"],
+                      "exames": descricao(p["procs"]), "medico": p["medico"], "situacao": sit})
+    return {"ok": True, "pacientes": saida, "consulta": ler_situacao(cfg)}
 
 
 def _anotar(cfg, **dados):
@@ -267,6 +386,11 @@ def _consultar(event, cfg):
         _anotar(cfg, erro=str(e)[:200], erro_em=agora, ultima_consulta=agora, ip=ip, ae=ae, n=None)
         yield 0xC001, None
         return
+    # sai da lista quem ja mandou as imagens de todos os exames do dia e quem foi tirado na tela
+    hoje = datetime.date.today()
+    feitos = _recebidos(cfg, hoje)
+    fora = ler_excluidos(cfg, hoje)
+    lista = [p for p in lista if p["dia"] != hoje or (str(p["codpac"]) not in fora and not _atendido(p, feitos))]
     if nome:
         lista = [p for p in lista if all(t in p["nome"] for t in nome.split())]
     if pid:
