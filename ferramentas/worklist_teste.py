@@ -6,10 +6,12 @@ Esta janela responde so a CONSULTA de worklist, na porta 11113.
 So LE o banco do Medware (nunca grava). Nao guarda nada em arquivo: mostra na janela.
 Fechar a janela = desliga a lista (o aparelho volta a dar "Sem conexao" no Query).
 
-Uso: C:\\EcoPDF\\venv\\Scripts\\python.exe worklist_teste.py [senha] [porta] [caminho_do_fdb]
+Uso: C:\\EcoPDF\\venv\\Scripts\\python.exe worklist_teste.py [senha] [porta] [caminho_do_fdb] [AAAA-MM-DD]
+Com uma data (ex.: 2026-10-29), devolve a agenda DAQUELE dia como se fosse hoje (so para teste).
 """
 
 import datetime
+import re
 import sys
 import unicodedata
 
@@ -19,9 +21,12 @@ from pydicom.uid import generate_uid
 from pynetdicom import AE, evt
 from pynetdicom.sop_class import ModalityWorklistInformationFind, Verification
 
-SENHA = sys.argv[1] if len(sys.argv) > 1 else "masterkey"
-PORTA = int(sys.argv[2]) if len(sys.argv) > 2 else 11113
-BANCO = sys.argv[3] if len(sys.argv) > 3 else r"C:\Medware LaudosFlex\BD\Clinicas.fdb"
+_DATAS = [a for a in sys.argv[1:] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", a)]
+_ARGS = [a for a in sys.argv[1:] if a not in _DATAS]
+SENHA = _ARGS[0] if len(_ARGS) > 0 else "masterkey"
+PORTA = int(_ARGS[1]) if len(_ARGS) > 1 else 11113
+BANCO = _ARGS[2] if len(_ARGS) > 2 else r"C:\Medware LaudosFlex\BD\Clinicas.fdb"
+DIA_TESTE = datetime.date.fromisoformat(_DATAS[0]) if _DATAS else None
 MAX_DIAS = 7
 
 
@@ -139,7 +144,7 @@ def montar(p, pedido):
     sps = Dataset()
     sps.Modality = "US"
     sps.ScheduledStationAETitle = ""
-    sps.ScheduledProcedureStepStartDate = p["dia"].strftime("%Y%m%d")
+    sps.ScheduledProcedureStepStartDate = (datetime.date.today() if DIA_TESTE else p["dia"]).strftime("%Y%m%d")
     sps.ScheduledProcedureStepStartTime = p["hora"].strftime("%H%M%S")
     sps.ScheduledPerformingPhysicianName = p["medico"][:64]
     sps.ScheduledProcedureStepDescription = " + ".join(p["procs"])[:64]
@@ -162,6 +167,8 @@ def ao_consultar(event):
     sps = pedido.get("ScheduledProcedureStepSequence")
     data_pedida = sps[0].get("ScheduledProcedureStepStartDate", "") if sps else ""
     ini, fim = intervalo(data_pedida)
+    if DIA_TESTE:
+        ini = fim = DIA_TESTE
     nome = filtro_texto(pedido.get("PatientName", ""))
     pid = filtro_texto(pedido.get("PatientID", ""))
     agora = datetime.datetime.now().strftime("%H:%M:%S")
@@ -189,11 +196,14 @@ def ao_consultar(event):
 
 
 def main():
+    dia = DIA_TESTE or datetime.date.today()
     try:
-        n = len(buscar(datetime.date.today(), datetime.date.today()))
+        n = len(buscar(dia, dia))
     except Exception as e:
         sys.exit(f"NAO consegui ler o Medware: {e}")
-    print(f"Medware lido: {n} paciente(s) hoje.")
+    if DIA_TESTE:
+        print(f"MODO TESTE: devolvendo a agenda de {dia:%d/%m/%Y} como se fosse hoje.")
+    print(f"Medware lido: {n} paciente(s) em {dia:%d/%m/%Y}.")
     ae = AE(ae_title="ECOPDF")
     ae.add_supported_context(ModalityWorklistInformationFind)
     ae.add_supported_context(Verification)
