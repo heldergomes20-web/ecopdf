@@ -423,7 +423,7 @@ async function salvar() {
 }
 // ---------------- impressao ----------------
 let imp = null;   // exame a imprimir (da tela do exame ou da lista)
-const DESCARTAVEL = ["Novo", "Folha ajustada", "Pendente", "Fora da pasta 2"];
+const DESCARTAVEL = ["Novo", "Folha ajustada", "Pendente", "Fora da pasta 2", "Finalizado"];
 function botaoDescartar() {
   const b = $("b-descartar"); b.dataset.conf = ""; b.classList.remove("alerta", "on"); b.disabled = false;
   if (ex.situacao === "Descartado") { b.style.display = ""; b.textContent = "Restaurar"; }
