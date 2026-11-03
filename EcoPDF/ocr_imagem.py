@@ -15,8 +15,6 @@ Como funciona:
 
 Aparelho com outra fonte ou outra resolucao simplesmente nao gera leitura.
 
-fonte_vivid.json NAO vai no GitHub nem no EcoPDF.zip (foi gerada de imagens de exames):
-copiar do pendrive para a pasta do EcoPDF, como o painel.ini. Sem ela, nada e lido da imagem.
 """
 
 import json
