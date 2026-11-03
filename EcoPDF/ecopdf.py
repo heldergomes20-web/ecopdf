@@ -1384,6 +1384,28 @@ def processar_pedidos(cfg):
     return erros
 
 
+def _dados_em_coluna(linhas):
+    """Laudo do eco do Medware: rotulos empilhados ('Paciente:', 'Data Nasc.:', 'Sexo:', ...)
+    e depois os valores, na mesma ordem. So paciente, nascimento e sexo (os primeiros)."""
+    for k, l in enumerate(linhas):
+        if not re.match(r"Paciente\s*:$", l):
+            continue
+        rotulos = []
+        j = k
+        while j < len(linhas) and linhas[j].endswith(":"):
+            rotulos.append(linhas[j][:-1].strip().lower())
+            j += 1
+        valores = []
+        while j < len(linhas) and not linhas[j].endswith(":") and len(valores) < len(rotulos):
+            valores.append(linhas[j])
+            j += 1
+        par = dict(zip(rotulos, valores))
+        achar = lambda rx: next((v for r, v in par.items() if re.match(rx, r)), "")
+        return {"paciente": " ".join(achar(r"paciente").split()),
+                "nasc": achar(r"data (de )?nasc"), "sexo": achar(r"sexo")}
+    return {"paciente": ""}
+
+
 def dados_do_laudo(arq, tipos):
     """Campos do quadro 'Dados do Paciente' do laudo, como estao escritos nele.
     Sem texto legivel, so o nome (tirado do nome do arquivo)."""
@@ -1408,6 +1430,8 @@ def dados_do_laudo(arq, tipos):
         "idade": campo("Idade"), "convenio": campo(r"Conv[eê]nio"),
         "solicitado": campo("Solicitado por"), "endereco": endereco,
     }
+    if not dados["paciente"] or dados["paciente"].endswith(":"):
+        dados.update(_dados_em_coluna(linhas))
     nome = dados["paciente"]
     if "," in nome:  # 'FERNANDES, LARISSA BRAGA' -> 'LARISSA BRAGA FERNANDES'
         sobrenome, _, resto = nome.partition(",")
