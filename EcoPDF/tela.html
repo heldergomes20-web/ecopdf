@@ -433,7 +433,8 @@ function botaoDescartar() {
 async function descartarOuRestaurar() {
   const b = $("b-descartar"), restaurar = ex.situacao === "Descartado";
   if (!restaurar && b.dataset.conf !== "1") {
-    b.dataset.conf = "1"; b.classList.add("alerta", "on"); b.textContent = "Confirmar: descartar";
+    b.dataset.conf = "1"; b.classList.add("alerta", "on"); b.textContent = ex.situacao === "Finalizado" ? "Confirmar: descartar e tirar o final da pasta 3" : "Confirmar: descartar";
+    if (ex.situacao === "Finalizado") aviso("Exame já finalizado: o PDF final sai da pasta 3. Para tê-lo de novo, reimprima o laudo no Medware pela PDF24 e reenvie as imagens do aparelho.", true);
     setTimeout(() => { if (b.dataset.conf === "1") botaoDescartar(); }, 5000);
     return;
   }
