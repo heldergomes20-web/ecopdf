@@ -5,6 +5,7 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 2026.11.03.1
 - Tela: a roda do mouse troca de imagem (antes dava zoom). Zoom pelos botoes "- zoom / + zoom" no canto da imagem ou Ctrl + roda.
 - Medidas: raiz da aorta, aorta ascendente, AE, DDVE, DSVE, septo e parede posterior em mm inteiros, sem casa decimal (arredondado).
+- Folha de imagens: a identificacao do aparelho (4 ultimos caracteres, cinza, no fim da barra "Pagina") nao saia com o Vivid S6, que nao manda o numero de serie. Agora usa o final do nome da estacao (VIVID_S6-008046 -> 8046).
 
 2026.11.03
 - Folha de imagens: o nome do paciente na barra cinza saía como "DATA NASC.:" com o laudo de eco do Medware (dados do paciente em coluna). Agora lê o nome certo. Exame ja finalizado com o nome errado: reimprimir o laudo no Medware (PDF24) refaz o final com o nome certo.
