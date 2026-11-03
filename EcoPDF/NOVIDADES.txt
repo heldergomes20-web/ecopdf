@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.03.1
+- Tela: a roda do mouse troca de imagem (antes dava zoom). Zoom pelos botoes "- zoom / + zoom" no canto da imagem ou Ctrl + roda.
+
 2026.11.03
 - Folha de imagens: o nome do paciente na barra cinza saía como "DATA NASC.:" com o laudo de eco do Medware (dados do paciente em coluna). Agora lê o nome certo. Exame ja finalizado com o nome errado: reimprimir o laudo no Medware (PDF24) refaz o final com o nome certo.
 - Medidas (Vivid S6): VE diastolico e sistolico (DDVE/DSVE) passam a ser reconhecidos. O "AE (diametro)" deixa de pegar o comprimento do AE no 4 camaras (superior-inferior), que nao e o diametro; fica em branco quando so houver essa medida.
