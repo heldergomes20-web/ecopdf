@@ -5,8 +5,10 @@ Fontes:
   - cabecalho DICOM de qualquer imagem: sexo, nascimento, idade, altura, peso, FC (se o
     aparelho mandar; nascimento/idade so se digitados no cadastro do aparelho)
   - relatorio estruturado (DICOM SR) que o aparelho manda ao encerrar o exame
-  - caixa de medida gravada na imagem (ocr_imagem.py), so quando o SR nao tem a medida
-    (03/11/2026: e′ do Vivid do Bessa e item de usuario, nao vai no SR); marcado na tela
+  - caixa de medida gravada na imagem (ocr_imagem.py): no eco so quando o SR nao tem a medida;
+    nas carotidas, velocidades pelo nome do vaso digitado na imagem (SR do Vivid vem com o
+    vaso errado); marcado na tela (03/11/2026: e′ do Vivid do Bessa e item de usuario e nao vai
+    no SR; nas carotidas o medico mede todos os vasos com o mesmo item)
 
 Regras (decididas com o Helder em 31/10/2026):
   - valor exibido = valor recebido; so converte unidade (cm->mm, m/s->cm/s...), nunca calcula
@@ -302,12 +304,23 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
                            "grupo": "",
                            "origem": origem})
     elif cat == "carotidas":
+        # No Vivid o medico costuma medir todos os vasos com o mesmo item do pacote
+        # ("Rt Prox ACC PS/ED") ou com a ferramenta PS/ED generica, e o SR fica com o vaso
+        # errado. Se alguma imagem tem o nome do vaso digitado (ACCD, ACID, AVE...), as
+        # velocidades vem so das imagens e o SR e ignorado para elas (Helder, 03/11/2026).
+        chaves_ocr = {k for k, _, _ in ocr or []
+                      if re.fullmatch(r"(acc|ace|aci_vps|aci_vdf|vert_vps)_[de]", k)}
         for suf, nome_lado, lado in LADOS:
             for chave, rotulo, un, padrao in CAROTIDAS:
-                v = _procurar(itens, padrao, un, lado)
+                origem = ""
+                if chaves_ocr and un == "cm/s":
+                    v = _do_ocr(ocr, chave + suf, un)
+                    origem = "imagem" if v is not None else ""
+                else:
+                    v = _procurar(itens, padrao, un, lado)
                 linhas.append({"chave": chave + suf, "rotulo": rotulo, "unidade": un,
                                "valor": "" if v is None else formatar(v, un),
-                               "grupo": "Lado " + nome_lado, "origem": ""})
+                               "grupo": "Lado " + nome_lado, "origem": origem})
     texto = "\n".join(f"{l['chave']}={l['valor']}" for l in linhas if l["valor"])
     return {"categoria": cat, "linhas": linhas, "texto": texto,
             "tem_sr": bool(srs), "n_medidas_sr": len(itens),

@@ -381,7 +381,7 @@ function painel() {
     if (l.grupo && l.grupo !== grupo) { grupo = l.grupo; h += `<div class="grp">${esc(grupo)}</div>`; }
     h += `<div class="lin"><span>${esc(l.rotulo)}${l.origem === "imagem" ? ` <span class="img-tag" title="Lido da caixa de medida gravada na imagem. Confira.">imagem</span>` : ""}</span>${l.valor ? `<b>${esc(l.valor)}${l.unidade ? " " + esc(l.unidade) : ""}</b>` : `<span class="branco">em branco</span>`}</div>`;
   }
-  if (m.n_imagem) h += `<p class="quieto pq" style="margin-top:10px"><span class="img-tag">imagem</span> = não veio no relatório do aparelho; lido da caixa de medida gravada na imagem. Confira antes de liberar o laudo.</p>`;
+  if (m.n_imagem) h += `<p class="quieto pq" style="margin-top:10px"><span class="img-tag">imagem</span> = lido da caixa de medida gravada na imagem${m.categoria === "carotidas" ? " (vaso pelo nome digitado na imagem: ACCD, ACID, ACED, AVD...)" : " (não veio no relatório do aparelho)"}. Confira antes de liberar o laudo.</p>`;
   h += `<p class="quieto pq" style="margin-top:10px">Em branco = não medido com a medida identificada do aparelho, ou valor duvidoso. Medida em branco não entra no texto copiado.</p>`;
   p.innerHTML = h;
   const b = $("b-copiar"); if (b) b.onclick = copiar;

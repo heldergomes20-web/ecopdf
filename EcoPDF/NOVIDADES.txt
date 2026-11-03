@@ -5,6 +5,7 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 2026.11.03.1
 - Tela: a roda do mouse troca de imagem (antes dava zoom). Zoom pelos botoes "- zoom / + zoom" no canto da imagem ou Ctrl + roda.
 - Medidas: raiz da aorta, aorta ascendente, AE, DDVE, DSVE, septo e parede posterior em mm inteiros, sem casa decimal (arredondado).
+- Medidas das carotidas (Vivid): as velocidades passam a vir da imagem, pelo nome do vaso digitado (ACCD, ACCE, ACID, ACIE, ACED, ACEE, AVD, AVE) e pela caixa PS/ED gravada na mesma imagem. Motivo: no Vivid o medico mede todos os vasos com a ferramenta PS/ED ou com o mesmo item "Rt Prox ACC", e o relatorio do aparelho guarda tudo como ACC direita (o painel mostrava como VPS ACC direita a velocidade de outro vaso, ex.: 113,3 que era da ACE esquerda). Mais de uma medida na mesma caixa: vale a ultima feita (maior numero). ED 0,00 (segundo cursor nao colocado) e ignorado. Imagem sem nome de vaso reconhecido nao entra; mesmo vaso com valores diferentes em duas imagens = em branco. Valor com etiqueta "imagem": conferir. Nomes por extenso (ex.: "art. vert. dir.") ainda nao sao reconhecidos.
 - Folha de imagens: a identificacao do aparelho (4 ultimos caracteres, cinza, no fim da barra "Pagina") nao saia com o Vivid S6, que nao manda o numero de serie. Agora usa o final do nome da estacao (VIVID_S6-008046 -> 8046).
 
 2026.11.03
