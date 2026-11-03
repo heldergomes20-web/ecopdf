@@ -24,6 +24,7 @@ from pathlib import Path
 import numpy as np
 
 AQUI = Path(__file__).resolve().parent
+VERSAO = 2           # muda quando a leitura muda (invalida o ocr.json de cada estudo)
 CLARO = 150          # borda da caixa (menor canal RGB)
 TINTA = 100          # pixel de letra
 DIST_MAX = 0.35      # pior letra aceita na linha (0 = identica a fonte)
@@ -44,13 +45,24 @@ ROTULOS = {
     "PPVED": "pp",
     "SIVD": "siv",
 }
+# nome do vaso digitado na imagem (texto amarelo) -> (vaso, lado)
+VASOS = {
+    "ACCD": ("acc", "_d"), "ACCE": ("acc", "_e"),
+    "ACID": ("aci", "_d"), "ACIE": ("aci", "_e"),
+    "ACED": ("ace", "_d"), "ACEE": ("ace", "_e"),
+    "AVD": ("vert", "_d"), "AVE": ("vert", "_e"),
+}
+# vaso -> (chave da velocidade de pico, chave da diastolica final ou None) em medidas.py
+CHAVES_VASO = {"acc": ("acc", None), "ace": ("ace", None),
+               "aci": ("aci_vps", "aci_vdf"), "vert": ("vert_vps", None)}
 UNIDADES = ("m/s2", "m/s", "cm/s", "cm2", "cm", "mm", "ml/m2", "ml", "ms", "mmHg", "%")
 
 _fonte = None
+_fonte_rotulo = []   # letras do texto amarelo digitado pelo medico (nome do vaso)
 
 
 def _carregar_fonte():
-    global _fonte
+    global _fonte, _fonte_rotulo
     if _fonte is None:
         arq = AQUI / "fonte_vivid.json"
         if not arq.exists():
@@ -62,6 +74,8 @@ def _carregar_fonte():
             for g in lista:
                 glifos.append((ch, np.asarray(g, dtype=np.float32) / 255.0))
         _fonte = (doc["altura"], doc["acima"], glifos)
+        _fonte_rotulo = [(ch, np.asarray(g, dtype=np.float32) / 255.0)
+                         for ch, lista in doc.get("rotulos", {}).items() for g in lista]
     return _fonte
 
 
@@ -170,7 +184,9 @@ def ler_linha(lin):
         letras.append([ch, d, espaco])
         ant = x
     if len(letras) > 2 and letras[1][2] and len(letras[0][0]) == 1:
-        letras[0][0], letras[0][1] = "#", 0.0
+        # '#2' = segunda medida da caixa; '#' se o numero nao for reconhecido
+        letras[0][0] = "#" + (letras[0][0] if letras[0][0].isdigit() and letras[0][1] <= DIST_MAX else "")
+        letras[0][1] = 0.0
     texto = "".join((" " if e else "") + ch for ch, _, e in letras)
     return texto, max((d for _, d, _ in letras), default=9.0)
 
@@ -185,7 +201,7 @@ _RX = re.compile(r"^(.*?)\s+(-?\d+(?:\.\d+)?)\s*(" + "|".join(re.escape(u) for u
 
 def interpretar(texto):
     """'# E´SEP 0.07 m/s' -> ('E´SEP', 'es', 0.07, 'm/s'); None se nao reconhecer."""
-    t = texto.lstrip("#").strip()
+    t = re.sub(r"^#\d?\s*", "", texto).strip()
     t = re.sub(r"(?<=[\d.])\s+(?=[\d.])", "", t)       # '1 1 2.1 1' -> '112.11'
     m = _RX.match(t)
     if not m:
@@ -217,14 +233,119 @@ def textos_da_imagem(arr):
     return saida
 
 
-def medidas_da_imagem(arr):
-    """[(chave, valor, unidade, rotulo)] reconhecidos na imagem."""
+# --------------------------------------------------------------------------
+# Carotidas: nome do vaso digitado + caixa PS/ED
+# --------------------------------------------------------------------------
+
+def _amarelo(arr):
+    """Intensidade (0-255) so dos pixels amarelos (texto digitado pelo medico)."""
+    a = arr.astype(np.int16)
+    m = np.minimum(a[..., 0], a[..., 1])
+    return np.where((a[..., 2] < 0.6 * m) & (m > 60), m, 0).astype(np.uint8)
+
+
+def _componentes(M):
+    """[(y0, y1, x0, x1)] das manchas 8-conectadas da mascara (x1/y1 exclusivos)."""
+    H, W = M.shape
+    vis = np.zeros(M.shape, bool)
     saida = []
-    for texto, pior in textos_da_imagem(arr):
+    for y, x in zip(*np.nonzero(M)):
+        if vis[y, x]:
+            continue
+        vis[y, x] = True
+        pilha, y0, y1, x0, x1 = [(y, x)], y, y, x, x
+        while pilha:
+            cy, cx = pilha.pop()
+            y0, y1, x0, x1 = min(y0, cy), max(y1, cy), min(x0, cx), max(x1, cx)
+            for ny in (cy - 1, cy, cy + 1):
+                for nx in (cx - 1, cx, cx + 1):
+                    if 0 <= ny < H and 0 <= nx < W and M[ny, nx] and not vis[ny, nx]:
+                        vis[ny, nx] = True
+                        pilha.append((ny, nx))
+        saida.append((int(y0), int(y1) + 1, int(x0), int(x1) + 1))
+    return saida
+
+
+def rotulos_da_imagem(arr):
+    """Palavras em amarelo lidas com seguranca (ex.: 'ACCD'), em qualquer posicao."""
+    if arr is None or arr.ndim != 3 or not _carregar_fonte() or not _fonte_rotulo:
+        return []
+    Y = _amarelo(arr)
+    M = Y > TINTA
+    if M.sum() > 60000:      # imagem cheia de amarelo (Doppler colorido): nao tenta
+        return []
+    letras = sorted((c for c in _componentes(M) if 8 <= c[1] - c[0] <= 15 and c[3] - c[2] <= 14),
+                    key=lambda c: c[2])
+    palavras = []
+    for c in letras:
+        for p in palavras:
+            u = p[-1]
+            if abs(u[0] - c[0]) <= 2 and abs(u[1] - c[1]) <= 2 and 0 <= c[2] - u[3] <= 5:
+                p.append(c)
+                break
+        else:
+            palavras.append([c])
+    saida = []
+    for p in palavras:
+        if len(p) < 2:
+            continue
+        texto, ok = "", True
+        for y0, y1, x0, x1 in p:
+            d, ch = _classificar(Y[y0:y1, x0:x1].astype(np.float32) / 255.0, _fonte_rotulo)
+            if d > DIST_MAX:
+                ok = False
+                break
+            texto += ch
+        if ok:
+            saida.append(texto)
+    return saida
+
+
+def _carotida(arr, linhas):
+    """[(chave, valor, 'cm/s', rotulo)] do vaso digitado na imagem, ou []."""
+    vasos = {VASOS[p] for p in rotulos_da_imagem(arr) if p in VASOS}
+    if len(vasos) != 1:
+        return []      # sem nome de vaso, ou dois nomes na mesma imagem: nao arrisca
+    vaso, lado = vasos.pop()
+    ps, ed, idx = [], [], 0
+    for texto, pior in linhas:
+        m = re.match(r"^#(\d?)", texto)
+        if m:
+            idx = int(m.group(1) or 0)
+        if pior > DIST_MAX:
+            continue
+        t = re.sub(r"^#\d?\s*", "", texto).strip()
+        t = re.sub(r"(?<=[\d.])\s+(?=[\d.])", "", t)
+        r = re.match(r"^([A-Za-z ]*?)\s*\b(PS|ED)\s+(-?\d+(?:\.\d+)?)\s*(cm/s|m/s)$", t)
+        if not r:
+            continue
+        v = abs(float(r.group(3))) * (100 if r.group(4) == "m/s" else 1)
+        if v == 0:
+            continue   # ED 0.00 = segundo cursor nao colocado
+        (ps if r.group(2) == "PS" else ed).append((idx, v))
+    k_ps, k_ed = CHAVES_VASO[vaso]
+    nome = next(n for n, vl in VASOS.items() if vl == (vaso, lado))
+    saida = []
+    # mais de uma medida na caixa: vale a ultima feita (maior numero)
+    if ps:
+        saida.append((k_ps + lado, max(ps)[1], "cm/s", nome + " PS"))
+    if ed and k_ed:
+        saida.append((k_ed + lado, max(ed)[1], "cm/s", nome + " ED"))
+    return saida
+
+
+def medidas_da_imagem(arr):
+    """[(chave, valor, unidade, rotulo)] reconhecidos na imagem: itens do eco pelo rotulo
+    da caixa; velocidades das carotidas pelo nome do vaso digitado na imagem."""
+    saida = []
+    linhas = textos_da_imagem(arr)
+    for texto, pior in linhas:
         if pior > DIST_MAX:
             continue
         r = interpretar(texto)
         if r:
             rotulo, chave, valor, un = r
             saida.append((chave, valor, un, rotulo))
+    if any(re.search(r"\b(PS|ED)\s+-?\d", t) for t, _ in linhas):
+        saida.extend(_carotida(arr, linhas))
     return saida

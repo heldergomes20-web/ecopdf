@@ -290,7 +290,8 @@ def _ocr_estudo(pasta, itens, ep):
             st = arq.stat()
         except OSError:
             continue
-        marca = f"{st.st_size}-{int(st.st_mtime)}"
+        # versao da leitura na marca: leitor novo rele as imagens ja guardadas no cache
+        marca = f"{st.st_size}-{int(st.st_mtime)}-{ocr_imagem.VERSAO}"
         c = cache.get(arq.name)
         if not c or c.get("marca") != marca:
             try:
@@ -344,7 +345,7 @@ def detalhe(pasta, tipo, ep, cfg):
         "por_pagina": max(1, cfg["colunas"]) * max(1, cfg["linhas"]),
         "imagens": imagens,
         "medidas": med.medidas_do_exame(
-            tipo, ref, srs, _ocr_estudo(pasta, itens, ep) if med.categoria(tipo) == "eco" else None),
+            tipo, ref, srs, _ocr_estudo(pasta, itens, ep) if med.categoria(tipo) in ("eco", "carotidas") else None),
     }
 
 
