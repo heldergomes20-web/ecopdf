@@ -5,6 +5,8 @@ Fontes:
   - cabecalho DICOM de qualquer imagem: sexo, nascimento, idade, altura, peso, FC (se o
     aparelho mandar; nascimento/idade so se digitados no cadastro do aparelho)
   - relatorio estruturado (DICOM SR) que o aparelho manda ao encerrar o exame
+  - caixa de medida gravada na imagem (ocr_imagem.py), so quando o SR nao tem a medida
+    (03/11/2026: e′ do Vivid do Bessa e item de usuario, nao vai no SR); marcado na tela
 
 Regras (decididas com o Helder em 31/10/2026):
   - valor exibido = valor recebido; so converte unidade (cm->mm, m/s->cm/s...), nunca calcula
@@ -248,9 +250,22 @@ def formatar(valor, unidade):
     return s.replace(".", ",")
 
 
-def medidas_do_exame(tipo, ref, srs):
-    """{'categoria', 'linhas': [{chave, rotulo, unidade, valor (texto ou '')}], 'texto',
-        'fonte'} para o tipo do exame. ref = dataset de uma imagem; srs = datasets SR."""
+def _do_ocr(ocr, chave, unidade):
+    """Valor lido das imagens para a chave; None se nao houver ou se discordarem."""
+    vals = []
+    for k, valor, un in ocr or []:
+        if k != chave:
+            continue
+        v = _converter(valor, un, unidade)
+        if v is not None:
+            vals.append(abs(v) if unidade in ("cm/s", "m/s") else v)
+    return vals[0] if vals and len({round(v, 3) for v in vals}) == 1 else None
+
+
+def medidas_do_exame(tipo, ref, srs, ocr=None):
+    """{'categoria', 'linhas': [{chave, rotulo, unidade, valor (texto ou ''), origem}],
+        'texto', ...} para o tipo do exame. ref = dataset de uma imagem; srs = datasets SR;
+        ocr = [(chave, valor, unidade)] lidos das caixas de medida das imagens."""
     cat = categoria(tipo)
     itens = []
     for sr in srs:
@@ -263,20 +278,26 @@ def medidas_do_exame(tipo, ref, srs):
         cab = _do_cabecalho(ref)
         for chave, rotulo, un, padrao in ECO:
             v = cab.get(chave)
+            origem = ""
             if v is None and padrao:
                 v = _procurar(itens, padrao, un)
+            if v is None and padrao and ocr:
+                v = _do_ocr(ocr, chave, un)
+                origem = "imagem" if v is not None else ""
             linhas.append({"chave": chave, "rotulo": rotulo, "unidade": un,
-                           "valor": "" if v is None else formatar(v, un), "grupo": ""})
+                           "valor": "" if v is None else formatar(v, un), "grupo": "",
+                           "origem": origem})
     elif cat == "carotidas":
         for suf, nome_lado, lado in LADOS:
             for chave, rotulo, un, padrao in CAROTIDAS:
                 v = _procurar(itens, padrao, un, lado)
                 linhas.append({"chave": chave + suf, "rotulo": rotulo, "unidade": un,
                                "valor": "" if v is None else formatar(v, un),
-                               "grupo": "Lado " + nome_lado})
+                               "grupo": "Lado " + nome_lado, "origem": ""})
     texto = "\n".join(f"{l['chave']}={l['valor']}" for l in linhas if l["valor"])
     return {"categoria": cat, "linhas": linhas, "texto": texto,
-            "tem_sr": bool(srs), "n_medidas_sr": len(itens)}
+            "tem_sr": bool(srs), "n_medidas_sr": len(itens),
+            "n_imagem": sum(1 for l in linhas if l["origem"] == "imagem")}
 
 
 def eh_sr(ds):
