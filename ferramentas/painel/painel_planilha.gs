@@ -3,6 +3,8 @@
  *
  * Cada EcoPDF manda o resumo do PC as 9h e as 15h (doPost). Uma linha por PC, sempre
  * sobrescrita. A sala vem da aba "PCs" (nome do computador -> sala), preenchida uma vez.
+ * Pode tambem escrever a sala direto na coluna Sala da aba Salas: ela e gravada na aba PCs
+ * (onEdit) e nao volta mais para "sem sala".
  * Alerta por e-mail as ~9h45 e ~15h45, so quando alguma sala nao esta OK.
  *
  * Instalar: Extensoes > Apps Script > colar este arquivo > Salvar > recarregar a planilha
@@ -69,7 +71,8 @@ function doPost(e) {
     var ultimaImg = img === '' ? 'nenhuma' : fmt(new Date(agora.getTime() - img * 60000));
 
     var v = {};
-    v['Sala'] = salaDe_(pc);  // texto (formula daria #ERROR! em planilha pt-BR); conferir_ atualiza
+    // texto (formula daria #ERROR! em planilha pt-BR); sala escrita a mao na aba Salas e preservada
+    v['Sala'] = salaOuManual_(pc, i < 0 ? '' : antes[col('Sala') - 1], mapaSalas_());
     v['Último envio'] = agora;
     v['PC'] = pc;
     v['Versão'] = limpo(d.versao, 20);
@@ -175,7 +178,7 @@ function conferir_() {
   var mapa = mapaSalas_();  // sala escrita na aba PCs aparece na proxima conferencia (ate 1 h)
   sh.getRange(LIN0, col('Sala'), n, 1).setValues(dados.map(function (r) {
     var pc = String(r[col('PC') - 1] || '');
-    return [pc ? (mapa[pc] || 'sem sala') : r[col('Sala') - 1]];
+    return [pc ? salaOuManual_(pc, r[col('Sala') - 1], mapa) : r[col('Sala') - 1]];
   }));
   var modelos = JSON.parse(PropertiesService.getScriptProperties().getProperty('MODELOS') || '{}');
   var saida = dados.map(function (r) {
@@ -384,4 +387,47 @@ function mapaSalas_() {
   return m;
 }
 function salaDe_(pc) { return mapaSalas_()[String(pc).trim()] || 'sem sala'; }
+
+/** Sala da aba PCs; se o PC nao estiver la mas a celula Sala da aba Salas foi escrita a mao,
+ *  adota esse texto e grava na aba PCs (fonte unica). So vira "sem sala" se nao houver nenhum. */
+function salaOuManual_(pc, atual, mapa) {
+  var k = String(pc).trim(), t = String(atual || '').trim();
+  if (mapa[k]) return mapa[k];
+  if (t && t !== 'sem sala') { gravarSala_(k, t); mapa[k] = t; return t; }
+  return 'sem sala';
+}
+
+/** Cria ou atualiza a linha do PC na aba PCs (coluna A = nome do computador, B = sala). */
+function gravarSala_(pc, sala) {
+  var k = String(pc).trim();
+  if (!k) return;
+  var ss = SpreadsheetApp.getActive();
+  var p = ss.getSheetByName(ABA_PCS);
+  if (!p) {
+    p = ss.insertSheet(ABA_PCS);
+    p.getRange('A1:C1').setValues([['Nome do computador', 'Sala', 'Observação']]).setFontWeight('bold');
+    p.setFrozenRows(1);
+  }
+  var n = p.getLastRow() - 1;
+  var nomes = n > 0 ? p.getRange(2, 1, n, 1).getValues().map(function (r) { return String(r[0]).trim(); }) : [];
+  var i = nomes.indexOf(k);
+  if (i >= 0) p.getRange(i + 2, 2).setValue(sala);
+  else p.appendRow([k, sala, 'gravado pela aba Salas']);
+}
+
+/** Edicao manual da coluna Sala na aba Salas: grava na aba PCs para o proximo envio nao apagar. */
+function onEdit(e) {
+  if (!e || !e.range) return;
+  var sh = e.range.getSheet();
+  if (sh.getName() !== ABA) return;
+  var c = col('Sala');
+  if (e.range.getColumn() > c || e.range.getLastColumn() < c || e.range.getLastRow() < LIN0) return;
+  var r0 = Math.max(LIN0, e.range.getRow()), r1 = e.range.getLastRow();
+  var salas = sh.getRange(r0, c, r1 - r0 + 1, 1).getValues();
+  var pcs = sh.getRange(r0, col('PC'), r1 - r0 + 1, 1).getValues();
+  for (var j = 0; j < salas.length; j++) {
+    var pc = String(pcs[j][0] || '').trim(), sala = String(salas[j][0] || '').trim();
+    if (pc && sala && sala !== 'sem sala') gravarSala_(pc, sala);
+  }
+}
 function ipPrincipal(s) { return String(s).split(',')[0].trim(); }
