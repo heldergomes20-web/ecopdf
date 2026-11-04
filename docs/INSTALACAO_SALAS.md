@@ -167,18 +167,18 @@ Medware ──imprime na PDF24──► pasta 0 ──────►│  renome
 | | Tambauzinho sala 3 | Tambauzinho sala 6 | Tambauzinho sala 8 |
 | --- | --- | --- | --- |
 | Aparelho | GE Vivid S6 (mesmo modelo do Bessa) | Philips Affiniti 50G | GE Vivid T8 |
-| Sondas | 6S (eco infantil → Ecocardiograma), 4C (Eco Fetal) | S4-2 (eco), L12-3 / "L12-3ERGO" (carótidas) | a confirmar no exame teste |
-| Tecla de envio | Store | **Acquire** (mesma tecla para loop e foto; loops descartados no PC) | Store (menus do T8 diferem do S6) |
-| Menus de rede | iguais ao Bessa (esperado) | Utilities → Setups → Rede/DICOM (não conferido) | não conferidos |
+| Sondas | 6S (eco infantil → Ecocardiograma), 4C (Eco Fetal) | S4-2 (eco), L12-3 / "L12-3ERGO" (carótidas) | T8 não manda nome da sonda; tipo pela frequência (eco 3500 kHz, carótidas 12000 kHz), funcionou |
+| Tecla de envio | Store | **Acquire** (mesma tecla para loop e foto; loops descartados no PC) | Store (confirmado 04/11) |
+| Menus de rede | iguais ao Bessa (esperado) | Utilities → Setups → Rede/DICOM (não conferido) | **iguais ao S6** (Config → Conectividade → Dispositivos / Dataflow). Dicom storage antigo apontava para o IP velho do PC: corrigir |
 | Tipo de exame | Frequência não separa 6S de 4C: fetal depende da descrição ECO FETAL da worklist. Sem worklist, eco e fetal do mesmo dia podem cair juntos | Se o Affiniti mandar o nome da sonda, o tipo sai por `[tipos]`; se não, pela frequência | Idem |
 | Laudo | Eco infantil pelo Medware; fetal de outra plataforma, impresso na PDF24 (reconhecido pelo conteúdo) | Medware | Medware |
-| OCR (e′, carótidas) | Deve funcionar (mesma fonte GE), conferir | **Não funciona**: `fonte_vivid.json` é da fonte GE. e′ e velocidades só pelo SR, se vierem | Fonte do T8 pode diferir; conferir |
-| Marca na folha | StationName (S6 não manda série) | DeviceSerialNumber, se vier | DeviceSerialNumber ou StationName |
+| OCR (e′, carótidas) | Deve funcionar (mesma fonte GE), conferir | **Não funciona**: `fonte_vivid.json` é da fonte GE. e′ e velocidades só pelo SR, se vierem | Caixa, fonte e nome do vaso (branco) diferentes do S6: leitura própria (`fonte_t8.json`, 2026.11.04.1) com conferência; ainda com poucas amostras, melhora a cada exame enviado |
+| Marca na folha | StationName (S6 não manda série) | DeviceSerialNumber, se vier | StationName (VT8-…; T8 não manda série) |
 
 ### 2.5 O que ainda não se sabe (descobrir na instalação)
 
 **Tambauzinho (as três salas)**
-- Onde fica o banco do Medware: num servidor da unidade ou em cada PC. Define `MEDWARE_SERVIDORES` e a regra de firewall da porta 3050 no servidor. Hoje cada unidade tem o seu banco (Bessa confirmado).
+- Banco do Medware: **num servidor da unidade** (PC "Servidor", porta 3050 aberta; confirmado 04/11). Desde a 2026.11.04 o EcoPDF acha sozinho pelo `C:\Medware LaudosFlex\Bd.xml` do PC; `MEDWARE_SERVIDORES` no painel.ini só para forçar.
 - Lista da unidade nas três salas: o paciente só sai da lista na sala que recebeu as imagens; nas outras, até Excluir ou meia-noite. O seletor de médico reduz isso.
 - Laudar numa sala um exame cujas imagens estão em outra: não implementado. Se for raro, laudar no PC da sala do aparelho.
 - Impressora de cada sala e porta (USB ou Wi-Fi/WSD). Em WSD o Windows pode recusar a "EcoPDF Foto"; nesse caso o EcoPDF imprime tudo na padrão (sem papel foto separado) e a coluna do painel fica vazia.
@@ -196,7 +196,17 @@ Medware ──imprime na PDF24──► pasta 0 ──────►│  renome
 ### 2.6 Ordem sugerida
 
 1. **Sala 3 (Vivid S6)**: mesmo aparelho do Bessa; valida o método e o Medware de Tambauzinho. Ponto novo: separação fetal x infantil pela worklist.
-2. **Sala 8 (Vivid T8)**: GE com menus diferentes; confirma sondas e fonte.
+2. **Sala 8 (Vivid T8)**: instalada em 04/11/2026 (ver 2.7).
 3. **Sala 6 (Affiniti 50G)**: maior incerteza (Philips, Acquire, loops, OCR inexistente).
 
 Cada sala instalada vira referência: o que for confirmado entra no Manual de instalação e na ficha da sala no Registro das máquinas, e este arquivo é atualizado só se o método mudar.
+
+### 2.7 Sala 8 de Tambauzinho (Vivid T8), instalada em 04/11/2026: o que foi diferente
+
+- PC estava em DHCP: IP fixado no Windows (o Vivid tinha o IP antigo no Dicom storage; corrigido).
+- Worklist pelo Bd.xml, sem linha no painel.ini; lista apareceu no aparelho na primeira tentativa.
+- Relógio do Vivid estava errado: corrigir antes do exame teste.
+- Menus do T8 iguais aos do S6; Dataflow padrão e P1 como no Bessa.
+- Assinatura feita no PC da sala (Python instalado com `winget install Python.Python.3.13`).
+- e′ e velocidades das carótidas: o SR do T8 não traz e′ e grava todas as carótidas no mesmo vaso; vêm da imagem (2026.11.04.1). PS/ED genérico não vai para o SR: aparece para Confirmar.
+- Canal: começou em teste; passou para geral com a 2026.11.04.1 (Latest).
