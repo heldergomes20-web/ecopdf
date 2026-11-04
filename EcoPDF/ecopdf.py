@@ -1732,6 +1732,20 @@ def atalho_laudos_prontos(cfg):
         log.warning("Nao consegui criar o atalho Laudos prontos")
 
 
+def vigiar_atualizacao(parar):
+    """Atualizacao automatica, parte sem administrador: 3 min depois de ligar e a cada 2 h baixa e
+    confere a versao nova do canal (atualizador.preparar). Quem instala sao as tarefas agendadas
+    "EcoPDF Atualizar 6h" e "EcoPDF Atualizar ao ligar", nunca durante o expediente."""
+    parar.wait(180)
+    while not parar.is_set():
+        try:
+            import atualizador
+            log.info("Atualizacao automatica: %s", atualizador.preparar())
+        except Exception:
+            log.exception("Atualizacao automatica: erro ao procurar versao nova")
+        parar.wait(2 * 3600)
+
+
 def main():
     cfg = carregar_config(BASE / "config.ini")
     configurar_log(cfg["pasta_log"])
@@ -1767,6 +1781,8 @@ def main():
         painel.iniciar(cfg, sys.modules[__name__], parar)
     except Exception:
         log.exception("Painel das salas nao iniciou (o resto continua funcionando)")
+
+    threading.Thread(target=vigiar_atualizacao, args=(parar,), daemon=True, name="atualizacao").start()
 
     log.info("EcoPDF %s ouvindo: AE=%s porta=%d | fotos em %s | laudos em %s -> %s",
              versao(), cfg["ae_title"], cfg["porta"], cfg["pasta_imagens"],

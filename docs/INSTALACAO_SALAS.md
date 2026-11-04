@@ -47,7 +47,7 @@ Medware ──imprime na PDF24──► pasta 0 ──────►│  renome
 | Canal | **geral** desde 03/11 (`atualizar_agora.bat geral`). Os colegas passam a usar o Bessa; ele deixou de ser o PC piloto |
 | Próximo piloto | O PC onde o Helder for testar recebe `atualizar_agora.bat teste` |
 | Como atualizar | Clicar no número da versão na tela → "Atualizar EcoPDF". Ou `C:\EcoPDF\atualizar_agora.bat`. Volta: `voltar.bat` (e volta automática se a porta DICOM não abrir em 60 s) |
-| Atualização automática | Ainda não existe |
+| Atualização automática | A partir da 2026.11.04: tarefas `EcoPDF Atualizar 6h` e `EcoPDF Atualizar ao ligar` (criadas pelo instalar.bat). Desliga no PC com `AUTO = nao` no canal.ini |
 
 ### 1.4 Vivid S6
 

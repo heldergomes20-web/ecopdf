@@ -231,7 +231,7 @@ async function carregarLista() {
     const r = await fetch("/api/exames"); const d = await r.json();
     exames = d.exames || [];
     laudosSemImg = d.laudos_sem_imagens || [];
-    $("atualizado").textContent = `Atualizado ${d.agora} · atualiza sozinho`; $("b-versao").textContent = `EcoPDF ${d.versao}`;
+    $("atualizado").textContent = `Lista atualizada ${d.agora} (sozinha)`; $("b-versao").textContent = `EcoPDF ${d.versao}`;
     $("b-tudo").textContent = `${Math.round((d.dias_guardados || 180) / 30)} meses (tudo)`;
     desenharLista();
   } catch (e) { $("atualizado").textContent = "Sem conexão com o EcoPDF (ele está rodando?)"; }
