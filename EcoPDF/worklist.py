@@ -5,8 +5,10 @@ O aparelho consulta (C-FIND) o mesmo AE/porta das imagens. A cada consulta o Eco
 banco do Medware (Firebird; nunca grava) e devolve os pacientes do dia, um por paciente.
 Sem polling: encaixe aparece na proxima consulta.
 
-Onde fica o banco: MEDWARE_SERVIDORES (config.ini ou painel.ini), em ordem; o primeiro que
-responder e usado (127.0.0.1 = este PC e o servidor do Medware). Cada item pode ser
+Onde fica o banco: MEDWARE_SERVIDORES no painel.ini, se houver. Sem ele, o EcoPDF le o
+C:\\Medware LaudosFlex\\Bd.xml deste PC (o mesmo arquivo que o Medware usa: NomeServidor,
+CaminhoBanco, Porta) e tenta esse servidor primeiro; depois o MEDWARE_SERVIDORES do config.ini
+(127.0.0.1 = banco neste PC). O primeiro que responder e usado. Cada item pode ser
 "servidor" ou "servidor:C:\\caminho\\Clinicas.fdb". Senha: MEDWARE_SENHA no painel.ini
 (fora do zip publico); sem ela, a padrao do Firebird.
 Ultima consulta e ultimo erro vao para log/worklist.json (tela/painel). Nada de paciente
@@ -15,6 +17,8 @@ vai para o painel: so hora, IP do aparelho e quantidade.
 
 import datetime
 import json
+import os
+import xml.etree.ElementTree as ET
 import logging
 import socket
 import threading
@@ -27,6 +31,7 @@ from pydicom.uid import generate_uid
 log = logging.getLogger("ecopdf")
 
 BANCO_PADRAO = r"C:\Medware LaudosFlex\BD\Clinicas.fdb"
+BDXML_MEDWARE = r"C:\Medware LaudosFlex\Bd.xml"
 SENHA_PADRAO_FIREBIRD = "masterkey"
 PORTA_FIREBIRD = 3050
 MAX_DIAS = 7
@@ -36,10 +41,43 @@ _SERVIDOR_OK = {"item": None, "em": 0.0}   # ultimo servidor que respondeu (cach
 
 # ---------------------------------------------------------------- configuracao
 
+def ler_bdxml(caminho=BDXML_MEDWARE):
+    """Servidor do Medware lido do Bd.xml deste PC: ("servidor:caminho", porta) ou (None, None)."""
+    try:
+        raiz = ET.parse(caminho).getroot()
+    except (OSError, ET.ParseError):
+        return None, None
+    nome = (raiz.findtext("NomeServidor") or "").strip()
+    banco = (raiz.findtext("CaminhoBanco") or "").strip()
+    try:
+        porta = int((raiz.findtext("Porta") or "").strip() or PORTA_FIREBIRD)
+    except ValueError:
+        porta = PORTA_FIREBIRD
+    if not nome:
+        return None, None
+    if nome.lower() in ("localhost", "127.0.0.1", socket.gethostname().lower(),
+                        os.environ.get("COMPUTERNAME", "").lower()):
+        nome = "127.0.0.1"
+    return (f"{nome}:{banco}" if banco else nome), porta
+
+
 def configurar(cfg, painel_ini):
     """Completa cfg com as chaves da worklist. painel_ini(chave) -> '' se nao houver."""
-    servidores = painel_ini("MEDWARE_SERVIDORES") or cfg.get("medware_servidores_txt", "") or "127.0.0.1"
-    cfg["medware_servidores"] = [s.strip() for s in servidores.split(",") if s.strip()]
+    servidores = painel_ini("MEDWARE_SERVIDORES")
+    cfg["medware_origem"] = "painel.ini"
+    if not servidores:
+        item, porta = ler_bdxml(BDXML_MEDWARE)
+        extra = cfg.get("medware_servidores_txt", "") or "127.0.0.1"
+        servidores = f"{item}, {extra}" if item else extra
+        cfg["medware_origem"] = "Bd.xml do Medware" if item else "config.ini"
+        if porta:
+            cfg["medware_porta"] = porta
+    lista = []
+    for s in servidores.split(","):
+        s = s.strip()
+        if s and s.lower() not in [x.lower() for x in lista]:
+            lista.append(s)
+    cfg["medware_servidores"] = lista
     cfg["medware_senha"] = painel_ini("MEDWARE_SENHA") or SENHA_PADRAO_FIREBIRD
     cfg.setdefault("medware_banco", BANCO_PADRAO)
     return cfg
@@ -56,9 +94,9 @@ def _alvos(cfg):
         yield item, host, banco
 
 
-def _porta_responde(host, segundos=2.0):
+def _porta_responde(host, porta=PORTA_FIREBIRD, segundos=2.0):
     try:
-        with socket.create_connection((host, PORTA_FIREBIRD), timeout=segundos):
+        with socket.create_connection((host, porta), timeout=segundos):
             return True
     except OSError:
         return False
@@ -72,12 +110,13 @@ def _conectar(cfg):
     if ok and time.time() - _SERVIDOR_OK["em"] < 600:
         alvos.sort(key=lambda a: a[0] != ok)
     erros = []
+    porta = cfg.get("medware_porta") or PORTA_FIREBIRD
     for item, host, banco in alvos:
-        if not _porta_responde(host):
-            erros.append(f"{host}: sem resposta na porta {PORTA_FIREBIRD}")
+        if not _porta_responde(host, porta):
+            erros.append(f"{host}: sem resposta na porta {porta}")
             continue
         try:
-            con = firebirdsql.connect(host=host, port=PORTA_FIREBIRD, database=banco, user="SYSDBA",
+            con = firebirdsql.connect(host=host, port=porta, database=banco, user="SYSDBA",
                                       password=cfg["medware_senha"], charset="WIN1252", timeout=10)
             _SERVIDOR_OK.update(item=item, em=time.time())
             return con, item

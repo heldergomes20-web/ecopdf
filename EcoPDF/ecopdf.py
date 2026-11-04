@@ -1797,7 +1797,8 @@ def main():
             worklist.configurar(cfg, _painel_ini)
             ae.add_supported_context(ModalityWorklistInformationFind)
             handlers.append((evt.EVT_C_FIND, worklist.on_find, [cfg]))
-            log.info("Lista de pacientes (worklist) ligada: Medware em %s", ", ".join(cfg["medware_servidores"]))
+            log.info("Lista de pacientes (worklist) ligada: Medware em %s (de %s)", ", ".join(cfg["medware_servidores"]),
+                     cfg.get("medware_origem", "?"))
         except Exception:
             log.exception("Lista de pacientes (worklist) nao iniciou (o resto continua funcionando)")
     try:
