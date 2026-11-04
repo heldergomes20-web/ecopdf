@@ -15,6 +15,11 @@ Como funciona:
 
 Aparelho com outra fonte ou outra resolucao simplesmente nao gera leitura.
 
+Vivid T8 (sala 8 de Tambauzinho, 04/11/2026): caixa com borda cinza e fundo cinza escuro,
+outra fonte (fonte_t8.json) e nome do vaso digitado em BRANCO. A leitura do T8 sai com chaves
+"t8_..." e so vale depois de conferida em medidas.py (e′ septal + lateral contra o E′ med da
+caixa; velocidades das carotidas contra os valores do SR). Ver medidas._validar_t8.
+
 """
 
 import json
@@ -24,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 AQUI = Path(__file__).resolve().parent
-VERSAO = 3           # muda quando a leitura muda (invalida o ocr.json de cada estudo)
+VERSAO = 4           # muda quando a leitura muda (invalida o ocr.json de cada estudo)
 CLARO = 150          # borda da caixa (menor canal RGB)
 TINTA = 100          # pixel de letra
 DIST_MAX = 0.35      # pior letra aceita na linha (0 = identica a fonte)
@@ -162,10 +167,10 @@ def _classificar(g, glifos):
     return melhor
 
 
-def ler_linha(lin):
+def ler_linha(lin, fonte=None):
     """(texto, pior distancia) de uma linha recortada da caixa. O numero colorido do
     inicio (ordem da medida na caixa) nao conta para a pior distancia e vira '#'."""
-    altura, acima, glifos = _carregar_fonte()
+    altura, acima, glifos = fonte or _carregar_fonte()
     win = _janela(lin, altura, acima)
     if win is None:
         return "", 9.0
@@ -196,10 +201,10 @@ def ler_linha(lin):
 # --------------------------------------------------------------------------
 
 _RX = re.compile(r"^(.*?)\s+(-?\d+(?:\.\d+)?)\s*(" + "|".join(re.escape(u) for u in UNIDADES)
-                 + r")?$")
+                 + r")?$", re.I)
 
 
-def interpretar(texto):
+def interpretar(texto, rotulos=ROTULOS):
     """'# E´SEP 0.07 m/s' -> ('E´SEP', 'es', 0.07, 'm/s'); None se nao reconhecer."""
     t = re.sub(r"^#\d?\s*", "", texto).strip()
     t = re.sub(r"(?<=[\d.])\s+(?=[\d.])", "", t)       # '1 1 2.1 1' -> '112.11'
@@ -207,7 +212,7 @@ def interpretar(texto):
     if not m:
         return None
     rotulo, num, un = m.group(1).strip(), m.group(2), m.group(3) or ""
-    chave = ROTULOS.get(re.sub(r"[\s.´]", "", rotulo).upper())
+    chave = rotulos.get(re.sub(r"[\s.´'′]", "", rotulo).upper())
     if not chave:
         return None
     try:
@@ -299,19 +304,20 @@ MEDIA_VASO = 0.5    # 2a tentativa: distancia media por letra aceita para um nom
 MARGEM_VASO = 0.3   # ... e o 2o nome mais parecido tem de ficar ao menos isto mais longe
 
 
-def _custo(g, letras, fonte):
+def _custo(g, letras, fonte, dist=None):
     """Soma das distancias de g (mancha) lida como a sequencia exata de letras."""
+    dist = dist or _dist
     g = _aparar(g)
     if g.shape[1] == 0:
         return 9.0 * len(letras)
     if len(letras) == 1:
-        ds = [_dist(g, t) for ch, t in fonte if ch == letras and abs(t.shape[1] - g.shape[1]) <= 1]
+        ds = [dist(g, t) for ch, t in fonte if ch == letras and abs(t.shape[1] - g.shape[1]) <= 1]
         return min(ds) if ds else 9.0
-    return min((_custo(g[:, :c], letras[0], fonte) + _custo(g[:, c:], letras[1:], fonte)
+    return min((_custo(g[:, :c], letras[0], fonte, dist) + _custo(g[:, c:], letras[1:], fonte, dist)
                 for c in range(2, g.shape[1] - 1)), default=9.0 * len(letras))
 
 
-def _vaso_da_palavra(manchas, fonte):
+def _vaso_da_palavra(manchas, fonte, dist=None):
     """Nome de vaso mais parecido com as manchas (cada uma com 1 a 3 letras), ou None.
     Para letra desenhada um pouco diferente (o aparelho suaviza a borda conforme a
     posicao; visto em 03/11). Lado D x E: so aceita com folga sobre o 2o nome."""
@@ -323,7 +329,7 @@ def _vaso_da_palavra(manchas, fonte):
             if i == len(manchas):
                 return 0.0 if j == len(nome) else 99.0
             if (i, j) not in memo:
-                memo[i, j] = min((_custo(manchas[i], nome[j:j + k], fonte) + f(i + 1, j + k)
+                memo[i, j] = min((_custo(manchas[i], nome[j:j + k], fonte, dist) + f(i + 1, j + k)
                                   for k in (1, 2, 3) if j + k <= len(nome)), default=99.0)
             return memo[i, j]
         custos.append((f(0, 0), nome))
@@ -372,9 +378,11 @@ def rotulos_da_imagem(arr):
     return saida
 
 
-def _carotida(arr, linhas):
+def _carotida(arr, linhas, palavras=None, prefixo=""):
     """[(chave, valor, 'cm/s', rotulo)] do vaso digitado na imagem, ou []."""
-    vasos = {VASOS[p] for p in rotulos_da_imagem(arr) if p in VASOS}
+    if palavras is None:
+        palavras = rotulos_da_imagem(arr)
+    vasos = {VASOS[p] for p in palavras if p in VASOS}
     if len(vasos) != 1:
         return []      # sem nome de vaso, ou dois nomes na mesma imagem: nao arrisca
     vaso, lado = vasos.pop()
@@ -399,15 +407,161 @@ def _carotida(arr, linhas):
     saida = []
     # mais de uma medida na caixa: vale a ultima feita (maior numero)
     if ps:
-        saida.append((k_ps + lado, max(ps)[1], "cm/s", nome + " PS"))
+        saida.append((prefixo + k_ps + lado, max(ps)[1], "cm/s", nome + " PS"))
     if ed and k_ed:
-        saida.append((k_ed + lado, max(ed)[1], "cm/s", nome + " ED"))
+        saida.append((prefixo + k_ed + lado, max(ed)[1], "cm/s", nome + " ED"))
     return saida
 
 
-def medidas_da_imagem(arr):
+# --------------------------------------------------------------------------
+# GE Vivid T8 (04/11/2026)
+# --------------------------------------------------------------------------
+
+T8_BORDA = (95, 155)     # cinza da borda da caixa (menor canal RGB)
+T8_FUNDO = (10, 50)      # mediana do fundo cinza escuro
+T8_BRANCO = 140          # nome do vaso digitado (branco)
+ALTURA_VASO_T8 = 12
+# rotulos do T8 usados (o resto vem do SR): e′ septal, lateral e a media que o aparelho calcula
+ROTULOS_T8 = {"ES": "t8_es", "EL": "t8_el", "EMED": "t8_em"}
+
+_fonte_t8 = None
+
+
+def _carregar_fonte_t8():
+    """(caixa, vaso): caixa = (altura, acima, glifos); vaso = [(letra, glifo)]. False sem arquivo."""
+    global _fonte_t8
+    if _fonte_t8 is None:
+        arq = AQUI / "fonte_t8.json"
+        if not arq.exists():
+            _fonte_t8 = False
+            return _fonte_t8
+        doc = json.loads(arq.read_text(encoding="utf-8"))
+        glifos = [(ch, np.asarray(g, dtype=np.float32) / 255.0)
+                  for ch, lista in doc["glifos"].items() for g in lista]
+        vaso = [(ch, np.asarray(g, dtype=np.float32) / 255.0)
+                for ch, lista in doc.get("rotulos", {}).items() for g in lista]
+        _fonte_t8 = ((doc["altura"], doc["acima"], glifos), vaso)
+    return _fonte_t8
+
+
+def caixas_t8(claro):
+    """[(y_topo, y_fundo, x0, x1)] das caixas de medida do T8 (borda cinza, fundo cinza escuro)."""
+    B = (claro >= T8_BORDA[0]) & (claro <= T8_BORDA[1])
+    H, W = B.shape
+    achadas = []
+    for y in range(H - 12):
+        for x0, x1 in _corridas(B[y], 40):
+            if any(a[0] <= y <= a[1] and a[2] - 3 <= x0 <= a[3] for a in achadas):
+                continue
+            xe = x0 - 1 if x0 > 0 and B[y + 1:y + 12, x0 - 1].all() else x0
+            if not B[y + 1:y + 12, xe].all():
+                continue
+            if not T8_FUNDO[0] <= np.median(claro[y + 2:y + 12, xe + 2:x1 - 2]) <= T8_FUNDO[1]:
+                continue
+            fundo = H
+            for yy in range(y + 10, H):
+                if not B[yy, xe] or B[yy, xe + 2:x1 - 2].mean() > 0.9:
+                    fundo = yy
+                    break
+            achadas.append((y, fundo, xe, x1))
+    return achadas
+
+
+def _linhas_t8(claro, cx):
+    y0, y1, x0, x1 = cx
+    w = claro[y0 + 1:y1, x0 + 1:x1 - 1].astype(np.float32)
+    w = np.clip((w - 35) * 255 / 200, 0, 255).astype(np.uint8)   # fundo cinza -> preto
+    on = (w > CLARO).any(axis=1)
+    return [w[max(0, a - 2):min(len(w), b + 3)] for a, b in _corridas(on, 5)]
+
+
+def _dist_desloc(a, b):
+    """_dist tolerando 1 pixel de deslocamento (borda suavizada do texto digitado)."""
+    melhor = _dist(a, b)
+    for dy in (-1, 1):
+        bb = np.roll(b, dy, axis=0)
+        bb[0 if dy == 1 else -1] = 0
+        melhor = min(melhor, _dist(a, bb))
+        for dx in ((1, 0), (0, 1)):
+            melhor = min(melhor, _dist(np.pad(a, ((0, 0), (dx[0], 0))), np.pad(bb, ((0, 0), (dx[1], 0)))))
+    for dx in ((1, 0), (0, 1)):
+        melhor = min(melhor, _dist(np.pad(a, ((0, 0), (dx[0], 0))), np.pad(b, ((0, 0), (dx[1], 0)))))
+    return melhor
+
+
+def _vaso_t8(manchas, fonte):
+    """Nome de vaso (VASOS) mais parecido com as manchas brancas, com folga sobre o 2o; ou None."""
+    return _vaso_da_palavra(manchas, fonte, _dist_desloc)
+
+
+def vasos_t8(arr, caixas_achadas, fonte):
+    """Nomes de vaso digitados em branco (fora das caixas de medida)."""
+    claro = arr.astype(np.int16).min(axis=2)
+    M = claro > T8_BRANCO
+    for y0, y1, x0, x1 in caixas_achadas:
+        M[y0:y1 + 1, x0:x1 + 1] = False
+    if M.sum() > 60000:
+        return []
+    rot = np.zeros(M.shape, np.int32)
+    comps = _componentes(M, rot)
+    letras = sorted(((i + 1, c) for i, c in enumerate(comps)
+                     if 7 <= c[1] - c[0] <= 13 and 1 <= c[3] - c[2] <= 24), key=lambda ic: ic[1][2])
+    palavras = []
+    for i, c in letras:
+        for p in palavras:
+            u = p[-1][1]
+            if abs(u[0] - c[0]) <= 2 and abs(u[1] - c[1]) <= 2 and -1 <= c[2] - u[3] <= 4:
+                p.append((i, c))
+                break
+        else:
+            palavras.append([(i, c)])
+    saida = []
+    for p in palavras:
+        if not 2 <= len(p) <= 4:
+            continue
+        y0 = min(c[0] for _, c in p)
+        manchas = []
+        for i, (_, _, x0, x1) in p:
+            g = np.zeros((ALTURA_VASO_T8, x1 - x0), np.float32)
+            sub = np.where(rot[y0:y0 + ALTURA_VASO_T8, x0:x1] == i,
+                           claro[y0:y0 + ALTURA_VASO_T8, x0:x1], 0) / 255.0
+            g[:sub.shape[0]] = sub
+            manchas.append(g)
+        nome = _vaso_t8(manchas, fonte)
+        if nome:
+            saida.append(nome)
+    return saida
+
+
+def medidas_t8(arr):
+    """Leitura do Vivid T8: [(chave 't8_...', valor, unidade, rotulo)], ainda sem conferir."""
+    fontes = _carregar_fonte_t8()
+    if arr is None or arr.ndim != 3 or not fontes:
+        return []
+    fonte_caixa, fonte_vaso = fontes
+    claro = arr.min(axis=2)
+    if claro.dtype != np.uint8:
+        claro = np.clip(claro, 0, 255).astype(np.uint8)
+    achadas = caixas_t8(claro)
+    linhas = [ler_linha(lin, fonte_caixa) for cx in achadas for lin in _linhas_t8(claro, cx)]
+    saida = []
+    for texto, pior in linhas:
+        if texto and pior <= DIST_MAX:
+            r = interpretar(texto, ROTULOS_T8)
+            if r:
+                rotulo, chave, valor, un = r
+                saida.append((chave, valor, un, rotulo))
+    if fonte_vaso and any(re.search(r"\b(PS|ED)\s+-?\d", t) for t, _ in linhas):
+        saida.extend(_carotida(arr, linhas, vasos_t8(arr, achadas, fonte_vaso), "t8_"))
+    return saida
+
+
+def medidas_da_imagem(arr, modelo=""):
     """[(chave, valor, unidade, rotulo)] reconhecidos na imagem: itens do eco pelo rotulo
-    da caixa; velocidades das carotidas pelo nome do vaso digitado na imagem."""
+    da caixa; velocidades das carotidas pelo nome do vaso digitado na imagem.
+    modelo = ManufacturerModelName do DICOM (o T8 tem leitura propria)."""
+    if "T8" in str(modelo or "").upper():
+        return medidas_t8(arr)
     saida = []
     linhas = textos_da_imagem(arr)
     for texto, pior in linhas:
