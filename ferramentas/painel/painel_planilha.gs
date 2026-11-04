@@ -426,7 +426,7 @@ function gravarSala_(pc, sala) {
   var n = p.getLastRow() - 1;
   var nomes = n > 0 ? p.getRange(2, 1, n, 1).getValues().map(function (r) { return String(r[0]).trim(); }) : [];
   var i = nomes.indexOf(k);
-  if (i >= 0) p.getRange(i + 2, 2, 1, 2).setValues([[sala, '']]);
+  if (i >= 0) p.getRange(i + 2, 2).setValue(sala);
   else p.appendRow([k, sala, 'gravado pela aba Salas']);
 }
 
