@@ -15,6 +15,7 @@ Regras (decididas com o Helder em 31/10/2026):
     (excecao: idade pelo nascimento e a data do exame quando o aparelho nao manda a idade)
   - na duvida (mais de um valor diferente sem "media", unidade desconhecida) fica em branco
   - medida em branco nao gera linha no texto copiado
+  - valor fora do possivel (FAIXAS, IMC, DSVE >= DDVE) fica 'suspeito': fora do texto ate confirmar na tela
   - nunca entra nome, ID ou outro dado de identificacao no texto copiado; nascimento e idade
     entram (pedido do Helder em 01/11/2026, para a pagina de laudos)
   - eco fetal: nenhuma medida
@@ -276,6 +277,51 @@ def _do_ocr(ocr, chave, unidade):
     return vals[0] if vals and len({round(v, 3) for v in vals}) == 1 else None
 
 
+# Faixa do POSSIVEL (nao do normal), na unidade de saida: fora dela o valor e quase certamente
+# erro de leitura, de unidade ou de cadastro. Larga de proposito: vale para crianca (eco infantil)
+# e para doenca grave. Valor fora fica em vermelho na tela e so entra no "Copiar medidas" depois
+# que o medico confirma (Helder 04/11/2026: altura 92 cm e peso 180 kg passaram sem aviso).
+FAIXAS = {
+    "fc": (25, 250), "alt": (40, 220), "peso": (1.5, 300),
+    "raiz": (8, 65), "ae": (8, 90), "ddve": (12, 100), "dsve": (6, 90), "siv": (2, 35), "pp": (2, 35),
+    "asc": (8, 80), "aei": (5, 200), "fe": (5, 90),
+    "E": (15, 300), "A": (10, 250), "es": (1.5, 30), "el": (1.5, 35), "v": (0.5, 7),
+    "acc": (10, 400), "ace": (10, 600), "aci_vps": (10, 700), "aci_vdf": (1, 400), "vert_vps": (5, 300),
+    "vert_diam": (1, 9), "placa_acc": (0.5, 15), "placa_aci": (0.5, 15), "placa_ace": (0.5, 15),
+}
+IMC = (10, 70)   # peso / altura^2: pega altura e peso trocados ou na escala errada
+
+
+def _numero(texto):
+    try:
+        return float(str(texto).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _marcar_suspeitos(linhas):
+    """Poe 'suspeito' (motivo) nas linhas com valor fora do possivel."""
+    por = {l["chave"]: l for l in linhas}
+    for l in linhas:
+        base = re.sub(r"_[de]$", "", l["chave"])
+        v = _numero(l["valor"]) if l["valor"] else None
+        if v is None or base not in FAIXAS:
+            continue
+        lo, hi = FAIXAS[base]
+        if not lo <= v <= hi:
+            l["suspeito"] = f"fora do possível ({formatar(lo, l['unidade'])} a {formatar(hi, l['unidade'])} {l['unidade']})"
+    dd, ds = por.get("ddve"), por.get("dsve")
+    if dd and ds and dd["valor"] and ds["valor"] and _numero(ds["valor"]) >= _numero(dd["valor"]):
+        for l in (dd, ds):
+            l.setdefault("suspeito", "DSVE maior ou igual ao DDVE")
+    alt, peso = por.get("alt"), por.get("peso")
+    if alt and peso and alt["valor"] and peso["valor"]:
+        imc = _numero(peso["valor"]) / (_numero(alt["valor"]) / 100) ** 2
+        if not IMC[0] <= imc <= IMC[1]:
+            for l in (alt, peso):
+                l.setdefault("suspeito", f"altura e peso não combinam (IMC {imc:.0f}): trocados ou em escala errada")
+
+
 def medidas_do_exame(tipo, ref, srs, ocr=None):
     """{'categoria', 'linhas': [{chave, rotulo, unidade, valor (texto ou ''), origem}],
         'texto', ...} para o tipo do exame. ref = dataset de uma imagem; srs = datasets SR;
@@ -321,7 +367,9 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
                 linhas.append({"chave": chave + suf, "rotulo": rotulo, "unidade": un,
                                "valor": "" if v is None else formatar(v, un),
                                "grupo": "Lado " + nome_lado, "origem": origem})
-    texto = "\n".join(f"{l['chave']}={l['valor']}" for l in linhas if l["valor"])
+    _marcar_suspeitos(linhas)
+    # valor suspeito so entra no texto copiado depois que o medico confirma na tela
+    texto = "\n".join(f"{l['chave']}={l['valor']}" for l in linhas if l["valor"] and not l.get("suspeito"))
     return {"categoria": cat, "linhas": linhas, "texto": texto,
             "tem_sr": bool(srs), "n_medidas_sr": len(itens),
             "n_imagem": sum(1 for l in linhas if l["origem"] == "imagem")}
