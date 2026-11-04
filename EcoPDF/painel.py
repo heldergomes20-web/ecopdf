@@ -38,6 +38,7 @@ MEMORIA_MAX_MB = 600            # EcoPDF usando mais que isso = algo acumulando 
 SEM_MEDIDAS_DIAS = 3            # ultimos N dias com eco sem NENHUM relatorio de medidas = aparelho parou de mandar
                                 # (por exame nao serve: quem mede com caliper livre nao gera relatorio)
 FOLHA_MAX_S = 60                # folha de imagens demorando mais que isso = PC lento ou exame enorme
+ATUALIZACAO_PRONTA_DIAS = 2      # versao baixada e nao instalada ha mais que isso = tarefas da atualizacao com problema
 DISCO_DIAS_ATENCAO, DISCO_DIAS_PROBLEMA = 30, 7  # disco acaba em menos que isso no ritmo atual
 # motivo do laudo sem par (texto da tela) -> categoria curta que vai para a planilha
 MOTIVOS = (("nome fora do padrao", "nome fora do padrão"), ("aberto em outro", "PDF aberto"),
@@ -507,9 +508,34 @@ def coletar(cfg, ep, manual=False):
                    "Rede (cabo/Wi-Fi, IP, riscos)": _texto_rede(d["rede"]),
                    "Medidas (relatório do aparelho)": _texto_medidas(d),
                    "Fila EcoPDF Foto": _texto_fila_foto(cfg, d["impressora_info"]),
-                   "Lista de pacientes (worklist)": _texto_worklist(cfg, d, ep)}
+                   "Lista de pacientes (worklist)": _texto_worklist(cfg, d, ep),
+                   "Atualização automática": _texto_atualizacao()}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
+
+
+def _texto_atualizacao():
+    try:
+        import atualizador
+        return atualizador.texto_painel()
+    except Exception as e:
+        return f"ERRO: {type(e).__name__}"
+
+
+def _aviso_atualizacao(texto):
+    """Frase de ATENCAO da atualizacao automatica, ou ''."""
+    if texto.startswith("ERRO: "):
+        return "atualização automática: " + texto[6:]
+    try:
+        import atualizador
+        e = atualizador.ler_estado()
+        desde = datetime.fromisoformat(e.get("pronta_desde", "")) if e.get("pronta") else None
+    except Exception:
+        return ""
+    if desde and (datetime.now() - desde).total_seconds() > ATUALIZACAO_PRONTA_DIAS * 86400:
+        return (f"versão {e['pronta']} baixada há mais de {ATUALIZACAO_PRONTA_DIAS} dias e não instalada: "
+                "conferir as tarefas \"EcoPDF Atualizar\" (rodar instalar.bat de novo)")
+    return ""
 
 
 def _texto_worklist(cfg, d, ep):
@@ -605,6 +631,9 @@ def avaliar(d):
         amar.append("lista de pacientes: " + wl[6:])
     elif wl.startswith("ATENÇÃO: "):
         amar.append("lista de pacientes: " + wl[9:].split(" · ")[0])
+    aviso = _aviso_atualizacao(str(d.get("extras", {}).get("Atualização automática", "")))
+    if aviso:
+        amar.append(aviso)
     if imp.get("grave"):
         amar.append(f"impressora: {_texto_impressora(imp)}")
     elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):

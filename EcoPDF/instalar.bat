@@ -57,7 +57,7 @@ set PORTA=11112
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"PORTA" config.ini') do set PORTA=%%b
 
 schtasks /end /tn EcoPDF >nul 2>&1
-timeout /t 2 >nul
+ping -n 3 127.0.0.1 >nul
 netstat -an | findstr /r /c:":%PORTA% .*LISTENING" >nul
 if not errorlevel 1 (
   echo.
@@ -84,6 +84,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Register-ScheduledTask -TaskName 'EcoPDF' -Action $a -Trigger $t -Settings $s -Force | Out-Null;" ^
   "Stop-ScheduledTask -TaskName 'EcoPDF' -ErrorAction SilentlyContinue; Start-ScheduledTask -TaskName 'EcoPDF'"
 
+rem Atualizacao automatica (6h e ao ligar): duas tarefas com permissao de administrador, sem janela.
+rem Na propria atualizacao automatica (ECOPDF_AUTO) nao recria: a tarefa esta rodando.
+if not defined ECOPDF_AUTO (
+  echo Configurando a atualizacao automatica ^(6h ou ao ligar o PC^)...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$p = New-ScheduledTaskPrincipal -UserId '%USERDOMAIN%\%USERNAME%' -LogonType Interactive -RunLevel Highest;" ^
+    "$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew;" ^
+    "$a = New-ScheduledTaskAction -Execute '%~dp0venv\Scripts\pythonw.exe' -Argument 'atualizador.py auto 6h' -WorkingDirectory '%~dp0';" ^
+    "Register-ScheduledTask -TaskName 'EcoPDF Atualizar 6h' -Action $a -Trigger (New-ScheduledTaskTrigger -Daily -At 06:00) -Principal $p -Settings $s -Force | Out-Null;" ^
+    "$a = New-ScheduledTaskAction -Execute '%~dp0venv\Scripts\pythonw.exe' -Argument 'atualizador.py auto inicio' -WorkingDirectory '%~dp0';" ^
+    "Register-ScheduledTask -TaskName 'EcoPDF Atualizar ao ligar' -Action $a -Trigger (New-ScheduledTaskTrigger -AtLogOn -User '%USERDOMAIN%\%USERNAME%') -Principal $p -Settings $s -Force | Out-Null"
+)
+
 set TELA_PORTA=8765
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"TELA_PORTA" config.ini') do set TELA_PORTA=%%b
 echo Criando o icone "EcoPDF" na Area de Trabalho e no menu Iniciar...
@@ -97,7 +110,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  if ($edge) { $l.TargetPath=$edge; $l.Arguments='--app='+$url } else { $l.TargetPath=(Join-Path $env:WINDIR 'explorer.exe'); $l.Arguments=$url };" ^
   "  $l.IconLocation=$ico+',0'; $l.Description='EcoPDF - exames e imagens'; $l.Save() }"
 
-timeout /t 5 >nul
+ping -n 6 127.0.0.1 >nul
 echo.
 call "%~dp0status.bat" nopause
 echo.
