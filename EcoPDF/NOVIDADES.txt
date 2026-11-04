@@ -11,6 +11,7 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 - Tela: situacoes com texto do que falta fazer: "Novo" vira "Aguardando laudo", "Pendente" vira "Laudo atrasado" e "Fora da pasta 2" vira "Folha sumiu" (passar o mouse explica). As cores e o botao Pendentes nao mudam.
 - Tela do exame: miniaturas com borda cinza (o vermelho fica so para o que pede acao; imagem tirada da folha continua apagada e tracejada); cabecalho em duas linhas (nome longo cortado, com o nome inteiro ao passar o mouse; o codigo do aparelho foi para o passar o mouse).
 - Para desligar so num PC: linha AUTO = nao no C:\EcoPDF\canal.ini. O botao Atualizar da tela e o atualizar_agora.bat continuam valendo.
+- Lista de pacientes (worklist): o EcoPDF acha sozinho onde esta o banco do Medware, lendo o arquivo de conexao do proprio Medware no PC (C:\Medware LaudosFlex\Bd.xml). PC de unidade com o Medware num servidor (ex.: Tambauzinho) nao precisa mais de MEDWARE_SERVIDORES no painel.ini. Se a linha existir no painel.ini, ela continua valendo.
 
 2026.11.03.4
 - Painel das salas: o EcoPDF volta a mandar a situacao do PC para a planilha a cada 15 minutos enquanto o PC esta ligado (antes: so as 9h e as 15h). A planilha continua marcando SEM SINAL se faltar o envio das 9h ou das 15h. PAINEL_INTERVALO_MIN no config.ini (0 = volta aos horarios de PAINEL_HORARIOS).
