@@ -717,16 +717,20 @@ async function excluirWorklist(cod, voltar) {
   abrirWorklist();
 }
 $("b-wl").onclick = abrirWorklist;
+let medicosEm = 0;
 async function carregarMedicos() {
+  medicosEm = Date.now();
   try {
     const d = await (await fetch("/api/worklist_medicos")).json();
     const sel = $("wl-medico"), lista = d.medicos || [];
     if (d.atual && !lista.includes(d.atual)) lista.push(d.atual);
-    sel.innerHTML = `<option value="">Todos os médicos</option>` + lista.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+    const html = `<option value="">Todos os médicos</option>` + lista.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+    if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }   // so muda se a lista mudou (nao fecha o seletor aberto)
     sel.value = d.atual || ""; $("wl-sel").classList.toggle("on", !!d.atual);
   } catch (e) {}
 }
-$("wl-medico").onfocus = () => { if ($("wl-medico").options.length <= 1) carregarMedicos(); };
+// recarrega ao clicar: medico que entrou na agenda depois de a tela abrir aparece na hora
+$("wl-medico").onmousedown = $("wl-medico").onfocus = () => { if (Date.now() - medicosEm > 5000) carregarMedicos(); };
 $("wl-medico").onchange = async () => {
   const m = $("wl-medico").value;
   try {
