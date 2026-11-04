@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.04.1
+- Tela: o seletor "Worklist [Todos os medicos]" passa a buscar a lista de medicos de novo quando voce clica nele. Medico que entrou na agenda depois de a tela abrir aparece na hora (antes podia levar ate 5 minutos).
+
 2026.11.04
 - Atualizacao automatica: o EcoPDF procura versao nova a cada 2 horas (e 3 minutos depois de ligar), baixa e confere a assinatura, mas so INSTALA as 6h (PC ligado de madrugada e sem exame chegando nos ultimos 15 min) ou logo ao ligar o PC. Nunca durante o atendimento. A instalacao roda escondida (sem janela) e, se o EcoPDF novo nao abrir a porta DICOM em 60 s, volta sozinho para a anterior e nao tenta de novo aquela versao.
 - Painel das salas: coluna "Atualizacao automatica" (em dia / versao pronta para instalar / ultima instalacao) e ATENCAO quando a versao nova voltou sozinha ou ficou baixada mais de 2 dias sem instalar. status.bat mostra a mesma linha.
