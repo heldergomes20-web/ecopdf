@@ -277,6 +277,64 @@ def _do_ocr(ocr, chave, unidade):
     return vals[0] if vals and len({round(v, 3) for v in vals}) == 1 else None
 
 
+T8_TOL_EMED = 0.012   # m/s: E's + E'l = 2 x E' med, com o arredondamento da caixa
+T8_TOL_SR = 0.011     # cm/s: velocidade lida tem de estar no SR (2 casas)
+
+
+def _validar_t8(ocr, itens):
+    """Leitura do Vivid T8 (chaves 't8_...') so vale conferida (Helder 04/11/2026: nao vai
+    medir vaso por vaso com o item proprio; a fonte do T8 ainda tem poucas amostras):
+      - e′: septal e lateral so entram se a caixa tambem mostra o E′ med que o aparelho
+        calcula e (septal + lateral) bate com 2 x E′ med;
+      - carotidas: cada velocidade lida tem de existir no SR do exame (o SR traz os numeros
+        certos, so com o vaso errado); o vaso vem do nome digitado na imagem.
+    Sem como conferir (so um e′ medido; PS/ED generico, que nao vai para o SR) o valor aparece,
+    mas so entra no "Copiar medidas" depois de o medico clicar em Confirmar. Conferencia que
+    falha (soma nao bate com o E′ med) = valor descartado.
+    Devolve (lista sem as chaves t8_ e com as lidas no nome normal, {chaves a confirmar})."""
+    if not any(str(k).startswith("t8_") for k, _, _ in ocr or []):
+        return ocr, set()
+    saida = [m for m in ocr if not str(m[0]).startswith("t8_")]
+    conferir = set()
+    es, el, em = (_do_ocr(ocr, "t8_" + c, "m/s") for c in ("es", "el", "em"))
+    if None not in (es, el, em):
+        if abs(es + el - 2 * em) <= T8_TOL_EMED:
+            saida += [("es", es, "m/s"), ("el", el, "m/s")]
+    else:
+        for chave, v in (("es", es), ("el", el)):
+            if v is not None:
+                saida.append((chave, v, "m/s"))
+                conferir.add(chave)
+    no_sr = [abs(c) for _, v, u, _ in itens for c in [_converter(v, u, "cm/s")] if c is not None]
+    for k, v, u in ocr:
+        k = str(k)
+        if not k.startswith("t8_") or k in ("t8_es", "t8_el", "t8_em"):
+            continue
+        c = _converter(v, u, "cm/s")
+        if c is None:
+            continue
+        saida.append((k[3:], v, u))
+        if not any(abs(abs(c) - x) <= T8_TOL_SR for x in no_sr):
+            conferir.add(k[3:])
+    return saida, conferir
+
+
+def _sr_um_vaso_so(itens):
+    """True se o SR traz mais de 2 velocidades e todas no mesmo vaso e lado: o medico mediu
+    tudo com o mesmo item ("Rt Prox ACC"), entao o vaso do SR nao vale (visto no T8 em 04/11:
+    a VPS da ACE esquerda aparecia como ACC direita)."""
+    vasos, n = set(), 0
+    for desc, _, un, _ in itens:
+        if _converter(1, un, "cm/s") is None or not re.search(rf"{_PSV}|{_EDV}", desc, I):
+            continue
+        n += 1
+        vaso = next((nome for nome, rx in (("acc", _CCA), ("ace", _ECA), ("aci", _ICA), ("vert", _VERT))
+                     if re.search(rx, desc, I)), "?")
+        lado = next((suf for suf, _, rx in LADOS if re.search(rx, desc, I)), "?")
+        vasos.add((vaso, lado))
+    return n > 2 and len(vasos) <= 1
+
+
 # Faixa do POSSIVEL (nao do normal), na unidade de saida: fora dela o valor e quase certamente
 # erro de leitura, de unidade ou de cadastro. Larga de proposito: vale para crianca (eco infantil)
 # e para doenca grave. Valor fora fica em vermelho na tela e so entra no "Copiar medidas" depois
@@ -333,6 +391,7 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
             itens.extend(itens_do_sr(sr))
         except Exception:
             pass
+    ocr, conferir = _validar_t8(ocr, itens)
     linhas = []
     if cat == "eco":
         cab = _do_cabecalho(ref)
@@ -356,18 +415,24 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
         # velocidades vem so das imagens e o SR e ignorado para elas (Helder, 03/11/2026).
         chaves_ocr = {k for k, _, _ in ocr or []
                       if re.fullmatch(r"(acc|ace|aci_vps|aci_vdf|vert_vps)_[de]", k)}
+        sr_um_vaso = _sr_um_vaso_so(itens)
         for suf, nome_lado, lado in LADOS:
             for chave, rotulo, un, padrao in CAROTIDAS:
                 origem = ""
                 if chaves_ocr and un == "cm/s":
                     v = _do_ocr(ocr, chave + suf, un)
                     origem = "imagem" if v is not None else ""
+                elif un == "cm/s" and sr_um_vaso:
+                    v = None
                 else:
                     v = _procurar(itens, padrao, un, lado)
                 linhas.append({"chave": chave + suf, "rotulo": rotulo, "unidade": un,
                                "valor": "" if v is None else formatar(v, un),
                                "grupo": "Lado " + nome_lado, "origem": origem})
     _marcar_suspeitos(linhas)
+    for l in linhas:
+        if l["chave"] in conferir and l["valor"] and l["origem"] == "imagem":
+            l.setdefault("suspeito", "lido da imagem do T8 sem conferência automática: confira na imagem")
     # valor suspeito so entra no texto copiado depois que o medico confirma na tela
     texto = "\n".join(f"{l['chave']}={l['valor']}" for l in linhas if l["valor"] and not l.get("suspeito"))
     return {"categoria": cat, "linhas": linhas, "texto": texto,

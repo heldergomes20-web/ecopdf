@@ -296,7 +296,8 @@ def _ocr_estudo(pasta, itens, ep):
         if not c or c.get("marca") != marca:
             try:
                 ds = pydicom.dcmread(arq)
-                lidas = [list(m[:3]) for m in ocr_imagem.medidas_da_imagem(ds.pixel_array)] \
+                lidas = [list(m[:3]) for m in ocr_imagem.medidas_da_imagem(
+                    ds.pixel_array, ds.get("ManufacturerModelName", ""))] \
                     if int(ds.get("NumberOfFrames", 1) or 1) == 1 else []
             except Exception:
                 ep.log.exception("Tela: OCR falhou em %s", arq.name)
