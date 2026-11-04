@@ -172,7 +172,7 @@ function conferir_() {
   var publicada = versaoPublicada();
   var esperado = ultimoHorarioEsperado(new Date());
   sh.getRange('A2').setValue('Versão publicada (Latest): ' + (publicada || '?') +
-    '   ·   conferido em ' + fmt(new Date()) + '   ·   envios às 9h e 15h');
+    '   ·   conferido em ' + fmt(new Date()) + '   ·   envios a cada 15 min');
   if (n <= 0) return;
   var dados = sh.getRange(LIN0, 1, n, COLS.length).getValues();
   var mapa = mapaSalas_();  // sala escrita na aba PCs aparece na proxima conferencia (ate 1 h)
@@ -394,13 +394,20 @@ function salaOuManual_(pc, atual, mapa) {
   var k = String(pc).trim(), t = String(atual || '').trim();
   if (mapa[k]) return mapa[k];
   if (t && t !== 'sem sala') { gravarSala_(k, t); mapa[k] = t; return t; }
+  listarPC_(k);  // PC novo entra na aba PCs com a Sala em branco, para preencher
   return 'sem sala';
 }
 
-/** Cria ou atualiza a linha do PC na aba PCs (coluna A = nome do computador, B = sala). */
-function gravarSala_(pc, sala) {
+/** Garante uma linha do PC na aba PCs (sem mexer na sala, se ja existir). */
+function listarPC_(pc) {
   var k = String(pc).trim();
   if (!k) return;
+  var p = abaPcs_();
+  var n = p.getLastRow() - 1;
+  var nomes = n > 0 ? p.getRange(2, 1, n, 1).getValues().map(function (r) { return String(r[0]).trim(); }) : [];
+  if (nomes.indexOf(k) < 0) p.appendRow([k, '', 'novo: escreva a sala na coluna B']);
+}
+function abaPcs_() {
   var ss = SpreadsheetApp.getActive();
   var p = ss.getSheetByName(ABA_PCS);
   if (!p) {
@@ -408,10 +415,18 @@ function gravarSala_(pc, sala) {
     p.getRange('A1:C1').setValues([['Nome do computador', 'Sala', 'Observação']]).setFontWeight('bold');
     p.setFrozenRows(1);
   }
+  return p;
+}
+
+/** Cria ou atualiza a linha do PC na aba PCs (coluna A = nome do computador, B = sala). */
+function gravarSala_(pc, sala) {
+  var k = String(pc).trim();
+  if (!k) return;
+  var p = abaPcs_();
   var n = p.getLastRow() - 1;
   var nomes = n > 0 ? p.getRange(2, 1, n, 1).getValues().map(function (r) { return String(r[0]).trim(); }) : [];
   var i = nomes.indexOf(k);
-  if (i >= 0) p.getRange(i + 2, 2).setValue(sala);
+  if (i >= 0) p.getRange(i + 2, 2, 1, 2).setValues([[sala, '']]);
   else p.appendRow([k, sala, 'gravado pela aba Salas']);
 }
 
