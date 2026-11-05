@@ -565,8 +565,11 @@ def medidas_da_imagem(arr, modelo=""):
     """[(chave, valor, unidade, rotulo)] reconhecidos na imagem: itens do eco pelo rotulo
     da caixa; velocidades das carotidas pelo nome do vaso digitado na imagem.
     modelo = ManufacturerModelName do DICOM (o T8 tem leitura propria)."""
-    if "T8" in str(modelo or "").upper():
+    m = str(modelo or "").upper()
+    if "T8" in m:
         return medidas_t8(arr)
+    if m and "VIVID" not in m:
+        return []      # fontes e caixas sao do GE Vivid: outro aparelho (ex.: Philips) nao le
     saida = []
     linhas = textos_da_imagem(arr)
     for texto, pior in linhas:
