@@ -445,4 +445,10 @@ function onEdit(e) {
     if (pc && sala && sala !== 'sem sala') gravarSala_(pc, sala);
   }
 }
-function ipPrincipal(s) { return String(s).split(',')[0].trim(); }
+/** Primeiro IP interno da lista (EcoPDF antigo mandava tambem IP de placa virtual, ex.:
+ *  Topaz Loopback 54.x, e a troca de ordem dava falso 'IP do PC mudou'). */
+function ipPrincipal(s) {
+  var l = String(s).split(',').map(function (x) { return x.trim(); }).filter(String);
+  var loc = l.filter(function (x) { return /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x); });
+  return loc[0] || l[0] || '';
+}
