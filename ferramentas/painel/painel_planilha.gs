@@ -13,9 +13,9 @@
  */
 
 var TZ = 'America/Fortaleza';            // Joao Pessoa (UTC-3, sem horario de verao)
-var HORARIOS = [9, 15];                  // horas do envio (iguais a PAINEL_HORARIOS)
-var TOLERANCIA_MIN = 30;                 // envio pode atrasar ate isso (PC ligando)
-var DIAS_UTEIS = {1: [9, 15], 2: [9, 15], 3: [9, 15], 4: [9, 15], 5: [9, 15], 6: [9]}; // 0 = domingo: nada
+var HORARIOS = [9, 15];                  // horas do e-mail de alerta (~h50)
+var SEM_SINAL_MIN = 60;                  // sem envio ha mais que isso no expediente = SEM SINAL
+var EXPEDIENTE = {1: [8, 18], 2: [8, 18], 3: [8, 18], 4: [8, 18], 5: [8, 18], 6: [8, 12]}; // 0 = domingo: nada
 var RELOGIO_MAX_MIN = 10;                // diferenca maxima PC x Google
 var REPO = 'heldergomes20-web/ecopdf';   // versao publicada (Latest) no GitHub
 var MAX_LINHAS = 60;
@@ -170,7 +170,7 @@ function conferir_() {
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(ABA);
   var n = sh.getLastRow() - LIN0 + 1;
   var publicada = versaoPublicada();
-  var esperado = ultimoHorarioEsperado(new Date());
+  var limite = limiteSinal_(new Date());  // envio mais velho que isso = SEM SINAL
   sh.getRange('A2').setValue('Versão publicada (Latest): ' + (publicada || '?') +
     '   ·   conferido em ' + fmt(new Date()) + '   ·   envios a cada 15 min');
   if (n <= 0) return;
@@ -184,14 +184,13 @@ function conferir_() {
   var saida = dados.map(function (r) {
     var prob = [], aten = [];
     var envio = r[col('Último envio') - 1];
-    if (esperado && envio instanceof Date && envio < esperado) {
+    if (limite && envio instanceof Date && envio < limite) {
+      var msg = 'sem envio desde ' + fmt(envio) + ' (PC desligado, sem internet ou EcoPDF parado)';
       if (r[col('Situação') - 1] !== 'SEM SINAL') {  // so na passagem para SEM SINAL
         var pcx = String(r[col('PC') - 1]);
-        historico_([new Date(), salaDe_(pcx), pcx, r[col('Versão') - 1], 'SEM SINAL',
-          'nao mandou o envio das ' + Utilities.formatDate(esperado, TZ, 'HH:mm'), r[col('IP do PC') - 1], '', '']);
+        historico_([new Date(), salaDe_(pcx), pcx, r[col('Versão') - 1], 'SEM SINAL', msg, r[col('IP do PC') - 1], '', '']);
       }
-      return ['SEM SINAL', 'nao mandou o envio das ' + Utilities.formatDate(esperado, TZ, 'HH:mm') +
-        ' (PC desligado, sem internet ou EcoPDF parado). Ultimo: ' + fmt(envio)];
+      return ['SEM SINAL', msg];
     }
     var nivel = r[col('nivel_pc') - 1];
     var pp = String(r[col('problemas_pc') - 1] || '');
@@ -215,18 +214,21 @@ function conferir_() {
   sh.getRange(LIN0, col('Situação'), n, 2).setValues(saida);
 }
 
-/** Horario de envio mais recente que ja deveria ter chegado (com tolerancia). */
-function ultimoHorarioEsperado(agora) {
+/** O EcoPDF envia a cada 15 min. No expediente (EXPEDIENTE), o PC tem de ter mandado algo
+ *  nos ultimos SEM_SINAL_MIN. Fora dele vale o fim do ultimo expediente (PC que parou as 15h
+ *  continua SEM SINAL a noite; PC desligado as 18h, nao). Na 1a hora do dia vale o dia anterior,
+ *  para o PC ter tempo de ligar. Devolve o horario-limite ou null. */
+function limiteSinal_(agora) {
   for (var d = 0; d < 8; d++) {
     var dia = new Date(agora.getTime() - d * 86400000);
     var ymd = Utilities.formatDate(dia, TZ, 'yyyy-MM-dd');
     var semana = Number(Utilities.formatDate(dia, TZ, 'u')) % 7; // 7 = domingo -> 0
-    var horas = (DIAS_UTEIS[semana] || []).slice().reverse();
-    for (var k = 0; k < horas.length; k++) {
-      var h = ('0' + horas[k]).slice(-2);
-      var t = new Date(ymd + 'T' + h + ':00:00-03:00');
-      if (t.getTime() + TOLERANCIA_MIN * 60000 <= agora.getTime()) return t;
-    }
+    var j = EXPEDIENTE[semana];
+    if (!j) continue;
+    var ini = new Date(ymd + 'T' + ('0' + j[0]).slice(-2) + ':00:00-03:00');
+    var fim = new Date(ymd + 'T' + ('0' + j[1]).slice(-2) + ':00:00-03:00');
+    var t = Math.min(agora.getTime(), fim.getTime()) - SEM_SINAL_MIN * 60000;
+    if (t >= ini.getTime()) return new Date(t);
   }
   return null;
 }

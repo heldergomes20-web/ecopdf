@@ -33,8 +33,9 @@ ESQUECIDO_HORAS = 24            # pendencia mais velha que isso deixa a sala ama
 SEM_IMAGEM_DIAS = 3             # dias uteis sem nenhuma imagem = aparelho desligado do EcoPDF?
 DISCO_ATENCAO_GB, DISCO_PROBLEMA_GB = 10, 3
 SINAIS_DIAS = 7                 # janela dos sinais de problema abaixo
-LIBERADOS_MAX = 2               # mais que isso em 7 dias = aparelho nao esta enviando?
-DESCARTADOS_MAX = 3             # mais que isso em 7 dias = nome diferente / envio duplicado?
+LIBERADOS_MAX = 10              # mais que isso em 7 dias = aparelho nao esta enviando? (Helder 05/11: 2 -> 10, adesao parcial)
+DESCARTADOS_MAX = 10            # mais que isso em 7 dias = nome diferente / envio duplicado? (05/11: 3 -> 10)
+ERROS_MIN = 5                   # erros no registro em 24 h a partir disso = aviso (1 isolado nao pede acao)
 MEMORIA_MAX_MB = 600            # EcoPDF usando mais que isso = algo acumulando (avisar)
 SEM_MEDIDAS_DIAS = 3            # ultimos N dias com eco sem NENHUM relatorio de medidas = aparelho parou de mandar
                                 # (por exame nao serve: quem mede com caliper livre nao gera relatorio)
@@ -663,7 +664,7 @@ def avaliar(d):
         amar.append(f"{d['revisar']} em 9 - Revisar")
     if d["retificados_3d"]:
         amar.append(f"{d['retificados_3d']} retificado(s) para subir de novo")
-    if d["erros_24h"]:
+    if d["erros_24h"] >= ERROS_MIN:
         amar.append(f"{d['erros_24h']} erro(s) no registro em 24 h")
     esquecido = ESQUECIDO_HORAS * 60
     if d["imagens_sem_laudo_mais_antiga_min"] > esquecido:
