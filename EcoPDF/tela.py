@@ -558,7 +558,12 @@ def _handler(ep, cfg):
                     return self._enviar(200, sinal(q.get("e", ""), ep, cfg))
                 if u.path == "/api/exame":
                     pasta = _pasta(q.get("e", ""), cfg)
+                    # assinatura ANTES de ler: imagem que chegar durante a leitura (OCR demora)
+                    # muda a assinatura e a pagina recarrega (05/11: abria com 4 de 8 e parava)
+                    ass = "-".join(str(x) for x in _assinatura(pasta)) if pasta else ""
                     d = detalhe(pasta, q.get("t", ""), ep, cfg) if pasta else None
+                    if d:
+                        d["ass"] = ass
                     return self._enviar(200 if d else 404, d or {"erro": "exame nao encontrado"})
                 if u.path == "/final":
                     pasta = _pasta(q.get("e", ""), cfg)

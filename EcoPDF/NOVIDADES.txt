@@ -2,6 +2,10 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.05.1
+- Tela: corrigido o exame aberto sozinho que mostrava so as primeiras imagens (ex.: 4 de 8) e nao ia acrescentando as outras ate sair e entrar de novo (visto no 1o exame real com a 2026.11.05). Imagem que chegava enquanto a tela ainda lia as primeiras nao era percebida. Agora ela aparece em poucos segundos.
+- Tela: janela que estava coberta ou minimizada atualiza assim que volta para a frente.
+
 2026.11.05
 - Laudos: o EcoPDF passa a ler varios modelos de laudo, nao so o padrao. Cada medico pode usar um modelo no Medware, e laudo com o cabecalho diferente (ex.: "Data Exame:" em vez de "Data :", "Solicitador por:", titulo "Ecodopplercardiograma transtoracico") ia para 9 - Revisar.
 - Data do exame: aceita "Data :", "Data Ex:", "Data Exame:", "Data do Exame:", "Realizado em:", "Data de realizacao:" e "Data do atendimento:". Nunca usa a data de nascimento. Sem rotulo conhecido, usa a unica data do cabecalho que nao e a de nascimento; se houver duvida, continua indo para 9 - Revisar.
