@@ -2,6 +2,13 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.05
+- Laudos: o EcoPDF passa a ler varios modelos de laudo, nao so o padrao. Cada medico pode usar um modelo no Medware, e laudo com o cabecalho diferente (ex.: "Data Exame:" em vez de "Data :", "Solicitador por:", titulo "Ecodopplercardiograma transtoracico") ia para 9 - Revisar.
+- Data do exame: aceita "Data :", "Data Ex:", "Data Exame:", "Data do Exame:", "Realizado em:", "Data de realizacao:" e "Data do atendimento:". Nunca usa a data de nascimento. Sem rotulo conhecido, usa a unica data do cabecalho que nao e a de nascimento; se houver duvida, continua indo para 9 - Revisar.
+- Tipo do exame pelo titulo: "Ecocardiograma", "Ecodopplercardiograma", "Ecocardiograma transtoracico" e parecidos = Ecocardiograma; titulo com carotidas ou vertebrais = Duplex_Scan_Vascular_Carotidas; fetal = Ecocardiograma_Fetal. Eco de estresse e transesofagico continuam com o titulo do laudo.
+- Folha de imagens: o nome do paciente da barra cinza passa a ser lido do mesmo jeito em qualquer modelo (no modelo com a tabela de medidas no alto, saia a data de nascimento no lugar do nome).
+- Laudo que ja estava em 9 - Revisar por causa disso: depois de atualizar, mova o PDF de 9 - Revisar para 0 - Entrada PDF24; o EcoPDF le de novo e junta com as imagens.
+
 2026.11.04.1
 - Tela: o seletor "Worklist [Todos os medicos]" passa a buscar a lista de medicos de novo quando voce clica nele. Medico que entrou na agenda depois de a tela abrir aparece na hora (antes podia levar ate 5 minutos).
 - Medidas do Vivid T8 (sala 8 de Tambauzinho): o EcoPDF passa a ler da imagem o e' septal e lateral e as velocidades das carotidas pelo nome do vaso digitado (ACCD, ACID, AVE...), como ja fazia no S6 do Bessa. Conferencia automatica: o e' septal + lateral tem de bater com o E' med que o aparelho mostra na caixa; cada velocidade tem de existir no relatorio do aparelho. O que nao da para conferir (um e' so, ou PS/ED generico, que nao vai para o relatorio) aparece em vermelho e so entra no "Copiar medidas" depois de clicar em Confirmar.
