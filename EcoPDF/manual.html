@@ -91,7 +91,7 @@ li{margin:4px 0}
 <p><b>Situação de cada exame.</b> Tudo termina em <b>Finalizado</b>, exceto o que for descartado. Na lista, <b>Laudo atrasado</b> aparece em amarelo (lembrete) e só <b>Laudo sem imagens</b> e <b>Folha sumiu</b> aparecem em vermelho, porque pedem ação.</p>
 <table>
   <tr><th>Situação</th><th>O que significa</th><th>O que fazer</th></tr>
-  <tr><td>Recebendo</td><td>Imagens chegando do aparelho</td><td>Nada. Em 2,5 min sem imagem nova vira Aguardando laudo</td></tr>
+  <tr><td>Recebendo</td><td>Imagens chegando do aparelho</td><td>Nada. Em 1 min sem imagem nova vira Aguardando laudo</td></tr>
   <tr><td>Aguardando laudo</td><td>Folha de imagens pronta, esperando o laudo</td><td>Laudar e imprimir no Medware</td></tr>
   <tr><td>Folha ajustada</td><td>Igual a Aguardando laudo, com imagens tiradas ou reordenadas na tela</td><td>Laudar</td></tr>
   <tr><td>Laudo atrasado</td><td>Imagens há mais de 30 min sem laudo</td><td>Laudar; se já laudou, conferir nome, data e tipo do laudo</td></tr>
@@ -149,7 +149,7 @@ li{margin:4px 0}
 <table>
   <tr><th>Situação</th><th>O que fazer</th><th>Até 6 meses do exame</th><th>Depois de 6 meses</th></tr>
   <tr><td><b>Laudo errado</b></td><td>Corrija no Medware (ou na plataforma do fetal) e imprima de novo</td><td>O PDF é refeito com as mesmas imagens e o nome do laudo novo, e volta à pasta 3 com <code>_retificado</code></td><td>Funciona igual: usa a folha de imagens que foi guardada</td></tr>
-  <tr><td><b>Faltou imagem</b></td><td>Reabra o <b>mesmo exame</b> no aparelho, congele e grave a imagem (Store/Acquire)</td><td>2,5 min depois o PDF é refeito com todas as imagens</td><td><b>Não faça.</b> As imagens originais já foram apagadas e o PDF poderia sair só com as novas. Avise a administração da clínica</td></tr>
+  <tr><td><b>Faltou imagem</b></td><td>Reabra o <b>mesmo exame</b> no aparelho, congele e grave a imagem (Store/Acquire)</td><td>1 min depois o PDF é refeito com todas as imagens</td><td><b>Não faça.</b> As imagens originais já foram apagadas e o PDF poderia sair só com as novas. Avise a administração da clínica</td></tr>
   <tr><td><b>Imagem a mais</b></td><td>Na tela <b>EcoPDF - Exames</b>, abra o exame, clique no ✓ da imagem e em <b>Salvar folha</b></td><td>A folha é refeita sem a imagem; se já estava finalizado, volta à pasta 3 com <code>_retificado</code></td><td>Não é possível: o exame não aparece mais na tela</td></tr>
   <tr><td><b>Tirou sem querer</b></td><td>Na tela, clique de novo no ✓ da imagem e em <b>Salvar folha</b></td><td>A imagem volta</td><td>Não é possível</td></tr>
   <tr><td><b>Ordem das imagens</b></td><td>Na tela, arraste a miniatura para a posição certa e clique em Salvar folha</td><td>A folha é refeita na nova ordem</td><td>Não é possível</td></tr>
@@ -164,7 +164,7 @@ li{margin:4px 0}
 <div class="faq">
 <p><b>Como o sistema sabe de quem é cada imagem?</b> Cada imagem sai do aparelho com o nome do paciente, a data e a sonda usada. O PC junta o laudo e as imagens que têm a mesma data, o mesmo tipo de exame e o mesmo paciente. O nome que aparece na folha é sempre o do laudo.</p>
 <p><b>Faço Eco e Carótidas no mesmo cadastro. Ele separa?</b> Sim, pela sonda de cada imagem: setorial vai para o Eco, linear vai para as Carótidas e a convexa 4C vai para o Eco Fetal. Sai um PDF para cada laudo Nos aparelhos que não mandam o nome da sonda (como o Vivid S6), a separação é pela frequência da sonda: a linear (carótidas) é bem mais alta que a setorial (eco).</p>
-<p><b>Como ele sabe que terminei o exame?</b> Quando passam 2,5 minutos sem chegar imagem nova. Se chegar mais imagem depois, ele refaz.</p>
+<p><b>Como ele sabe que terminei o exame?</b> Quando passa 1 minuto sem chegar imagem nova. Se chegar mais imagem depois, ele refaz (também depois de juntar com o laudo: o final é refeito com todas as imagens).</p>
 <p><b>Posso ver as imagens enquanto laudo?</b> Pode, pela tela <b>EcoPDF - Exames</b>: imagem grande, com zoom e com as medidas do aparelho. Ela usa as imagens originais e não trava nada. O PDF da pasta 2 também pode ser aberto, mas, enquanto ele estiver aberto, a junção espera.</p>
 <p><b>E se eu não laudar no mesmo dia?</b> As imagens ficam esperando na pasta 2 e juntam quando o laudo sair. Elas aparecem em Pendentes, na tela, como lembrete.</p>
 <p><b>Como sei que um laudo já foi refeito?</b> De três formas. O arquivo volta a aparecer na pasta 3 com <code>_retificado</code> no fim do nome. A tela mostra o selo "Subir de novo" por 3 dias (passe o mouse para ver o motivo e o horário). E a versão anterior fica guardada em <code>C:\EcoPDF\processados\substituidos</code>. Para saber o que precisa subir de novo, use o selo "Subir de novo" da tela e o _retificado no fim do nome.</p>
