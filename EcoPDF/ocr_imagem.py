@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 AQUI = Path(__file__).resolve().parent
-VERSAO = 4           # muda quando a leitura muda (invalida o ocr.json de cada estudo)
+VERSAO = 5           # muda quando a leitura muda (invalida o ocr.json de cada estudo)
 CLARO = 150          # borda da caixa (menor canal RGB)
 TINTA = 100          # pixel de letra
 DIST_MAX = 0.35      # pior letra aceita na linha (0 = identica a fonte)
@@ -386,12 +386,14 @@ def _carotida(arr, linhas, palavras=None, prefixo=""):
     if len(vasos) != 1:
         return []      # sem nome de vaso, ou dois nomes na mesma imagem: nao arrisca
     vaso, lado = vasos.pop()
-    ps, ed, idx = [], [], 0
+    ps, ed = [], []
     for texto, pior in linhas:
-        m = re.match(r"^#(\d?)", texto)
-        if m:
-            idx = int(m.group(1) or 0)
         if pior > DIST_MAX:
+            # linha PS/ED mal lida ABAIXO das ja lidas: pode ser a remarcacao, entao a de
+            # cima nao vale mais (melhor ficar em branco do que pegar a medida descartada)
+            m = re.search(r"\b(PS|ED)\b", texto or "")
+            if m:
+                (ps if m.group(1) == "PS" else ed).append(None)
             continue
         t = re.sub(r"^#\d?\s*", "", texto).strip()
         t = re.sub(r"(?<=[\d.])\s+(?=[\d.])", "", t)
@@ -401,15 +403,18 @@ def _carotida(arr, linhas, palavras=None, prefixo=""):
         v = abs(float(r.group(3))) * (100 if r.group(4) == "m/s" else 1)
         if v == 0:
             continue   # ED 0.00 = segundo cursor nao colocado
-        (ps if r.group(2) == "PS" else ed).append((idx, v))
+        (ps if r.group(2) == "PS" else ed).append(v)
     k_ps, k_ed = CHAVES_VASO[vaso]
     nome = next(n for n, vl in VASOS.items() if vl == (vaso, lado))
     saida = []
-    # mais de uma medida na caixa: vale a ultima feita (maior numero)
-    if ps:
-        saida.append((prefixo + k_ps + lado, max(ps)[1], "cm/s", nome + " PS"))
-    if ed and k_ed:
-        saida.append((prefixo + k_ed + lado, max(ed)[1], "cm/s", nome + " ED"))
+    # Mais de uma medida na caixa = o medico remarcou: vale a de BAIXO (o Vivid acrescenta
+    # cada medida nova no fim da caixa), PS e ED separados porque na remarcacao o ED (#3)
+    # costuma vir acima do PS (#2). Nao usa o numero #1/#2/#3: o do S6 (azul) nao e lido, e
+    # o desempate caia no maior valor (Helder, 05/11/2026).
+    if ps and ps[-1] is not None:
+        saida.append((prefixo + k_ps + lado, ps[-1], "cm/s", nome + " PS"))
+    if ed and ed[-1] is not None and k_ed:
+        saida.append((prefixo + k_ed + lado, ed[-1], "cm/s", nome + " ED"))
     return saida
 
 

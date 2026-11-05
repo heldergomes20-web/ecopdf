@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.05.3
+- Carotidas: quando o medico remarca a velocidade (a 1a medida ficou errada e ele mede de novo, em geral com o item "Rt Prox ACC"), vale a medida de BAIXO da caixa PS/ED, que e a remarcacao. Antes, no Vivid S6, quando havia duas medidas o EcoPDF ficava com o maior valor; nos exames reais isso coincidia com a remarcacao, mas sairia errado se a remarcacao desse um valor menor. PS e ED sao escolhidos separados. Se a linha de baixo nao puder ser lida com seguranca, o campo fica em branco em vez de usar a medida de cima.
+
 2026.11.05.2
 - Exame fecha mais rapido: a folha de imagens e feita 1 minuto depois da ultima imagem (antes 2,5 min; ESPERA_SEGUNDOS = 60). O laudo impresso junta com as imagens mais cedo. Se chegar imagem depois, a folha e refeita; se o laudo ja tinha juntado, o final e refeito com todas as imagens (_retificado, selo "Subir de novo").
 
