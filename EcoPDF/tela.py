@@ -554,6 +554,8 @@ def _handler(ep, cfg):
                 if u.path == "/api/imprimir_estado":
                     st = impressao.estado(int(q.get("id", "0") or 0))
                     return self._enviar(200, st or {"estado": "erro", "mensagem": "impressão não encontrada"})
+                if u.path == "/api/sinal":
+                    return self._enviar(200, sinal(q.get("e", ""), ep, cfg))
                 if u.path == "/api/exame":
                     pasta = _pasta(q.get("e", ""), cfg)
                     d = detalhe(pasta, q.get("t", ""), ep, cfg) if pasta else None
@@ -646,8 +648,51 @@ def _handler(ep, cfg):
     return H
 
 
-_estado = {"contato": 0.0, "aberta_em": 0.0, "url": ""}
+_estado = {"contato": 0.0, "aberta_em": 0.0, "url": "", "ultimo": None}
 ABERTA_SEG = 120   # pagina aberta consulta a cada 15 s (aba minimizada: ~1 por minuto)
+ULTIMO_SEG = 600   # exame que chegou ha menos de 10 min: a tela abre direto nele
+
+
+def recebida(estudo, tipo):
+    """Imagem gravada (chamado pelo on_store). Guarda o exame da ultima imagem: a tela abre
+    nele e a pagina aberta mostra as imagens novas / avisa que chegou outro exame.
+    So na memoria: reiniciar o EcoPDF esquece (a tela volta a abrir na lista)."""
+    if tipo is None:   # SR ou arquivo sem imagem: nao muda o exame
+        return
+    _estado["ultimo"] = {"estudo": estudo, "tipo": tipo or "", "em": time.time()}
+
+
+def _url_ultimo():
+    """Endereco da tela ja no exame da ultima imagem (se recente); senao, a lista."""
+    u = _estado["ultimo"]
+    if u and time.time() - u["em"] < ULTIMO_SEG:
+        from urllib.parse import quote
+        return f'{_estado["url"]}#e={quote(u["estudo"], safe="")}&t={quote(u["tipo"], safe="")}'
+    return _estado["url"]
+
+
+def sinal(estudo, ep, cfg):
+    """Consulta leve da pagina (a cada 4 s com um exame aberto): ultimo exame que chegou e
+    se a pasta do exame aberto mudou (imagem nova, medidas, folha). Le so datas de arquivo."""
+    agora = time.time()
+    r = {"ultimo": None, "ass": "", "ultima_ha": None}
+    u = _estado["ultimo"]
+    if u:
+        r["ultimo"] = {"estudo": u["estudo"], "tipo": u["tipo"], "ha": int(agora - u["em"]),
+                       "tipo_nome": (u["tipo"] or "Exame").replace("_", " ")}
+        p = _pasta(u["estudo"], cfg)
+        try:
+            t = _info_estudo(p, ep, cfg)["tipos"].get(u["tipo"]) if p else None
+        except Exception:
+            t = None
+        if t:
+            r["ultimo"].update(paciente=t["paciente"], hora=t["hora"])
+    p = _pasta(estudo, cfg) if estudo else None
+    if p:
+        ass = _assinatura(p)
+        r["ass"] = "-".join(str(x) for x in ass)
+        r["ultima_ha"] = int(agora - ass[-1]) if ass[-1] else None
+    return r
 
 
 def _janelas_da_tela():
@@ -762,7 +807,7 @@ def abrir_se_fechada(cfg):
     if janelas:
         _trazer_para_frente(janelas[0])
         return
-    abrir_janela(_estado["url"])
+    abrir_janela(_url_ultimo())
 
 
 def abrir_pasta_final(estudo, tipo, ep, cfg):

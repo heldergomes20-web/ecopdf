@@ -10,6 +10,8 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 - Laudo que ja estava em 9 - Revisar por causa disso: depois de atualizar, mova o PDF de 9 - Revisar para 0 - Entrada PDF24; o EcoPDF le de novo e junta com as imagens.
 - Painel das salas: placa de rede virtual (ex.: Topaz Loopback do banco, VPN, acesso remoto) nao conta mais como rede do PC. Acaba o falso "IP do PC mudou" e "2 redes ativas" (visto no Bessa com o endereco 54.232.189.113).
 - Painel das salas: menos aviso que nao pede acao. Erros no registro so avisam a partir de 5 em 24 h (antes 1). Laudos liberados sem imagens e exames descartados so avisam acima de 10 em 7 dias (antes 2 e 3), enquanto parte dos medicos ainda nao usa o fluxo.
+- Tela: laudar com as imagens ao lado do Medware. Quando chega a primeira imagem de um exame, a tela abre direto nesse exame (se estava na lista ou fechada). Imagens e medidas novas aparecem sozinhas no exame aberto (selo verde "novo" na miniatura por 3 min; "recebendo" ao lado do nome). Com outro exame aberto ela nao troca: mostra a faixa "Novo exame chegou: NOME" com Abrir e Depois (com folha alterada e nao salva, pede para salvar antes).
+- Tela em janela estreita (ao lado do Medware, menos de 1100 px): imagem em cima, miniaturas, medidas embaixo em 2 colunas; botoes da folha (Salvar, Pre-visualizar, Imprimir, Descartar, Ver final) no botao "⋯"; nome do paciente maior. Janela larga ou 2o monitor: igual a antes. Tirar/voltar (✓), arrastar e zoom funcionam nos dois.
 
 2026.11.04.1
 - Tela: o seletor "Worklist [Todos os medicos]" passa a buscar a lista de medicos de novo quando voce clica nele. Medico que entrou na agenda depois de a tela abrir aparece na hora (antes podia levar ate 5 minutos).
