@@ -21,6 +21,7 @@ import sys
 import threading
 import time
 import unicodedata
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pdfplumber
@@ -43,7 +44,9 @@ MANTER_ACENTOS = False  # False: "JOAO" em vez de "JOAO" com til (mais seguro p/
 PARTICULAS = {"de", "da", "do", "das", "dos", "e"}
 
 # Palavras que encerram o campo "Paciente" na mesma linha do PDF
-PARAR_NOME = {"Data", "Exame", "Exame:", "Nº", "N°", "Sexo", "Convênio", "Idade"}
+PARAR_NOME = {"Data", "Exame", "Exame:", "Nº", "N°", "No", "Sexo", "Convênio", "Convenio", "Idade",
+              "Nasc", "Nasc.", "CPF", "RG", "Prontuário", "Prontuario", "Registro", "Atendimento",
+              "Código", "Codigo", "Realizado"}
 
 # Tipo de exame: se o titulo do laudo contiver a chave (sem acento, minusculo),
 # usa o nome da direita. Ajuste/adicione livremente. Se nao houver regra, usa
@@ -52,10 +55,34 @@ TIPOS_PERSONALIZADOS = {
     # "duplex scan vascular carotidas": "Doppler_Carotidas",
 }
 
+# Titulo do laudo -> tipo do [tipos] do config.ini (cada medico/modelo escreve de um jeito:
+# "Ecocardiograma", "Ecodopplercardiograma transtoracico", "Doppler de carotidas e vertebrais").
+# Testado na ordem, no titulo sem acento e minusculo. None = nao e o eco comum: fica o titulo.
+TIPOS_POR_PALAVRA = [
+    (r"fetal|idade gestacional", "Ecocardiograma_Fetal"),
+    (r"carotid|vertebr", "Duplex_Scan_Vascular_Carotidas"),
+    (r"estresse|stress|esforco|dobutamina|transesofag", None),
+    (r"(?:eco|doppler)\w*cardiogra|ecocardiografia|transtoracic", "Ecocardiograma"),
+]
+
 # ----------------------------------------------------------------------------
 # EXTRACAO
 # ----------------------------------------------------------------------------
-RE_DATA = re.compile(r"(?:Data(?:\s+Ex)?|Realizado\s+em)\s*:\s*(\d{2}/\d{2}/\d{4})")
+# Data do exame. Cada modelo de laudo usa um rotulo: "Data :", "Data Ex:", "Data Exame:",
+# "Data do Exame:", "Realizado em:", "Data de realizacao:", "Data do atendimento:".
+# Na ordem: primeiro o rotulo que diz que e a data do exame, depois "Data :" sozinho.
+# Nunca a data de nascimento ("Data Nasc.:", "Data de Nascimento:").
+DATA = r"(\d{2}/\d{2}/\d{4})"
+RE_DATAS = [
+    re.compile(r"(?:Data\s*(?:d[oae]\s+)?(?:Ex(?:ame)?\b\.?|Realiza\w*|Atendimento)|Realizad[oa]\s+em)"
+               r"\s*:?\s*" + DATA, re.I),
+    re.compile(r"\bData\s*:\s*" + DATA, re.I),
+]
+RE_DATA = RE_DATAS[1]  # compatibilidade
+RE_QUALQUER_DATA = re.compile(r"\b" + DATA + r"\b")
+RE_NASC = re.compile(r"nasc", re.I)
+# Nome do paciente: "Paciente:", "Paciente :", "Nome:", "Nome do Paciente:" (nao "Dados do Paciente")
+RE_NOME = re.compile(r"^(?:(?:Nome\s+(?:d[oa]\s+)?)?Paciente\b\s*:?|Nome\s*:)\s*(.*)$", re.I)
 # Laudo fetal (vem de outra plataforma, com titulo livre): reconhecido pelo conteudo
 RE_FETAL = re.compile(r"(?:cardiograma|eco)\w*\s+fetal|idade\s+gestacional")
 
@@ -81,8 +108,31 @@ def agrupar_linhas(words, tol=3.0):
     return linhas
 
 
+def _data_valida(txt):
+    try:
+        d = datetime.strptime(txt, "%d/%m/%Y")
+    except ValueError:
+        return False
+    return 2000 <= d.year and d <= datetime.now() + timedelta(days=1)
+
+
+def _nome_da_linha(junto):
+    m = RE_NOME.match(junto)
+    if not m:
+        return None
+    partes = []
+    for t in m.group(1).split():
+        if t == ":":
+            continue
+        if t in PARAR_NOME or t.endswith(":") or RE_QUALQUER_DATA.search(t):
+            break
+        partes.append(t)
+    return " ".join(partes) or None
+
+
 def extrair_campos(pdf_path: Path):
-    """Retorna (nome, data 'dd/mm/aaaa', titulo/tipo bruto) ou None nos que faltarem."""
+    """Retorna (nome, data 'dd/mm/aaaa', titulo/tipo bruto) ou None nos que faltarem.
+    Aceita varios modelos de laudo (cada medico usa um no Medware)."""
     with pdfplumber.open(pdf_path) as pdf:
         if not pdf.pages:
             return None, None, None
@@ -91,44 +141,48 @@ def extrair_campos(pdf_path: Path):
         texto_pagina = pagina.extract_text() or ""
 
     linhas = agrupar_linhas(palavras)
-    nome = data = titulo = None
+    nome = titulo = None
+    juntos = [" ".join(w["text"] for w in linha) for linha in linhas]
 
-    for i, linha in enumerate(linhas):
-        textos = [w["text"] for w in linha]
-        junto = " ".join(textos)
+    for i, junto in enumerate(juntos):
+        # Nome: linha que comeca com "Paciente"/"Nome" (ignora o cabecalho "Dados do Paciente")
+        if nome is None:
+            nome = _nome_da_linha(junto)
 
-        # Nome: linha que comeca com "Paciente" (ignora o cabecalho "Dados do Paciente")
-        if nome is None and textos and textos[0].startswith("Paciente"):
-            partes = []
-            for t in textos[1:]:
-                if t == ":":
-                    continue
-                if t in PARAR_NOME:
-                    break
-                partes.append(t)
-            if partes:
-                nome = " ".join(partes)
+        # Titulo do exame: linha logo abaixo de "Solicitado por" / "Solicitador por" / "Solicitante"
+        if titulo is None and junto.lower().startswith("solicit") and i + 1 < len(juntos):
+            titulo = juntos[i + 1]
 
-        # Data de realizacao: "Data Ex: dd/mm/aaaa", "Data : dd/mm/aaaa" ou "Realizado em: dd/mm/aaaa"
-        # (nao casa com "Data de Nasc.")
-        if data is None:
-            m = RE_DATA.search(junto)
-            if m:
+    # Data de realizacao: rotulo de data do exame em qualquer linha; depois "Data :"
+    data = None
+    for rx in RE_DATAS:
+        for junto in juntos:
+            m = rx.search(junto)
+            if m and _data_valida(m.group(1)):
                 data = m.group(1)
-
-        # Titulo do exame: linha logo abaixo de "Solicitado por"
-        if titulo is None and textos and textos[0] == "Solicitado":
-            if i + 1 < len(linhas):
-                titulo = " ".join(w["text"] for w in linhas[i + 1])
+                break
+        if data:
+            break
+    if data is None:
+        # Sem rotulo conhecido: unica data do cabecalho que nao e a de nascimento
+        cab, vistas = juntos[:10], []
+        for junto in cab:
+            for m in RE_QUALQUER_DATA.finditer(junto):
+                rotulo = junto[:m.start()].rsplit(":", 1)[0][-20:]  # texto logo antes da data
+                if not RE_NASC.search(rotulo) and _data_valida(m.group(1)) and m.group(1) not in vistas:
+                    vistas.append(m.group(1))
+        if len(vistas) == 1:
+            data = vistas[0]
 
     # Fetal vence qualquer titulo: o EcoPDF junta pelo tipo "Ecocardiograma_Fetal"
     if RE_FETAL.search(sem_acento(texto_pagina).lower()):
         titulo = "Ecocardiograma Fetal"
 
-    # Laudo de eco nao tem linha de titulo: identifica pelo conteudo
+    # Laudo de eco sem linha de titulo: identifica pelo conteudo
     if titulo is None:
         t = sem_acento(texto_pagina).lower()
-        if "unidimensional" in t or "ecocardiograma" in t or "laudo descritivo" in t:
+        if ("unidimensional" in t or "ecocardiograma" in t or "laudo descritivo" in t
+                or "ecodopplercardiograma" in t):
             titulo = "Ecocardiograma"
 
     return nome, data, titulo
@@ -159,6 +213,11 @@ def formatar_tipo(titulo: str | None) -> str:
     for trecho, nome_curto in TIPOS_PERSONALIZADOS.items():
         if trecho in chave:
             return nome_curto
+    for rx, tipo in TIPOS_POR_PALAVRA:
+        if re.search(rx, chave):
+            if tipo:
+                return tipo
+            break
     palavras = [w.capitalize() if w.lower() not in PARTICULAS else w.lower()
                 for w in titulo.split()]
     return limpar(" ".join(palavras)) or "Exame"

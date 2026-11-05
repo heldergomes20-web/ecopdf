@@ -1427,6 +1427,15 @@ def _dados_em_coluna(linhas):
     return {"paciente": ""}
 
 
+def _nome_pelas_linhas(arq):
+    try:
+        import renomear_laudos
+        return renomear_laudos.extrair_campos(arq)[0] or ""
+    except Exception:
+        log.exception("Nome do paciente nao lido pelas linhas: %s", Path(arq).name)
+        return ""
+
+
 def dados_do_laudo(arq, tipos):
     """Campos do quadro 'Dados do Paciente' do laudo, como estao escritos nele.
     Sem texto legivel, so o nome (tirado do nome do arquivo)."""
@@ -1453,6 +1462,12 @@ def dados_do_laudo(arq, tipos):
     }
     if not dados["paciente"] or dados["paciente"].endswith(":"):
         dados.update(_dados_em_coluna(linhas))
+    # Nome lido linha a linha (o mesmo leitor do renomeador): vale para qualquer modelo de
+    # laudo. No modelo com a tabela de medidas no topo, o texto corrido punha a data de
+    # nascimento no lugar do nome.
+    nome_linhas = _nome_pelas_linhas(arq)
+    if nome_linhas:
+        dados["paciente"] = nome_linhas
     nome = dados["paciente"]
     if "," in nome:  # 'FERNANDES, LARISSA BRAGA' -> 'LARISSA BRAGA FERNANDES'
         sobrenome, _, resto = nome.partition(",")
