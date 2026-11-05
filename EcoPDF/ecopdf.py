@@ -127,9 +127,12 @@ TEMPOS_FOLHA = collections.deque(maxlen=300)  # (quando, segundos) para gerar a 
 TELA = None  # modulo da tela, quando ela esta ligada (para abrir ao receber)
 
 
-def _avisar_tela(cfg):
+def _avisar_tela(cfg, estudo=None, tipo=None):
+    """Chegou imagem (estudo/tipo) ou laudo: a tela abre (ou fica sabendo) no exame que chegou."""
     if TELA is not None:
         try:
+            if estudo is not None:
+                TELA.recebida(estudo, tipo)
             TELA.abrir_se_fechada(cfg)
         except Exception:
             log.exception("Tela: nao consegui abrir o navegador")
@@ -438,7 +441,13 @@ def on_store(event, cfg):
         gravar_atomico(pasta / (limpar_arquivo(sop, 64) + ".dcm"),
                        lambda p: p.write_bytes(dados))
         _anotar_conexao(event, "imagem")
-        _avisar_tela(cfg)
+        tipo = None
+        if ds.get("Rows") is not None:   # imagem (o SR das medidas nao muda o exame da tela)
+            try:
+                tipo = tipo_da_imagem(ds, cfg["tipos"], regra_freq(pasta, cfg)) or ""
+            except Exception:
+                tipo = None
+        _avisar_tela(cfg, pasta.name, tipo)
         log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
                  ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
