@@ -11,6 +11,7 @@ Sem painel.ini (PAINEL_URL e PAINEL_CHAVE) = desligado (nada sai do PC).
 Teste manual: enviar_status.bat (manda agora e mostra o que foi enviado).
 """
 
+import ipaddress
 import json
 import os
 import platform
@@ -356,8 +357,11 @@ try {
     $o.wifi = [bool](($ad.PhysicalMediaType -match '802\.11') -or ($ad.InterfaceDescription -match 'Wi-?Fi|Wireless'))
     $o.dhcp = [string](Get-NetIPInterface -InterfaceIndex $r.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).Dhcp
   }
+  # so placa fisica com IP interno; placa virtual (Topaz Loopback do banco, VPN, Hyper-V...) nao conta
   $o.redes = @(Get-NetIPConfiguration | Where-Object { $_.NetAdapter.Status -eq 'Up' -and $_.IPv4Address -and
-             $_.IPv4Address.IPAddress -notlike '169.254.*' } | Where-Object { (Get-NetAdapter -Physical -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue) }).Count
+             ($_.IPv4Address.IPAddress -match '^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)') -and
+             ($_.NetAdapter.InterfaceDescription -notmatch 'Loopback|Topaz|Virtual|VPN|TAP-|Hyper-V|VMware|WireGuard|Tailscale|ZeroTier|Fortinet|Cisco AnyConnect') } |
+             Where-Object { (Get-NetAdapter -Physical -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue) }).Count
 } catch {}
 try { $o.firewall = [bool](Get-NetFirewallRule -DisplayName 'EcoPDF DICOM' -ErrorAction Stop | Where-Object { $_.Enabled -eq 'True' }) } catch {}
 try {
@@ -400,8 +404,19 @@ def _texto_rede(r):
     return " · ".join(partes)
 
 
+def _ip_local(ip):
+    """IP de rede interna (192.168, 10, 172.16-31). Fora disso e placa virtual (ex.: Topaz
+    Loopback do banco, VPN, acesso remoto), que nao serve para o aparelho e dava falso
+    'IP do PC mudou' e '2 redes ativas' no Bessa (05/11: 54.232.189.113)."""
+    try:
+        a = ipaddress.ip_address(ip)
+        return any(a in ipaddress.ip_network(r) for r in ("192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"))
+    except ValueError:
+        return False
+
+
 def _ips():
-    """IPv4 deste PC: o da rede principal primeiro (rota padrao), depois os outros."""
+    """IPv4 internos deste PC: o da rede principal primeiro (rota padrao), depois os outros."""
     ips = []
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -417,7 +432,7 @@ def _ips():
                 ips.append(ip)
     except OSError:
         pass
-    return ", ".join(ips)[:80]
+    return ", ".join(ip for ip in ips if _ip_local(ip))[:80]
 
 
 def _conexao(cfg):
