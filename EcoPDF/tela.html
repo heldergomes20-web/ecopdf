@@ -353,7 +353,7 @@ async function abrirExame(estudo, tipo) {
   const r = await fetch(`/api/exame?e=${encodeURIComponent(estudo)}&t=${encodeURIComponent(tipo)}`);
   if (!r.ok) { aviso("Exame não encontrado (pode ter passado do prazo de guarda).", true); location.hash = ""; return; }
   ex = await r.json();
-  confirmados = new Set(); novos = new Map(); assVista = ""; vivoAte = 0;
+  confirmados = new Set(); novos = new Map(); assVista = ex.ass || ""; vivoAte = 0;
   ordem = ex.imagens.map(i => i.id); fora = new Set(ex.imagens.filter(i => i.fora).map(i => i.id));
   atual = 0; sujo = false;
   if (avisoNovo && avisoNovo.estudo === ex.estudo && avisoNovo.tipo === ex.tipo) fecharAvisoNovo();
@@ -841,6 +841,7 @@ async function recarregarExame() {
   const medMudou = JSON.stringify(d.medidas) !== JSON.stringify(ex.medidas);
   const final = ex.impressao ? {impressao: ex.impressao, final: ex.final, situacao: ex.situacao} : {};
   ex = Object.assign(d, final);
+  if (d.ass) assVista = d.ass;   // assinatura de quando o EcoPDF leu: o que chegou depois recarrega de novo
   if (chegaram.length) vivoAte = agora + 180000;
   atual = Math.max(0, ordem.indexOf(idAtual));
   subtitulo(); desenharTiras(); if (medMudou) painel();
@@ -863,8 +864,7 @@ async function sinal() {
       else if (ex && (u.estudo !== ex.estudo || u.tipo !== ex.tipo)) mostrarAvisoNovo(u);
     } else if (avisoNovo && chaveU(avisoNovo) === chaveU(u) && !avisoNovo.paciente && u.paciente) mostrarAvisoNovo(u);
     if (ex && d.ass) {
-      if (assVista && d.ass !== assVista) await recarregarExame();
-      assVista = d.ass;
+      if (d.ass !== assVista) await recarregarExame();
       if (d.ultima_ha !== null && d.ultima_ha < 180 && !vivoAte) { vivoAte = Date.now() + (180 - d.ultima_ha) * 1000; subtitulo(); }
     }
     if (ex) {   // selo "novo" some depois de 3 min; "recebendo" depois de 3 min sem imagem
@@ -877,6 +877,7 @@ async function sinal() {
   sinalOcupado = false;
 }
 setInterval(sinal, 4000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) sinal(); });   // janela que estava coberta/minimizada: atualiza na hora
 // menu "⋯" (janela estreita): os mesmos botoes da folha, so os que estao valendo agora
 $("b-mais").onclick = ev => {
   ev.stopPropagation();
