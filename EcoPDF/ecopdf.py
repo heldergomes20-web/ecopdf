@@ -73,6 +73,17 @@ TRANSFER_SYNTAXES = [
     "1.2.840.10008.1.2.4.90",   # JPEG 2000 Lossless
     "1.2.840.10008.1.2.4.91",   # JPEG 2000
     "1.2.840.10008.1.2.5",      # RLE Lossless
+    # Video (loops do Philips pelo Acquire): so aceitos para o aparelho nao dar erro de envio;
+    # com QUADRO_LOOP = ignorar o loop e descartado antes de qualquer leitura dos quadros.
+    "1.2.840.10008.1.2.4.100",  # MPEG2 MP@ML
+    "1.2.840.10008.1.2.4.101",  # MPEG2 MP@HL
+    "1.2.840.10008.1.2.4.102",  # MPEG-4 AVC/H.264 HP@4.1
+    "1.2.840.10008.1.2.4.103",  # MPEG-4 AVC/H.264 BD
+    "1.2.840.10008.1.2.4.104",  # MPEG-4 AVC/H.264 HP@4.2 2D
+    "1.2.840.10008.1.2.4.105",  # MPEG-4 AVC/H.264 HP@4.2 3D
+    "1.2.840.10008.1.2.4.106",  # MPEG-4 AVC/H.264 Stereo
+    "1.2.840.10008.1.2.4.107",  # HEVC/H.265 Main
+    "1.2.840.10008.1.2.4.108",  # HEVC/H.265 Main 10
 ]
 
 # Campos DICOM usados para descobrir o tipo de exame de cada imagem.
