@@ -4,6 +4,7 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 
 2026.11.06
 - Philips, carotidas: a vertebral passa a ser lida mesmo quando o fim do nome digitado ("DIR." / "ESQ.") cai em cima da imagem 2D e o brilho do tecido atrapalha a leitura. "ART. VERT. D..." ja e direita e "ART. VERT. E..." ja e esquerda (no exame de 06/11 as 11h a vertebral esquerda tinha ficado em branco).
+- Impressao: na janela de Imprimir ha o botao "Imprimir em baixa qualidade". Sai tudo num envio so pela impressora padrao, em papel comum e na qualidade normal da impressora (sem a EcoPDF Foto e sem o modo foto): mais rapido, fotos com menos qualidade. O uso nao muda: colocar o papel fotografico indicado por cima do papel comum, como sempre. O botao "Imprimir" continua igual (fotos em papel fotografico e qualidade alta).
 
 2026.11.05.3
 - Carotidas: quando o medico remarca a velocidade (a 1a medida ficou errada e ele mede de novo, em geral com o item "Rt Prox ACC"), vale a medida de BAIXO da caixa PS/ED, que e a remarcacao. Antes, no Vivid S6, quando havia duas medidas o EcoPDF ficava com o maior valor; nos exames reais isso coincidia com a remarcacao, mas sairia errado se a remarcacao desse um valor menor. PS e ED sao escolhidos separados. Se a linha de baixo nao puder ser lida com seguranca, o campo fica em branco em vez de usar a medida de cima.
