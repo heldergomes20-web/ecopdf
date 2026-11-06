@@ -620,7 +620,7 @@ def _handler(ep, cfg):
                     fotos, laudo = paginas_lote(itens, ep, cfg)
                     if not fotos and not laudo:
                         return self._enviar(404, {"erro": "nada para imprimir"})
-                    tid = impressao.iniciar(fotos, laudo, cfg, ep.log)
+                    tid = impressao.iniciar(fotos, laudo, cfg, ep.log, rapido=bool(corpo.get("rapido")))
                     if tid is None:
                         return self._enviar(200, {"navegador": True})
                     _anotar_impressao(cfg)
