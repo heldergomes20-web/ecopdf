@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.06.1
+- Complemento da correcao do "Recebendo" (2026.11.06): exame em que uma parte ja estava finalizada (ex.: carotidas juntadas) ou em que a folha "Imagens" ja tinha sido juntada ao laudo do eco continuava em "Recebendo". Agora a folha que ainda aguarda e refeita com o tipo certo, e o exame ja finalizado passa a aparecer como Finalizado (o final nao muda).
+
 2026.11.06
 - Philips, carotidas: a vertebral passa a ser lida mesmo quando o fim do nome digitado ("DIR." / "ESQ.") cai em cima da imagem 2D e o brilho do tecido atrapalha a leitura. "ART. VERT. D..." ja e direita e "ART. VERT. E..." ja e esquerda (no exame de 06/11 as 11h a vertebral esquerda tinha ficado em branco).
 - Impressao: na janela de Imprimir ha o botao "Imprimir em baixa qualidade". Sai tudo num envio so pela impressora padrao, em papel comum e na qualidade normal da impressora (sem a EcoPDF Foto e sem o modo foto): mais rapido, fotos com menos qualidade. O uso nao muda: colocar o papel fotografico indicado por cima do papel comum, como sempre. O botao "Imprimir" continua igual (fotos em papel fotografico e qualidade alta).

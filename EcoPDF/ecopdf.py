@@ -1595,11 +1595,12 @@ def reclassificar_pendentes(cfg):
     """Ao iniciar: exame ainda aguardando laudo (folha na pasta 2) cujo tipo mudou com o
     [tipos] desta versao (ex.: Philips S4_2, que antes saia "Imagens") tem a folha refeita
     com o tipo novo. Sem isso o exame ficava em "Recebendo" ate chegar imagem nova.
-    Exame com folha ja juntada ao laudo nao e mexido."""
+    Folha ja juntada ao laudo nao e refeita (o outro tipo do mesmo estudo pode estar finalizado)."""
     for pasta in cfg["pasta_dicom"].iterdir():
         try:
             antes = _ler_grupos(pasta) if pasta.is_dir() else []
-            if not antes or not all(Path(g["pdf"]).exists() for g in antes):
+            # so estudo com folha sem tipo ("Imagens") ou com tipo que saiu do [tipos]: le pouco ao iniciar
+            if not antes or all(g["tipo"] and g["tipo"] in cfg["tipos"] for g in antes):
                 continue
             freq = regra_freq(pasta, cfg)
             agora = set()
@@ -1613,6 +1614,26 @@ def reclassificar_pendentes(cfg):
                 if int(ds.get("NumberOfFrames", 1) or 1) > 1 and cfg["quadro_loop"] == "ignorar":
                     continue
                 agora.add(tipo_da_imagem(ds, cfg["tipos"], freq))
+            sumiram = {g["tipo"] for g in antes} - agora
+            novos = agora - {g["tipo"] for g in antes}
+            juntados = [g for g in antes if g["tipo"] in sumiram and not Path(g["pdf"]).exists()]
+            if juntados:
+                # tipo antigo ja juntado ao laudo (o final esta certo): nao refaz, so troca o nome
+                # do tipo no registro do estudo para a tela achar o exame (senao fica "Recebendo")
+                if len(juntados) == 1 and len(sumiram) == 1 and len(novos) == 1:
+                    velho, novo = juntados[0]["tipo"], next(iter(novos))
+                    log.info("Tipo do exame mudou com esta versao (%s -> %s), ja finalizado: so o registro de %s",
+                             velho or "Imagens", novo or "Imagens", pasta.name)
+                    juntados[0]["tipo"] = novo
+                    gravar_atomico(pasta / GRUPOS, lambda p: p.write_text(
+                        json.dumps(antes, ensure_ascii=False, indent=1), "utf-8"))
+                    for nome in (ORDEM, OCULTAS):
+                        d = _ler_json(pasta / nome, None)
+                        if isinstance(d, dict) and velho in d and novo not in d:
+                            d[novo] = d.pop(velho)
+                            gravar_atomico(pasta / nome, lambda p: p.write_text(
+                                json.dumps(d, ensure_ascii=False), "utf-8"))
+                continue
             if agora and agora != {g["tipo"] for g in antes}:
                 log.info("Tipo do exame mudou com esta versao (%s -> %s): refazendo a folha de %s",
                          sorted(g["tipo"] or "Imagens" for g in antes), sorted(t or "Imagens" for t in agora), pasta.name)
