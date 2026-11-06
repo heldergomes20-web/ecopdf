@@ -179,7 +179,9 @@ def _escolher(cands):
     # "User chosen value"); 2) a media; 3) todos (na duvida = em branco)
     escolhidos = [v for v, d in cands if re.search(r"chosen|escolhid", d, I)]
     medias = [v for v, d in cands if re.search(r"mean|average|m[eé]dia", d, I)]
-    usar = escolhidos or medias or [v for v, _ in cands]
+    # Philips manda o volume do AE em 4C, 2C e biplano, sem marcar qual foi escolhido: vale o biplano
+    biplano = [v for v, d in cands if re.search(r"biplane|bi-plane", d, I)]
+    usar = escolhidos or medias or biplano or [v for v, _ in cands]
     distintos = {round(v, 3) for v in usar}
     return usar[0] if len(distintos) == 1 else None
 
