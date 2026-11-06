@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.06.2
+- Impressao em baixa qualidade: deixa de ser um botao e vira a caixinha "Baixa qualidade (mais rapido)" na janela de Imprimir, desmarcada a cada vez (o padrao continua alta qualidade). Marcada, a sequencia e a mesma do Imprimir normal: primeiro as fotos, depois o laudo em outro envio, entao a pilha sai igual (fotos embaixo, laudo em cima). Antes ia tudo num envio so e a impressora podia inverter a ordem.
+
 2026.11.06.1
 - Complemento da correcao do "Recebendo" (2026.11.06): exame em que uma parte ja estava finalizada (ex.: carotidas juntadas) ou em que a folha "Imagens" ja tinha sido juntada ao laudo do eco continuava em "Recebendo". Agora a folha que ainda aguarda e refeita com o tipo certo, e o exame ja finalizado passa a aparecer como Finalizado (o final nao muda).
 
