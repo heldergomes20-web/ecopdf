@@ -20,6 +20,9 @@ outra fonte (fonte_t8.json) e nome do vaso digitado em BRANCO. A leitura do T8 s
 "t8_..." e so vale depois de conferida em medidas.py (e′ septal + lateral contra o E′ med da
 caixa; velocidades das carotidas contra os valores do SR). Ver medidas._validar_t8.
 
+Philips Affiniti 50G (sala 6 de Tambauzinho, 06/11/2026): PSV/EDV/RI em texto branco sem caixa e
+nome do vaso digitado em branco; fonte_philips.json; conferencia pelo RI. Ver medidas_philips.
+
 """
 
 import json
@@ -29,7 +32,7 @@ from pathlib import Path
 import numpy as np
 
 AQUI = Path(__file__).resolve().parent
-VERSAO = 5           # muda quando a leitura muda (invalida o ocr.json de cada estudo)
+VERSAO = 6           # muda quando a leitura muda (invalida o ocr.json de cada estudo)
 CLARO = 150          # borda da caixa (menor canal RGB)
 TINTA = 100          # pixel de letra
 DIST_MAX = 0.35      # pior letra aceita na linha (0 = identica a fonte)
@@ -561,6 +564,150 @@ def medidas_t8(arr):
     return saida
 
 
+# --------------------------------------------------------------------------
+# Philips Affiniti (sala 6 de Tambauzinho, 06/11/2026)
+# --------------------------------------------------------------------------
+# O medico mede PSV/EDV com a ferramenta avulsa do Doppler: a medida aparece na imagem
+# ("PSV -80.8 cm/s", "EDV -28.5 cm/s", "RI 0.65") mas nao vai para o SR. O nome do vaso e
+# digitado em branco (ACCD, ACIE, "ART. VERT. DIR."...). Texto branco sobre preto, sem caixa,
+# no mesmo lugar da tela (canto superior direito); fonte em fonte_philips.json (de exames reais).
+# Conferencia: o RI que o aparelho calcula tem de bater com (PSV - EDV) / PSV; sem RI legivel
+# o valor aparece para o medico confirmar (chave "ph_..."); RI que nao bate = leitura descartada.
+
+PH_TEXTO = 150           # medida (menor canal RGB)
+PH_ROTULO = 200          # nome do vaso digitado
+PH_ALTURA, PH_ACIMA = 24, 19
+PH_MEDIDA = (60, 360, 780, 1024)   # y0, y1, x0, x1 da regiao das medidas (imagem 1024 x 768)
+PH_MEDIDA_X_LINHA = 930            # a escala de cinza/cor ao lado (posicao varia) emendaria as linhas
+PH_NOME = (300, 440, 120, 720)     # ... e do nome do vaso (abaixo da imagem 2D, acima do espectro)
+PH_NOME_X_LINHA = 330              # a linha do nome e achada a esquerda da imagem 2D (fundo preto)
+PH_VASOS = {**VASOS, "ARTVERTDIR": ("vert", "_d"), "ARTVERTESQ": ("vert", "_e")}
+PH_TOL_RI = 0.012
+
+_fonte_ph = None
+
+
+def _carregar_fonte_ph():
+    """(glifos da medida, glifos do nome do vaso) ou False sem o arquivo."""
+    global _fonte_ph
+    if _fonte_ph is None:
+        arq = AQUI / "fonte_philips.json"
+        if not arq.exists():
+            _fonte_ph = False
+            return _fonte_ph
+        doc = json.loads(arq.read_text(encoding="utf-8"))
+        _fonte_ph = tuple([(ch, np.asarray(g, dtype=np.float32) / 255.0)
+                           for ch, lista in doc[k].items() for g in lista]
+                          for k in ("glifos", "rotulos"))
+    return _fonte_ph
+
+
+def _linhas_ph(cinza, limiar, regiao, x_linha=None):
+    """[(y, recorte)] das linhas de texto da regiao (pixels abaixo do limiar zerados).
+    x_linha: so as colunas ate ali decidem onde ha linha (o resto pode ter imagem clara)."""
+    y0, y1, x0, x1 = regiao
+    w = cinza[y0:y1, x0:x1].astype(np.float32)
+    w = np.where(w > limiar, w, 0)
+    on = (w[:, :(x_linha or x1) - x0] > 0).sum(axis=1) >= 2
+    return [(y0 + a, w[max(0, a - 2):b + 3]) for a, b in _corridas(on, 8) if b - a <= 30]
+
+
+def letras_ph(lin):
+    """[(x0, x1, glifo)] de uma linha: letras separadas por coluna vazia (risco fino fora)."""
+    win = _janela(lin, PH_ALTURA, PH_ACIMA)
+    if win is None:
+        return []
+    on = (win > 0).any(axis=0)
+    saida = []
+    for a, b in _corridas(on, 1):
+        g = win[:, a:b]
+        if (g > 0).any(axis=1).all():
+            break      # faixa da altura toda = escala de cinza/cor ao lado do texto: fim da linha
+        if b - a >= 3 or (g > 0).sum() >= 6:
+            saida.append((a, b, g))
+    return saida
+
+
+def _palavras_ph(letras, glifos):
+    """[(palavra, pior distancia, x0, x1)]; espaco = 6 colunas vazias ou mais."""
+    saida = []
+    for a, b, g in letras:
+        d, ch = _classificar(g, glifos)
+        if d > DIST_MAX and g.shape[1] >= 8:   # duas letras grudadas
+            for c in range(3, g.shape[1] - 2):
+                d1, c1 = _classificar(g[:, :c], glifos)
+                d2, c2 = _classificar(g[:, c:], glifos)
+                if max(d1, d2) < d:
+                    d, ch = max(d1, d2), c1 + c2
+        if saida and a - saida[-1][3] < 6:
+            p, pd, x0, _ = saida[-1]
+            saida[-1] = (p + ch, max(pd, d), x0, b)
+        else:
+            saida.append((ch, d, a, b))
+    return saida
+
+
+def _medidas_ph(cinza, glifos):
+    """{'PSV': v, 'EDV': v, 'RI': v} lidos na regiao das medidas (so palavras bem lidas)."""
+    achado = {}
+    for _, lin in _linhas_ph(cinza, PH_TEXTO, PH_MEDIDA, PH_MEDIDA_X_LINHA):
+        pal = _palavras_ph(letras_ph(lin), glifos)
+        if len(pal) < 2 or pal[0][0] not in ("PSV", "EDV", "RI"):
+            continue
+        rot, num = pal[0], pal[1]
+        if max(rot[1], num[1]) > DIST_MAX or not re.fullmatch(r"-?\d+(\.\d+)?", num[0]):
+            continue
+        if rot[0] in achado:
+            return {}      # duas medidas iguais na tela: nao sabe qual vale
+        achado[rot[0]] = abs(float(num[0]))
+    return achado
+
+
+def _vaso_ph(cinza, glifos):
+    """Nome do vaso digitado (chave de PH_VASOS) ou None. Um nome so na imagem."""
+    nomes = set()
+    for _, lin in _linhas_ph(cinza, PH_ROTULO, PH_NOME, PH_NOME_X_LINHA):
+        texto = ""
+        for a, b, g in letras_ph(lin):
+            d, ch = _classificar(g, glifos)
+            if d > DIST_MAX:
+                break
+            texto += ch
+            if texto.replace(".", "") in PH_VASOS:
+                # nenhum nome e comeco de outro: achou o nome inteiro, o que vem depois
+                # (linha do cursor, brilho da imagem) nao conta
+                nomes.add(texto.replace(".", ""))
+                break
+    return nomes.pop() if len(nomes) == 1 else None
+
+
+def medidas_philips(arr):
+    """[(chave, valor, 'cm/s', rotulo)] das carotidas no Philips. Chave normal quando o RI
+    confere; 'ph_' + chave quando nao ha RI legivel (medicos confirmam na tela)."""
+    fontes = _carregar_fonte_ph()
+    if arr is None or arr.ndim != 3 or not fontes:
+        return []
+    cinza = arr.min(axis=2)
+    m = _medidas_ph(cinza, fontes[0])
+    if "PSV" not in m:
+        return []
+    vaso = _vaso_ph(cinza, fontes[1])
+    if vaso is None:
+        return []
+    nome_vaso, lado = PH_VASOS[vaso]
+    k_ps, k_ed = CHAVES_VASO[nome_vaso]
+    psv, edv, ri = m["PSV"], m.get("EDV"), m.get("RI")
+    prefixo = "ph_"
+    if edv is not None and ri is not None and psv > 0:
+        if abs((psv - edv) / psv - ri) > PH_TOL_RI:
+            return []      # leitura nao confere com o RI do aparelho
+        prefixo = ""
+    saida = [(prefixo + k_ps + lado, psv, "cm/s", vaso + " PSV")]
+    if k_ed and edv:
+        saida.append((prefixo + k_ed + lado, edv, "cm/s", vaso + " EDV"))
+    return saida
+
+
 def medidas_da_imagem(arr, modelo=""):
     """[(chave, valor, unidade, rotulo)] reconhecidos na imagem: itens do eco pelo rotulo
     da caixa; velocidades das carotidas pelo nome do vaso digitado na imagem.
@@ -568,6 +715,8 @@ def medidas_da_imagem(arr, modelo=""):
     m = str(modelo or "").upper()
     if "T8" in m:
         return medidas_t8(arr)
+    if "AFFINITI" in m:
+        return medidas_philips(arr)
     if m and "VIVID" not in m:
         return []      # fontes e caixas sao do GE Vivid: outro aparelho (ex.: Philips) nao le
     saida = []
