@@ -581,7 +581,9 @@ PH_MEDIDA = (60, 360, 780, 1024)   # y0, y1, x0, x1 da regiao das medidas (image
 PH_MEDIDA_X_LINHA = 930            # a escala de cinza/cor ao lado (posicao varia) emendaria as linhas
 PH_NOME = (300, 440, 120, 720)     # ... e do nome do vaso (abaixo da imagem 2D, acima do espectro)
 PH_NOME_X_LINHA = 330              # a linha do nome e achada a esquerda da imagem 2D (fundo preto)
-PH_VASOS = {**VASOS, "ARTVERTDIR": ("vert", "_d"), "ARTVERTESQ": ("vert", "_e")}
+# "ART. VERT. D..." / "ART. VERT. E..." ja decide o lado: o fim (IR./SQ.) costuma cair sobre a
+# imagem 2D e o brilho do tecido gruda nas letras (exame de 06/11, 11h)
+PH_VASOS = {**VASOS, "ARTVERTD": ("vert", "_d"), "ARTVERTE": ("vert", "_e")}
 PH_TOL_RI = 0.012
 
 _fonte_ph = None
