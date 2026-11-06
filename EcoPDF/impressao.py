@@ -352,8 +352,8 @@ def disponivel(cfg):
 
 def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
     """Comeca a impressao em segundo plano. Devolve o id para acompanhar ou None (usar o jeito antigo).
-    rapido = botao "Imprimir em baixa qualidade": tudo num envio so na impressora padrao, papel
-    comum e qualidade padrao do driver (sem a EcoPDF Foto e sem modo foto), fotos e depois laudo."""
+    rapido = caixinha "Baixa qualidade": mesma sequencia (fotos, depois laudo em outro envio), mas
+    tudo na impressora padrao com papel comum e qualidade padrao do driver (sem EcoPDF Foto)."""
     ok, nome = disponivel(cfg)
     if not ok:
         log.info("Impressao direta indisponivel: %s", nome)
@@ -375,10 +375,21 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
     def rodar():
         try:
             if rapido:
+                # mesma sequencia do modo normal (fotos, espera, laudo em outro envio): a pilha sai
+                # igual (fotos embaixo, laudo em cima) mesmo com driver em "ordem inversa"
                 _, comum, _ = modo_foto(nome)
-                log.info("Impressao direta em baixa qualidade em %s (um envio, papel comum)", nome)
-                atualizar("laudo", "Imprimindo em baixa qualidade...")
-                _imprimir_paginas(nome, paginas_fotos + paginas_laudo, _devmode(nome, comum), "EcoPDF - exame")
+                log.info("Impressao direta em baixa qualidade em %s (papel comum, qualidade padrao)", nome)
+                if paginas_fotos:
+                    atualizar("fotos", f"Imprimindo {txt_fotos} (baixa qualidade)...")
+                    job = _imprimir_paginas(nome, paginas_fotos, _devmode(nome, comum), "EcoPDF - fotos")
+                    if paginas_laudo and not esperar_trabalho(nome, job, lambda m: atualizar("fotos", m)):
+                        log.warning("Impressao: fotos canceladas ou sem terminar; laudo nao enviado")
+                        atualizar("erro", "As fotos não terminaram (canceladas ou erro na impressora). "
+                                          f"{txt_laudo.capitalize()} NÃO foi impresso: confira a impressora e clique em Imprimir de novo.")
+                        return
+                if paginas_laudo:
+                    atualizar("laudo", f"Imprimindo {txt_laudo} (papel comum)...")
+                    _imprimir_paginas(nome, paginas_laudo, _devmode(nome, comum), "EcoPDF - laudo")
                 atualizar("pronto", f"Enviado para {nome} (baixa qualidade).")
                 return
             fila = None
