@@ -394,6 +394,9 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
         except Exception:
             pass
     ocr, conferir = _validar_t8(ocr, itens)
+    # Philips: "ph_" = velocidade lida sem o RI para conferir (ocr_imagem.medidas_philips)
+    conferir |= {str(k)[3:] for k, _, _ in ocr or [] if str(k).startswith("ph_")}
+    ocr = [(str(k)[3:] if str(k).startswith("ph_") else k, v, u) for k, v, u in ocr or []]
     linhas = []
     if cat == "eco":
         cab = _do_cabecalho(ref)
@@ -434,7 +437,7 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
     _marcar_suspeitos(linhas)
     for l in linhas:
         if l["chave"] in conferir and l["valor"] and l["origem"] == "imagem":
-            l.setdefault("suspeito", "lido da imagem do T8 sem conferência automática: confira na imagem")
+            l.setdefault("suspeito", "lido da imagem sem conferência automática: confira na imagem")
     # valor suspeito so entra no texto copiado depois que o medico confirma na tela
     texto = "\n".join(f"{l['chave']}={l['valor']}" for l in linhas if l["valor"] and not l.get("suspeito"))
     return {"categoria": cat, "linhas": linhas, "texto": texto,
