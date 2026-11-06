@@ -1591,8 +1591,43 @@ def _mesclar(laudo, foto, destino, cfg):
 # Vigia: decide quando um estudo esta completo e roda a juncao
 # --------------------------------------------------------------------------
 
+def reclassificar_pendentes(cfg):
+    """Ao iniciar: exame ainda aguardando laudo (folha na pasta 2) cujo tipo mudou com o
+    [tipos] desta versao (ex.: Philips S4_2, que antes saia "Imagens") tem a folha refeita
+    com o tipo novo. Sem isso o exame ficava em "Recebendo" ate chegar imagem nova.
+    Exame com folha ja juntada ao laudo nao e mexido."""
+    for pasta in cfg["pasta_dicom"].iterdir():
+        try:
+            antes = _ler_grupos(pasta) if pasta.is_dir() else []
+            if not antes or not all(Path(g["pdf"]).exists() for g in antes):
+                continue
+            freq = regra_freq(pasta, cfg)
+            agora = set()
+            for arq in pasta.glob("*.dcm"):
+                try:
+                    ds = pydicom.dcmread(arq, stop_before_pixels=True)
+                except Exception:
+                    continue
+                if ds.get("Rows") is None:  # SR, sem imagem
+                    continue
+                if int(ds.get("NumberOfFrames", 1) or 1) > 1 and cfg["quadro_loop"] == "ignorar":
+                    continue
+                agora.add(tipo_da_imagem(ds, cfg["tipos"], freq))
+            if agora and agora != {g["tipo"] for g in antes}:
+                log.info("Tipo do exame mudou com esta versao (%s -> %s): refazendo a folha de %s",
+                         sorted(g["tipo"] or "Imagens" for g in antes), sorted(t or "Imagens" for t in agora), pasta.name)
+                (pasta / GERADO).unlink(missing_ok=True)
+        except Exception:
+            log.exception("Falha ao conferir o tipo do estudo %s", pasta.name)
+
+
 def vigiar(cfg, parar):
     ultima_limpeza = 0.0
+    try:
+        with TRAVA:
+            reclassificar_pendentes(cfg)
+    except Exception:
+        log.exception("Falha ao conferir os tipos dos exames pendentes")
     laudo_visto = time.time()  # laudo que chega na pasta 1 depois disso abre a tela (TELA_ABRIR = ao_receber)
     while not parar.is_set():
         agora = time.time()
