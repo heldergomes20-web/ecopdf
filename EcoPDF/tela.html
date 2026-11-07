@@ -68,7 +68,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
 .grp{font-size:11.5px;font-weight:700;color:var(--vinho);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 2px}
 .lin{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #eef0f3}
 .lin b{font-weight:600;white-space:nowrap}.branco{color:#b0b6bf}
-.lin.susp b{color:#b42318}.lin.susp{background:#fff5f5}.susp-motivo{font-size:11.5px;color:#b42318;padding:2px 0 5px;border-bottom:1px solid #eef0f3}
+.sr-falta{margin-top:6px;padding:6px 8px;border-radius:6px;background:#fff7e0;color:#7a4b00;font-size:12.5px;line-height:1.4}.lin.susp b{color:#b42318}.lin.susp{background:#fff5f5}.susp-motivo{font-size:11.5px;color:#b42318;padding:2px 0 5px;border-bottom:1px solid #eef0f3}
 .lin.calc{background:#f4f7fb}.img-tag.semconf{background:#ffe8cc;color:#9a4a00;border-color:#f5b971}.img-tag.calc{background:#e3edff;color:#1f4fb5;border-color:#9db8ef}.calc-motivo{font-size:11.5px;color:var(--quieto);padding:2px 0 5px;border-bottom:1px solid #eef0f3}
 .mini-btn{font-size:11px;padding:1px 7px;line-height:1.4}.lin .val{display:flex;align-items:center;gap:6px}
 .sem-valor{font-size:12.5px;color:#8a9099;padding:6px 0 4px;line-height:1.45}.sem-valor span{font-weight:600}
@@ -388,7 +388,7 @@ async function abrirExame(estudo, tipo) {
   const r = await fetch(`/api/exame?e=${encodeURIComponent(estudo)}&t=${encodeURIComponent(tipo)}`);
   if (!r.ok) { aviso("Exame não encontrado (pode ter passado do prazo de guarda).", true); location.hash = ""; return; }
   ex = await r.json();
-  confirmados = new Set(); novos = new Map(); assVista = ex.ass || ""; vivoAte = 0;
+  confirmados = new Set(); copiado = null; novos = new Map(); assVista = ex.ass || ""; vivoAte = 0;
   ordem = ex.imagens.map(i => i.id); fora = new Set(ex.imagens.filter(i => i.fora).map(i => i.id));
   atual = 0; sujo = false;
   if (avisoNovo && avisoNovo.estudo === ex.estudo && avisoNovo.tipo === ex.tipo) fecharAvisoNovo();
@@ -490,7 +490,10 @@ function painel() {
   if (!m.categoria) { p.innerHTML = `<b>Medidas</b><p class="quieto" style="line-height:1.5">Para este tipo de exame as medidas não são exibidas.</p><p class="quieto pq">Imagens e folha funcionam igual aos outros exames.</p>`; return; }
   const texto = textoCopiar();
   let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Medidas</b><button class="btn" id="b-copiar" ${texto ? "" : "disabled"}>Copiar medidas</button></div>`;
-  h += `<div class="quieto pq" style="margin-top:4px">${m.tem_sr ? "do aparelho (relatório estruturado)" : "o aparelho não enviou o relatório de medidas"}</div>`;
+  // Helder 07/11: colava e "não reconhecia". O relatório (SR) é o ÚLTIMO arquivo que o aparelho manda,
+  // só ao encerrar o exame; antes disso o Copiar leva só o cadastro e o que foi lido das imagens.
+  h += m.tem_sr ? `<div class="quieto pq" style="margin-top:4px">do aparelho (relatório estruturado)</div>`
+    : `<div class="sr-falta">Relatório de medidas ainda não chegou. O aparelho manda ao <b>encerrar o exame</b> (End Exam); as medidas aparecem aqui sozinhas uns segundos depois. Antes disso o Copiar leva só o cadastro${m.n_imagem ? " e o lido das imagens" : ""}.</div>`;
   // Helder 04/11: valores juntos no topo; os vazios numa linha so ("Sem valor: ...") no fim do grupo
   const grupos = [];
   for (const l of m.linhas) {
@@ -565,12 +568,51 @@ function textoCopiar() {
   return (ex.medidas.linhas || []).filter(l => l.valor && (!l.suspeito || confirmados.has(l.chave)))
     .map(l => `${l.chave}=${l.valor}`).join("\n");
 }
+// Helder 07/11: precisava copiar várias vezes até colar certo. Causas tratadas aqui:
+// 1) a tela podia estar até 4 s atrás do EcoPDF (relatório que acabou de chegar): busca o exame
+//    na hora do clique e copia o que está valendo agora;
+// 2) a cópia podia falhar calada (janela sem foco) e a tela dizia "copiadas" com a área de
+//    transferência ainda com o conteúdo antigo: agora avisa em vermelho;
+// 3) medidas que chegam depois da cópia: avisa para copiar de novo (copiado = o que foi copiado).
+let copiado = null;
+function escreverAntigo(t) {
+  const a = document.createElement("textarea"); a.value = t; a.setAttribute("readonly", "");
+  a.style.cssText = "position:fixed;top:0;left:0;opacity:0"; document.body.appendChild(a);
+  a.focus(); a.select(); let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  a.remove(); return ok;
+}
 async function copiar() {
-  const t = textoCopiar();
-  try { await navigator.clipboard.writeText(t); }
-  catch (e) { const a = document.createElement("textarea"); a.value = t; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); }
+  const b = $("b-copiar"); if (b) b.disabled = true;
+  const exAntes = ex;
+  const fresco = (async () => { try { await recarregarExame(); } catch (e) {} return textoCopiar(); })();
+  let t = null, ok = false;
+  try {   // ClipboardItem com promessa: a escrita começa dentro do clique (com foco) e espera o dado fresco
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      await navigator.clipboard.write([new ClipboardItem({"text/plain": fresco.then(x => { t = x; return new Blob([x], {type: "text/plain"}); })})]);
+      ok = true;
+    }
+  } catch (e) {}
+  if (!ok) {
+    t = await fresco;
+    try { await navigator.clipboard.writeText(t); ok = true; } catch (e) { ok = escreverAntigo(t); }
+  }
+  if (ex !== exAntes && (!ex || ex.estudo !== exAntes.estudo)) return;
+  b && document.body.contains(b) && (b.disabled = false);
+  if ($("b-copiar")) $("b-copiar").disabled = !textoCopiar();
+  if (!ok || t === null) { copiado = null; aviso("Não consegui copiar (a janela do EcoPDF perdeu o foco). Clique em Copiar medidas de novo antes de colar.", true); return; }
+  copiado = {estudo: ex.estudo, tipo: ex.tipo, texto: t};
   const pend = ex.medidas.linhas.filter(l => l.valor && l.suspeito && !confirmados.has(l.chave)).length;
-  aviso(`${t.split("\n").length} medidas copiadas. Cole na página de laudos (Ctrl+V).` + (pend ? ` ${pend} em vermelho ficaram de fora (confirme se estiverem certas).` : ""));
+  const n = t ? t.split("\n").length : 0;
+  aviso(`${n} medidas copiadas. Cole na página de laudos (Ctrl+V).` + (pend ? ` ${pend} em vermelho ficaram de fora (confirme se estiverem certas).` : "")
+    + (ex.medidas.tem_sr ? "" : " Atenção: o relatório do aparelho ainda não chegou (encerre o exame no aparelho); foram só cadastro e imagens."), !ex.medidas.tem_sr);
+}
+function conferirCopiado() {   // chamado quando as medidas mudam com o exame aberto
+  if (!copiado || !ex || copiado.estudo !== ex.estudo || copiado.tipo !== ex.tipo) return;
+  if (textoCopiar() === copiado.texto) return;
+  copiado = null;
+  aviso("Chegaram medidas novas do aparelho depois da cópia. Clique em Copiar medidas de novo antes de colar.", true, true);
+  setTimeout(() => $("aviso").style.display = "none", 20000);
 }
 
 function estado() { return {e: ex.estudo, t: ex.tipo, ordem: ordem, fora: [...fora]}; }
@@ -933,7 +975,7 @@ async function recarregarExame() {
   if (d.ass) assVista = d.ass;   // assinatura de quando o EcoPDF leu: o que chegou depois recarrega de novo
   if (chegaram.length) vivoAte = agora + 180000;
   atual = Math.max(0, ordem.indexOf(idAtual));
-  subtitulo(); desenharTiras(); if (medMudou) painel();
+  subtitulo(); desenharTiras(); if (medMudou) { painel(); conferirCopiado(); }
   if (zoom === 1) mostrar(atual); else $("g-info").textContent = `Imagem ${atual + 1} de ${ordem.length}`;
   document.querySelectorAll(".mini").forEach(m => m.classList.toggle("atual", Number(m.dataset.k) === atual));
 }
