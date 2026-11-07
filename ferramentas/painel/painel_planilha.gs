@@ -60,9 +60,19 @@ function doPost(e) {
     var ip = limpo(d.ip, 80);
     var ipAnterior = i < 0 ? '' : antes[col('IP anterior (apague depois de conferir o aparelho)') - 1];
     var ipAntes = i < 0 ? '' : antes[col('IP do PC') - 1];
-    if (ipAntes && ip && ipPrincipal(ipAntes) !== ipPrincipal(ip)) ipAnterior = ipAntes;
+    var props = PropertiesService.getScriptProperties(), chaveIp = 'IP_MUDOU_' + pc;
+    if (ipAntes && ip && ipPrincipal(ipAntes) !== ipPrincipal(ip)) {
+      ipAnterior = ipAntes;
+      props.setProperty(chaveIp, new Date().toISOString());
+    }
 
     var c = d.ultima_conexao || {};
+    // o aparelho mandou imagem depois que o IP do PC mudou: ja esta com o IP novo, o aviso some
+    if (ipAnterior && String(c.tipo) === 'imagem' && c.em &&
+        new Date(c.em).getTime() > new Date(props.getProperty(chaveIp) || 0).getTime()) {
+      ipAnterior = '';
+      props.deleteProperty(chaveIp);
+    }
     var conexao = c.ip ? [limpo(c.ip, 40), limpo(c.ae, 20), limpo(c.tipo, 40), dataBr(c.em)].join(' · ') : 'nenhuma registrada';
     var relogio = '';
     var tpc = new Date(d.agora);
@@ -110,6 +120,7 @@ function doPost(e) {
     v['O que olhar'] = '';
     sh.getRange(linha, 1, 1, COLS.length).setValues([COLS.map(function (k) { return v[k] === undefined ? '' : v[k]; })]);
     extras_(sh, linha, d.extras);
+    notaErros_(sh.getRange(linha, col('Erros (24 h)')), d.erros_recentes);
     conferir_();
     var r = sh.getRange(linha, 1, 1, COLS.length).getValues()[0];
     historico_([agora, salaDe_(pc), pc, v['Versão'], r[col('Situação') - 1], r[col('O que olhar') - 1],
@@ -118,6 +129,15 @@ function doPost(e) {
     lock.releaseLock();
   }
   return resp(true);
+}
+
+/** Ultimos 10 erros do PC (hora + texto fixo da mensagem, sem paciente) como nota da celula
+ *  Erros (24 h): no computador aparece ao passar o mouse; no celular, tocando na celula. */
+function notaErros_(celula, lista) {
+  if (!Array.isArray(lista) || !lista.length) { celula.setNote(''); return; }
+  celula.setNote('Últimos erros (mais novo primeiro):\n' + lista.slice(0, 10).map(function (e) {
+    return dataBr(e && e.em) + '  ' + String(e && e.msg || '').replace(/[\r\n\t]/g, ' ').slice(0, 200);
+  }).join('\n'));
 }
 
 /** Campos novos do EcoPDF (d.extras = {rotulo: valor}) viram colunas sozinhos, depois das

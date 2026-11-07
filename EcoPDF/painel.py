@@ -119,6 +119,17 @@ def _erros_24h(cfg):
     return n
 
 
+def _erros_recentes(cfg):
+    """Ultimos erros do registro (log/erros_recentes.json, escrito pelo EcoPDF): hora e
+    texto fixo da mensagem, sem nome de arquivo nem de paciente. Mais novo primeiro."""
+    try:
+        lista = json.loads((cfg["pasta_log"] / "erros_recentes.json").read_text("utf-8"))
+        return [{"em": str(e.get("em", ""))[:19], "msg": str(e.get("msg", ""))[:200]}
+                for e in reversed(lista[-10:]) if isinstance(e, dict)]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
 def _recente(iso, agora, dias=SINAIS_DIAS):
     try:
         return bool(iso) and agora - datetime.fromisoformat(iso).timestamp() < dias * 86400
@@ -507,6 +518,7 @@ def coletar(cfg, ep, manual=False):
         "revisar": revisar,
         "retificados_3d": retificados,
         "erros_24h": _erros_24h(cfg),
+        "erros_recentes": _erros_recentes(cfg),
         "disco_livre_gb": disco,
         "renomeador_ok": renomeador,
         "impressora_info": _impressora_padrao(),

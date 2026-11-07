@@ -239,6 +239,50 @@ def _tipo_freq(c, tipos):
     return {"corte": corte, "alta": alta, "baixa": baixa}
 
 
+class ErrosRecentes(logging.Handler):
+    """Guarda os ultimos ERROS_RECENTES_MAX erros em log/erros_recentes.json para o painel.
+    So o texto fixo da mensagem (os %s viram "…") e o tipo da excecao: nome de arquivo,
+    pasta do estudo e texto da excecao podem ter nome de paciente e nunca entram."""
+
+    def __init__(self, arq):
+        super().__init__(logging.ERROR)
+        self.arq = arq
+        self.trava = threading.Lock()
+
+    @staticmethod
+    def resumo(record):
+        msg = re.sub(r"%[-+ #0-9.]*[sdrif]", "…", str(record.msg))[:120]
+        e = record.exc_info[1] if record.exc_info else None
+        if e is not None:
+            tipo = type(e).__name__
+            if isinstance(e, OSError) and e.strerror:
+                tipo += f" ({e.errno}: {e.strerror})"[:60]
+            tb = record.exc_info[2]
+            while tb is not None and tb.tb_next is not None:
+                tb = tb.tb_next
+            if tb is not None:  # onde no codigo (arquivo do programa e linha), para o diagnostico
+                tipo += f" {Path(tb.tb_frame.f_code.co_filename).name}:{tb.tb_lineno}"
+            msg += f" [{tipo}]"
+        return msg
+
+    def emit(self, record):
+        try:
+            item = {"em": datetime.fromtimestamp(record.created).isoformat(timespec="seconds"),
+                    "msg": self.resumo(record)}
+            with self.trava:
+                try:
+                    lista = json.loads(self.arq.read_text("utf-8"))
+                except (OSError, ValueError):
+                    lista = []
+                lista = (lista + [item])[-ERROS_RECENTES_MAX:]
+                gravar_atomico(self.arq, lambda p: p.write_text(json.dumps(lista, ensure_ascii=False), "utf-8"))
+        except Exception:
+            pass  # registro de erro nunca pode derrubar o EcoPDF
+
+
+ERROS_RECENTES_MAX = 10
+
+
 def configurar_log(pasta):
     pasta.mkdir(parents=True, exist_ok=True)
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
@@ -250,6 +294,7 @@ def configurar_log(pasta):
         tela = logging.StreamHandler()
         tela.setFormatter(fmt)
         log.addHandler(tela)
+    log.addHandler(ErrosRecentes(pasta / "erros_recentes.json"))
     log.setLevel(logging.INFO)
     log.propagate = False  # o renomeador usa o logger raiz (log/renomeador.log)
     logging.getLogger("pynetdicom").setLevel(logging.WARNING)
@@ -405,7 +450,16 @@ BASE_CONEXAO = [None]  # log/conexao.json (definido no main)
 
 
 def on_conectou(event, cfg):
-    _anotar_conexao(event, "conexao")
+    # vira "imagem" (C-STORE), "lista de pacientes" (C-FIND) ou "teste" logo depois;
+    # se ficar assim, o aparelho conectou e nao pediu nada que o EcoPDF anote
+    _anotar_conexao(event, "conectou sem imagem")
+
+
+def on_find(event, cfg):
+    """Consulta da lista de pacientes (worklist): anota no painel e repassa ao worklist."""
+    import worklist
+    _anotar_conexao(event, "lista de pacientes")
+    yield from worklist.on_find(event, cfg)
 
 
 def on_recusou(event, cfg):
@@ -1887,7 +1941,7 @@ def main():
             import firebirdsql  # noqa: F401  (confere que o componente do Medware esta instalado)
             worklist.configurar(cfg, _painel_ini)
             ae.add_supported_context(ModalityWorklistInformationFind)
-            handlers.append((evt.EVT_C_FIND, worklist.on_find, [cfg]))
+            handlers.append((evt.EVT_C_FIND, on_find, [cfg]))
             log.info("Lista de pacientes (worklist) ligada: Medware em %s (de %s)", ", ".join(cfg["medware_servidores"]),
                      cfg.get("medware_origem", "?"))
         except Exception:
