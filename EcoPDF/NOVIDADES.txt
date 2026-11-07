@@ -3,6 +3,7 @@ Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
 2026.11.07
+- Medidas do eco: linha "E/e' medio" (calculado), logo abaixo dos e'. E / media do e' septal e lateral, so para ver: nao entra no Copiar medidas. Se nao calcular, diz o motivo: falta a onda E, falta o e' septal ou lateral (mostra entao o E/e' do que foi medido), ou e' em vermelho esperando Confirmar (calcula ao confirmar).
 - Tela: abaixo da situacao, o que fazer agora: "Aguardando laudo" e "Laudo atrasado" dizem "Imprima o laudo no Medware pela PDF24" (fetal: plataforma fetal pela PDF24); "Recebendo" diz "Juntando as imagens (1-2 min apos a ultima)".
 - Tela: aviso amarelo "Poupe tempo: puxe o paciente pela Worklist do aparelho" quando chega exame cadastrado a mao no aparelho e o aparelho ainda nao consultou a lista neste turno (manha ate 13h, tarde depois). "Entendi" esconde ate o proximo turno; depois que o aparelho consulta a lista, nao aparece mais naquele turno.
 - Imprimir: ao abrir a janela, o EcoPDF confere a impressora padrao e avisa em vermelho se estiver offline ("confira se esta ligada e com o cabo USB"), sem papel, sem tinta, com papel atolado ou com impressao parada na fila; se a EcoPDF Foto for de outra impressora, avisa tambem. Se a impressao falhar, a mensagem de erro diz a causa provavel.
