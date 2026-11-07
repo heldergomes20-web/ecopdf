@@ -177,6 +177,77 @@ def listar_exames(ep, cfg):
     return exames
 
 
+RAIZ_WORKLIST = "1.2.826.0.1.3680043.8.498."   # UID que a worklist do EcoPDF cria (pydicom)
+TROCA_TURNO = 13   # medicos trocam por volta das 13h (Helder 07/11): o aviso do worklist vale por turno
+
+
+def turno_atual(agora=None):
+    """(id do turno, inicio AAAAMMDDHHMM): manha ate 13h, tarde depois."""
+    agora = agora or datetime.now()
+    tarde = agora.hour >= TROCA_TURNO
+    return (agora.strftime("%Y%m%d") + ("T" if tarde else "M"),
+            agora.strftime("%Y%m%d") + (f"{TROCA_TURNO:02d}00" if tarde else "0000"))
+
+
+def dica_worklist(exames, cfg, agora=None):
+    """Turno (id) em que mostrar 'puxe pelo worklist', ou "": worklist ligada, nenhuma consulta
+    neste turno e pelo menos um exame deste turno cadastrado a mao no aparelho."""
+    if not cfg.get("worklist"):
+        return ""
+    turno, inicio = turno_atual(agora)
+    try:
+        import worklist
+        ult = str(worklist.ler_situacao(cfg).get("ultima_consulta", ""))
+    except Exception:
+        ult = ""
+    if ult.replace("-", "").replace("T", "").replace(":", "")[:12] >= inicio:
+        return ""
+    for e in exames:
+        if (e["chegou"] + e["chegou_hora"]) >= inicio and not e["estudo"].startswith(RAIZ_WORKLIST):
+            return turno
+    return ""
+
+
+_imp_cache = {"em": 0.0, "d": None}
+_imp_trava = threading.Lock()
+
+
+def impressora_situacao(cfg):
+    """Aviso para o quadro Imprimir: {"grave": bool, "texto": str}; texto "" = tudo certo.
+    Mesma consulta do painel (impressora padrao do Windows), guardada por 30 s."""
+    with _imp_trava:
+        if _imp_cache["d"] is not None and time.time() - _imp_cache["em"] < 30:
+            return _imp_cache["d"]
+    d = {"grave": False, "texto": ""}
+    ok, nome = impressao.disponivel(cfg)
+    if ok:
+        import painel
+        i = painel._impressora_padrao()
+        sit, fila, minutos = i.get("situacao", ""), i.get("fila", 0), i.get("fila_min", 0)
+        if sit == "offline":
+            d = {"grave": True, "texto": f"A impressora {nome} está offline: confira se está ligada e com o "
+                                         "cabo USB conectado ao computador."}
+        elif i.get("grave") and sit != "pronta" and sit:
+            d = {"grave": True, "texto": f"A impressora {nome} está com problema ({sit}): resolva na impressora "
+                                         "antes de imprimir."}
+        elif fila and minutos > painel.FILA_PARADA_MIN:
+            d = {"grave": True, "texto": f"Há {fila} impressão(ões) parada(s) na fila da {nome} há {minutos} min: "
+                                         "confira se a impressora está ligada e com o cabo USB, ou cancele a fila."}
+        elif sit in ("pouco papel", "pouca tinta/toner"):
+            d = {"grave": False, "texto": f"A impressora {nome} avisa: {sit}."}
+        elif impressao.existe_impressora(impressao.FILA_FOTO) and not impressao.fila_foto_valida(nome):
+            d = {"grave": False, "texto": "A fila EcoPDF Foto é de outra impressora: as fotos saem pela padrão, "
+                                          "com o papel escolhido pelo EcoPDF. Para corrigir, rode criar_fila_foto.bat."}
+    elif "EcoPDF Foto" in nome:
+        d = {"grave": True, "texto": "A EcoPDF Foto está como impressora padrão: deixe a impressora da sala "
+                                     "como padrão no Windows."}
+    elif nome == "sem impressora padrao":
+        d = {"grave": True, "texto": "Este computador está sem impressora padrão no Windows."}
+    with _imp_trava:
+        _imp_cache.update(em=time.time(), d=d)
+    return d
+
+
 LAUDO_ESPERA_MIN = 3  # laudo recem-impresso costuma juntar em segundos: so mostra depois disso
 
 
@@ -539,7 +610,9 @@ def _handler(ep, cfg):
                     html = re.sub(r'(<b id="versao">)[^<]*', lambda m: m.group(1) + ep.versao(), html, count=1)
                     return self._enviar(200, html.encode("utf-8"), "text/html; charset=utf-8")
                 if u.path == "/api/exames":
-                    return self._enviar(200, {"exames": listar_exames(ep, cfg), "versao": ep.versao(),
+                    exames = listar_exames(ep, cfg)
+                    return self._enviar(200, {"exames": exames, "versao": ep.versao(),
+                                              "dica_worklist": dica_worklist(exames, cfg),
                                               "laudos_sem_imagens": laudos_sem_imagens(ep, cfg),
                                               "dias_guardados": cfg["manter_dicom_dias"],
                                               "agora": datetime.now().strftime("%H:%M:%S")})
@@ -551,6 +624,8 @@ def _handler(ep, cfg):
                     return self._enviar(200, worklist.lista_da_tela(cfg))
                 if u.path == "/api/atualizacao":
                     return self._enviar(200, consultar_atualizacao())
+                if u.path == "/api/impressora":
+                    return self._enviar(200, impressora_situacao(cfg))
                 if u.path == "/api/imprimir_estado":
                     st = impressao.estado(int(q.get("id", "0") or 0))
                     return self._enviar(200, st or {"estado": "erro", "mensagem": "impressão não encontrada"})

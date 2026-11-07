@@ -99,6 +99,10 @@ tr.sem-img{cursor:default;background:#fff8f8}
 .vivo{display:inline-flex;align-items:center;gap:5px;background:#dcf3e3;color:#17703a;border-radius:10px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap;margin-left:4px}
 .vivo i{width:7px;height:7px;border-radius:50%;background:#1f9d50;display:inline-block}
 .mini .novo{position:absolute;right:3px;bottom:3px;background:#1f9d50;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:0 4px}
+.dica{display:none;align-items:center;gap:12px;background:#fff6dd;border:1px solid #f0d58a;color:#5c4300;border-radius:8px;padding:9px 12px;margin:0 0 12px;line-height:1.45}
+.dica span{flex:1}
+.i-alerta{display:none;border-radius:8px;padding:9px 12px;margin-top:12px;line-height:1.45;background:#eef2f7;color:#374151}
+.i-alerta.grave{background:#fde2e2;color:#8a1f1f;border:1px solid #f3b4b4}
 .novo-aviso{display:none;align-items:center;gap:10px;background:#e3edff;border:1px solid #9db8ef;color:#1f3f8a;border-radius:8px;padding:8px 12px;margin:10px 22px 0;flex-wrap:wrap}
 .painel .grupos{columns:2 250px;column-gap:24px}
 .painel .lin,.painel .susp-motivo,.painel .sem-valor{break-inside:avoid}.painel .grp{break-after:avoid}
@@ -144,6 +148,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
 </div>
 
 <div id="lista">
+  <div class="dica" id="dica-wl"><span><b>Poupe tempo: puxe o paciente pela Worklist do aparelho.</b> Quem já está cadastrado no Medware aparece lá com nome, idade, peso e altura, sem digitar nada.</span><button class="btn" id="dica-wl-ok">Entendi</button></div>
   <div class="filtros">
     <button class="btn" data-dias="0">Hoje</button>
     <button class="btn" data-dias="7">7 dias</button>
@@ -232,6 +237,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
   <b style="font-size:16px" id="i-titulo">Imprimir exame</b>
   <p class="quieto pq" style="margin:4px 0 10px" id="i-expl">Sai direto na impressora padrão: primeiro a folha de fotos (papel fotográfico), depois o laudo (papel comum).</p>
   <div id="i-opcoes"></div>
+  <div class="i-alerta" id="i-alerta"></div>
   <div class="papel" id="i-papel"></div>
   <div class="acoes"><label class="quieto pq" id="i-rapido-c" style="margin-right:auto;display:flex;align-items:center;gap:6px;cursor:pointer" title="Fotos pela impressora padrão em papel comum e qualidade normal: mais rápido, com menos qualidade"><input type="checkbox" id="i-rapido"> Baixa qualidade (mais rápido)</label><button class="btn" id="i-nao">Cancelar</button><button class="btn pri" id="i-sim">Imprimir</button></div>
 </div></div>
@@ -269,8 +275,35 @@ const ROTULO = {"Novo": "Aguardando laudo", "Pendente": "Laudo atrasado", "Fora 
 const DICA = {"Fora da pasta 2": "O PDF de imagens saiu da pasta 2 antes de juntar com o laudo. Abra o exame e clique em Salvar folha para recriar.",
               "Pendente": "Imagens há mais de 30 min sem laudo. Se já laudou, confira nome, data e tipo do laudo."};
 function rotulo(s) { return ROTULO[s] || s; }
+// Helder 07/11: abaixo do selo, o que fazer agora (medico acostumado ao fluxo antigo)
+function proximoPasso(e) {
+  if (["Novo", "Folha ajustada", "Pendente"].includes(e.situacao))
+    return `<div class="quieto pq">${/Fetal/.test(e.tipo) ? "Laudo da plataforma fetal: imprimir" : "Imprima o laudo no Medware"} pela <b>PDF24</b></div>`;
+  if (e.situacao === "Recebendo") return `<div class="quieto pq">Juntando as imagens (1–2 min após a última)</div>`;
+  return "";
+}
 function classe(s) { return s === "Fora da pasta 2" ? "s-Alerta" : "s-" + (s || "").split(" ")[0]; }
 function tipoCurto(t) { return ({"Duplex Scan Vascular Carotidas": "Carótidas", "Ecocardiograma Fetal": "Eco fetal"})[t] || t; }
+
+// ---------------- avisos (Helder 07/11) ----------------
+// worklist: uma vez por turno (manha / tarde, troca as 13h), so quando chegou exame cadastrado a mao
+// e o aparelho ainda nao consultou a lista neste turno; "Entendi" esconde ate o proximo turno
+function lerLocal(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }
+function gravarLocal(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function dicaWorklist(turno) {
+  $("dica-wl").style.display = turno && lerLocal("dica-wl") !== turno ? "flex" : "none";
+  $("dica-wl-ok").onclick = () => { gravarLocal("dica-wl", turno); $("dica-wl").style.display = "none"; };
+}
+// impressora: confere ao abrir o quadro Imprimir e quando a impressao falha
+async function avisoImpressora(alvo) {
+  try {
+    const d = await (await fetch("/api/impressora")).json();
+    const a = $(alvo); if (!a) return d;
+    a.textContent = d.texto || ""; a.className = "i-alerta" + (d.grave ? " grave" : "");
+    a.style.display = d.texto ? "block" : "none";
+    return d;
+  } catch (e) { return {}; }
+}
 
 // ---------------- lista ----------------
 async function carregarLista() {
@@ -280,6 +313,7 @@ async function carregarLista() {
     laudosSemImg = d.laudos_sem_imagens || [];
     $("atualizado").textContent = `Lista atualizada ${d.agora} (sozinha)`; $("b-versao").textContent = `EcoPDF ${d.versao}`;
     $("b-tudo").textContent = `${Math.round((d.dias_guardados || 180) / 30)} meses (tudo)`;
+    dicaWorklist(d.dica_worklist);
     desenharLista();
   } catch (e) { $("atualizado").textContent = "Sem conexão com o EcoPDF (ele está rodando?)"; }
 }
@@ -305,7 +339,7 @@ function desenharLista() {
   $("linhas").innerHTML = lista.map((e, k) => `<tr data-k="${exames.indexOf(e)}">
     <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td title="${esc(e.tipo_nome)}">${esc(tipoCurto(e.tipo_nome))}</td>
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
-    <td><span class="selo ${classe(e.situacao)}"${DICA[e.situacao] ? ` title="${esc(DICA[e.situacao])}"` : ""}>${esc(rotulo(e.situacao))}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${e.reenvio ? ` <span class="selo s-Reenvio" title="Exame de ${dataBr(e.data)}, imagens recebidas em ${dataBr(e.chegou)}">Reenvio ${dataBr(e.chegou).slice(0,5)}</span>` : ""}${/Fetal/.test(e.tipo) && ["Novo", "Folha ajustada", "Pendente"].includes(e.situacao) ? `<div class="quieto pq">Laudo da plataforma fetal: imprimir pela <b>PDF24</b></div>` : ""}</td>
+    <td><span class="selo ${classe(e.situacao)}"${DICA[e.situacao] ? ` title="${esc(DICA[e.situacao])}"` : ""}>${esc(rotulo(e.situacao))}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${e.reenvio ? ` <span class="selo s-Reenvio" title="Exame de ${dataBr(e.data)}, imagens recebidas em ${dataBr(e.chegou)}">Reenvio ${dataBr(e.chegou).slice(0,5)}</span>` : ""}${proximoPasso(e)}</td>
     <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<input type="checkbox" class="sel-imp" data-sel="${esc(chaveEx(e))}" ${selImp.has(chaveEx(e)) ? "checked" : ""} title="Marcar para imprimir junto com outros exames"><a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
   const chegouLaudo = l => { const d = new Date(Date.now() - (l.minutos || 0) * 60000); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; };
   let laudos = laudosSemImg.filter(l => (l.data || "99999999") >= lim || chegouLaudo(l) >= lim);
@@ -644,6 +678,7 @@ function montarImpressao(lista) {
     papelImp();
   };
   papelImp();
+  $("i-alerta").style.display = "none"; avisoImpressora("i-alerta");
   $("m-imp").style.display = "flex";
   $("i-sim").focus();  // Enter ja imprime
 }
@@ -697,7 +732,11 @@ async function acompanharImpressao(id) {
     let d;
     try { d = await (await fetch(`/api/imprimir_estado?id=${id}`)).json(); } catch (e) { continue; }
     if (d.estado === "pronto") { aviso(d.mensagem); return; }
-    if (d.estado === "erro") { if (d.usar_navegador) impNavegador = true; aviso(d.mensagem, true, true); setTimeout(() => $("aviso").style.display = "none", 20000); return; }
+    if (d.estado === "erro") {
+      if (d.usar_navegador) impNavegador = true;
+      const p = await avisoImpressora(null);   // diz a causa provavel (offline, sem papel, fila parada)
+      aviso(d.mensagem + (p && p.texto ? " " + p.texto : ""), true, true); setTimeout(() => $("aviso").style.display = "none", 20000); return;
+    }
     aviso(d.mensagem, false, true);
   }
 }
