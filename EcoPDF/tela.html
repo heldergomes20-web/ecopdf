@@ -69,7 +69,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
 .lin{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #eef0f3}
 .lin b{font-weight:600;white-space:nowrap}.branco{color:#b0b6bf}
 .lin.susp b{color:#b42318}.lin.susp{background:#fff5f5}.susp-motivo{font-size:11.5px;color:#b42318;padding:2px 0 5px;border-bottom:1px solid #eef0f3}
-.lin.calc{background:#f4f7fb}.img-tag.calc{background:#e3edff;color:#1f4fb5;border-color:#9db8ef}.calc-motivo{font-size:11.5px;color:var(--quieto);padding:2px 0 5px;border-bottom:1px solid #eef0f3}
+.lin.calc{background:#f4f7fb}.img-tag.semconf{background:#ffe8cc;color:#9a4a00;border-color:#f5b971}.img-tag.calc{background:#e3edff;color:#1f4fb5;border-color:#9db8ef}.calc-motivo{font-size:11.5px;color:var(--quieto);padding:2px 0 5px;border-bottom:1px solid #eef0f3}
 .mini-btn{font-size:11px;padding:1px 7px;line-height:1.4}.lin .val{display:flex;align-items:center;gap:6px}
 .sem-valor{font-size:12.5px;color:#8a9099;padding:6px 0 4px;line-height:1.45}.sem-valor span{font-weight:600}
 .img-tag{display:inline-block;font-size:10px;line-height:1;padding:2px 5px;border-radius:4px;background:#fff4d6;color:#8a5a00;border:1px solid #f0d58a;vertical-align:1px}
@@ -505,7 +505,7 @@ function painel() {
     if (g.nome) h += `<div class="grp">${esc(g.nome)}</div>`;
     for (const l of g.linhas.filter(l => l.valor)) {
       const susp = l.suspeito && !confirmados.has(l.chave);
-      h += `<div class="lin${susp ? " susp" : ""}"${l.suspeito ? ` title="${esc(l.suspeito)}"` : ""}><span>${esc(l.rotulo)}${l.origem === "imagem" ? ` <span class="img-tag" title="Lido da caixa de medida gravada na imagem. Confira.">imagem</span>` : ""}</span><span class="val">${susp ? `<button class="btn mini-btn" data-conf="${esc(l.chave)}" title="${esc(l.suspeito)}. Clique se o valor está certo: ele passa a entrar no Copiar medidas.">Confirmar</button> ` : ""}<b>${esc(l.valor)}${l.unidade ? " " + esc(l.unidade) : ""}</b></span></div>`;
+      h += `<div class="lin${susp ? " susp" : ""}"${l.suspeito ? ` title="${esc(l.suspeito)}"` : ""}><span>${esc(l.rotulo)}${l.origem === "imagem" ? ` <span class="img-tag${l.sem_conferencia ? " semconf" : ""}" title="${l.sem_conferencia ? "Lido da imagem sem conferência automática (não deu para conferir com outro valor do aparelho). Confira na imagem." : "Lido da caixa de medida gravada na imagem. Confira."}">${l.sem_conferencia ? "imagem · confira" : "imagem"}</span>` : ""}</span><span class="val">${susp ? `<button class="btn mini-btn" data-conf="${esc(l.chave)}" title="${esc(l.suspeito)}. Clique se o valor está certo: ele passa a entrar no Copiar medidas.">Confirmar</button> ` : ""}<b>${esc(l.valor)}${l.unidade ? " " + esc(l.unidade) : ""}</b></span></div>`;
       if (susp && l.suspeito !== ultimoMotivo) h += `<div class="susp-motivo">${esc(l.suspeito)}. Não entra no Copiar medidas até confirmar.</div>`;
       if (susp) ultimoMotivo = l.suspeito;
     }
@@ -516,7 +516,7 @@ function painel() {
     h += `</div>`;
   }
   h += `</div>`;
-  if (m.n_imagem) h += `<p class="quieto pq" style="margin-top:10px"><span class="img-tag">imagem</span> = lido da caixa de medida gravada na imagem${m.categoria === "carotidas" ? " (vaso pelo nome digitado na imagem: ACCD, ACID, ACED, AVD...)" : " (não veio no relatório do aparelho)"}. Entra no Copiar medidas (o que está em vermelho, só depois de Confirmar). Confira antes de liberar o laudo.</p>`;
+  if (m.n_imagem) h += `<p class="quieto pq" style="margin-top:10px"><span class="img-tag">imagem</span> = lido da caixa de medida gravada na imagem${m.categoria === "carotidas" ? " (vaso pelo nome digitado na imagem: ACCD, ACID, ACED, AVD...)" : " (não veio no relatório do aparelho)"}. Entra no Copiar medidas; “imagem · confira” = sem conferência automática, olhe na imagem. Confira antes de liberar o laudo.</p>`;
   if (vazios) h += `<p class="quieto pq" style="margin-top:10px">Sem valor = não medido com a medida identificada do aparelho, ou valor duvidoso. Não entra no texto copiado.</p>`;
   p.innerHTML = h;
   const b = $("b-copiar"); if (b) b.onclick = copiar;

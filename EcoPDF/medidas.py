@@ -291,7 +291,7 @@ def _validar_t8(ocr, itens):
       - carotidas: cada velocidade lida tem de existir no SR do exame (o SR traz os numeros
         certos, so com o vaso errado); o vaso vem do nome digitado na imagem.
     Sem como conferir (so um e′ medido; PS/ED generico, que nao vai para o SR) o valor aparece,
-    mas so entra no "Copiar medidas" depois de o medico clicar em Confirmar. Conferencia que
+    e entra direto no "Copiar medidas" (Helder 07/11), marcado "sem conferencia". Conferencia que
     falha (soma nao bate com o E′ med) = valor descartado.
     Devolve (lista sem as chaves t8_ e com as lidas no nome normal, {chaves a confirmar})."""
     if not any(str(k).startswith("t8_") for k, _, _ in ocr or []):
@@ -436,8 +436,10 @@ def medidas_do_exame(tipo, ref, srs, ocr=None):
                                "grupo": "Lado " + nome_lado, "origem": origem})
     _marcar_suspeitos(linhas)
     for l in linhas:
+        # Helder 07/11/2026: lido da imagem sem conferencia entra direto no Copiar (sem Confirmar);
+        # so fica marcado na tela. Valor fora do possivel continua em vermelho.
         if l["chave"] in conferir and l["valor"] and l["origem"] == "imagem":
-            l.setdefault("suspeito", "lido da imagem sem conferência automática: confira na imagem")
+            l["sem_conferencia"] = True
     # valor suspeito so entra no texto copiado depois que o medico confirma na tela
     texto = "\n".join(f"{l['chave']}={l['valor']}" for l in linhas if l["valor"] and not l.get("suspeito"))
     return {"categoria": cat, "linhas": linhas, "texto": texto,
