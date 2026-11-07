@@ -19,6 +19,10 @@ button{font:inherit;cursor:pointer}
 .quieto{color:var(--quieto)}.pq{font-size:12.5px}
 .btn{border:1px solid #c3c9d2;background:var(--branco);border-radius:7px;padding:7px 14px;color:var(--tinta);text-decoration:none}
 .btn:hover{border-color:#8f97a3}
+.topo .btn,.topo .logo,.topo .wl-rot{white-space:nowrap;flex-shrink:0}
+@media (max-width:1300px){.topo #atualizado{display:none}}
+@media (max-width:1220px){.logo span{display:none}}
+@media (max-width:1000px){.topo{height:auto;min-height:52px;flex-wrap:wrap;padding:8px 12px;row-gap:8px}}
 .btn.pri{background:var(--vinho);color:#fff;border-color:var(--vinho);font-weight:600}
 .btn.on{background:var(--vinho);color:#fff;border-color:var(--vinho)}
 .btn.alerta{border-color:#a12a2a;color:#a12a2a;font-weight:600}
