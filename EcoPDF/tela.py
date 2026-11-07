@@ -609,6 +609,10 @@ def _handler(ep, cfg):
                     html = (BASE / "manual.html").read_text("utf-8")
                     html = re.sub(r'(<b id="versao">)[^<]*', lambda m: m.group(1) + ep.versao(), html, count=1)
                     return self._enviar(200, html.encode("utf-8"), "text/html; charset=utf-8")
+                if u.path == "/referencia":
+                    # tabela de consulta (valores de referencia do eco); vem no zip, abre no leitor de PDF
+                    return self._enviar(200, (BASE / "valores_referencia.pdf").read_bytes(), "application/pdf",
+                                        {"Content-Disposition": "inline; filename=valores_referencia.pdf"})
                 if u.path == "/api/exames":
                     exames = listar_exames(ep, cfg)
                     return self._enviar(200, {"exames": exames, "versao": ep.versao(),
