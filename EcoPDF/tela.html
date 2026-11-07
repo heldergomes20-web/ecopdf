@@ -69,6 +69,7 @@ tbody tr{cursor:pointer}tbody tr:hover td{background:#f6f0f1}
 .lin{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #eef0f3}
 .lin b{font-weight:600;white-space:nowrap}.branco{color:#b0b6bf}
 .lin.susp b{color:#b42318}.lin.susp{background:#fff5f5}.susp-motivo{font-size:11.5px;color:#b42318;padding:2px 0 5px;border-bottom:1px solid #eef0f3}
+.lin.calc{background:#f4f7fb}.img-tag.calc{background:#e3edff;color:#1f4fb5;border-color:#9db8ef}.calc-motivo{font-size:11.5px;color:var(--quieto);padding:2px 0 5px;border-bottom:1px solid #eef0f3}
 .mini-btn{font-size:11px;padding:1px 7px;line-height:1.4}.lin .val{display:flex;align-items:center;gap:6px}
 .sem-valor{font-size:12.5px;color:#8a9099;padding:6px 0 4px;line-height:1.45}.sem-valor span{font-weight:600}
 .img-tag{display:inline-block;font-size:10px;line-height:1;padding:2px 5px;border-radius:4px;background:#fff4d6;color:#8a5a00;border:1px solid #f0d58a;vertical-align:1px}
@@ -508,6 +509,7 @@ function painel() {
       if (susp && l.suspeito !== ultimoMotivo) h += `<div class="susp-motivo">${esc(l.suspeito)}. Não entra no Copiar medidas até confirmar.</div>`;
       if (susp) ultimoMotivo = l.suspeito;
     }
+    if (m.categoria === "eco" && g.linhas.some(l => l.chave === "E")) h += linhaEe(m.linhas);
     const sem = g.linhas.filter(l => !l.valor);
     vazios += sem.length;
     if (sem.length) h += `<div class="sem-valor"><span>Sem valor:</span> ${sem.map(l => esc(l.rotulo)).join(", ")}</div>`;
@@ -519,6 +521,35 @@ function painel() {
   p.innerHTML = h;
   const b = $("b-copiar"); if (b) b.onclick = copiar;
   p.querySelectorAll("[data-conf]").forEach(x => x.onclick = () => { confirmados.add(x.dataset.conf); painel(); });
+}
+// Helder 07/11: E/e′ médio calculado na tela (alguns médicos faziam à mão). Só para ver:
+// não entra no Copiar medidas. Usa só valores aceitos (sem vermelho ou já confirmados).
+function valorAceito(linhas, chave) {
+  const l = linhas.find(x => x.chave === chave);
+  if (!l || !l.valor) return {falta: true};
+  if (l.suspeito && !confirmados.has(chave)) return {pendente: true};
+  const v = parseFloat(String(l.valor).replace(",", "."));
+  return isFinite(v) && v > 0 ? {v} : {falta: true};
+}
+function calculoEe(linhas) {
+  const E = valorAceito(linhas, "E"), s = valorAceito(linhas, "es"), l = valorAceito(linhas, "el");
+  const um = (x, nome) => `E/e′ ${nome} = ${(E.v / x.v).toFixed(1).replace(".", ",")}`;
+  if (E.falta) return {motivo: "falta a onda E mitral"};
+  if (E.pendente) return {motivo: "confirme a onda E (em vermelho)"};
+  if (s.v && l.v) return {valor: E.v / ((s.v + l.v) / 2)};
+  if (s.pendente || l.pendente)
+    return {motivo: `confirme o e′ ${s.pendente && l.pendente ? "septal e o lateral" : s.pendente ? "septal" : "lateral"} (em vermelho)`};
+  if (s.v) return {motivo: "falta o e′ lateral", extra: um(s, "septal")};
+  if (l.v) return {motivo: "falta o e′ septal", extra: um(l, "lateral")};
+  return {motivo: "e′ septal e lateral não medidos (ou não vieram no relatório do aparelho)"};
+}
+function linhaEe(linhas) {
+  const c = calculoEe(linhas);
+  const tag = `<span class="img-tag calc" title="Calculado pelo EcoPDF: E ÷ média de e′ septal e lateral. Não entra no Copiar medidas.">calculado</span>`;
+  if (c.valor !== undefined)
+    return `<div class="lin calc"><span>E/e′ médio ${tag}</span><span class="val"><b>${c.valor.toFixed(1).replace(".", ",")}</b></span></div>`;
+  return `<div class="lin calc"><span>E/e′ médio ${tag}</span><span class="val quieto">não calculado</span></div>` +
+    `<div class="calc-motivo">${esc(c.motivo)}${c.extra ? `. ${esc(c.extra)}` : ""}</div>`;
 }
 function textoCopiar() {
   return (ex.medidas.linhas || []).filter(l => l.valor && (!l.suspeito || confirmados.has(l.chave)))
