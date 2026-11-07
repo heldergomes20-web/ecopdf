@@ -489,11 +489,15 @@ function painel() {
   const m = ex.medidas, p = $("painel");
   if (!m.categoria) { p.innerHTML = `<b>Medidas</b><p class="quieto" style="line-height:1.5">Para este tipo de exame as medidas não são exibidas.</p><p class="quieto pq">Imagens e folha funcionam igual aos outros exames.</p>`; return; }
   const texto = textoCopiar();
-  let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Medidas</b><button class="btn" id="b-copiar" ${texto ? "" : "disabled"}>Copiar medidas</button></div>`;
+  // Helder 07/11: botão apagado até o relatório (SR) chegar. Sem SR, acende 3 min depois da última
+  // imagem (exame sem relatório: caliper livre ou exame não encerrado no aparelho).
+  const esperando = !m.tem_sr && Date.now() < vivoAte;
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Medidas</b><button class="btn" id="b-copiar" ${texto && !esperando ? "" : "disabled"}>${esperando ? "Aguardando medidas…" : "Copiar medidas"}</button></div>`;
   // Helder 07/11: colava e "não reconhecia". O relatório (SR) é o ÚLTIMO arquivo que o aparelho manda,
   // só ao encerrar o exame; antes disso o Copiar leva só o cadastro e o que foi lido das imagens.
   h += m.tem_sr ? `<div class="quieto pq" style="margin-top:4px">do aparelho (relatório estruturado)</div>`
-    : `<div class="sr-falta">Relatório de medidas ainda não chegou. O aparelho manda ao <b>encerrar o exame</b> (End Exam); as medidas aparecem aqui sozinhas uns segundos depois. Antes disso o Copiar leva só o cadastro${m.n_imagem ? " e o lido das imagens" : ""}.</div>`;
+    : esperando ? `<div class="sr-falta">Aguardando o relatório de medidas: o aparelho manda ao <b>encerrar o exame</b> (End Exam). O botão acende sozinho quando ele chegar.</div>`
+    : `<div class="sr-falta">O aparelho não enviou o relatório de medidas (exame não encerrado no aparelho, ou medidas com caliper livre). O Copiar leva só o cadastro${m.n_imagem ? " e o lido das imagens" : ""}.</div>`;
   // Helder 04/11: valores juntos no topo; os vazios numa linha so ("Sem valor: ...") no fim do grupo
   const grupos = [];
   for (const l of m.linhas) {
@@ -598,8 +602,7 @@ async function copiar() {
     try { await navigator.clipboard.writeText(t); ok = true; } catch (e) { ok = escreverAntigo(t); }
   }
   if (ex !== exAntes && (!ex || ex.estudo !== exAntes.estudo)) return;
-  b && document.body.contains(b) && (b.disabled = false);
-  if ($("b-copiar")) $("b-copiar").disabled = !textoCopiar();
+  painel();
   if (!ok || t === null) { copiado = null; aviso("Não consegui copiar (a janela do EcoPDF perdeu o foco). Clique em Copiar medidas de novo antes de colar.", true); return; }
   copiado = {estudo: ex.estudo, tipo: ex.tipo, texto: t};
   const pend = ex.medidas.linhas.filter(l => l.valor && l.suspeito && !confirmados.has(l.chave)).length;
@@ -975,7 +978,7 @@ async function recarregarExame() {
   if (d.ass) assVista = d.ass;   // assinatura de quando o EcoPDF leu: o que chegou depois recarrega de novo
   if (chegaram.length) vivoAte = agora + 180000;
   atual = Math.max(0, ordem.indexOf(idAtual));
-  subtitulo(); desenharTiras(); if (medMudou) { painel(); conferirCopiado(); }
+  subtitulo(); desenharTiras(); if (medMudou) { painel(); conferirCopiado(); } else if (chegaram.length && !ex.medidas.tem_sr) painel();
   if (zoom === 1) mostrar(atual); else $("g-info").textContent = `Imagem ${atual + 1} de ${ordem.length}`;
   document.querySelectorAll(".mini").forEach(m => m.classList.toggle("atual", Number(m.dataset.k) === atual));
 }
@@ -996,13 +999,13 @@ async function sinal() {
     } else if (avisoNovo && chaveU(avisoNovo) === chaveU(u) && !avisoNovo.paciente && u.paciente) mostrarAvisoNovo(u);
     if (ex && d.ass) {
       if (d.ass !== assVista) await recarregarExame();
-      if (d.ultima_ha !== null && d.ultima_ha < 180 && !vivoAte) { vivoAte = Date.now() + (180 - d.ultima_ha) * 1000; subtitulo(); }
+      if (d.ultima_ha !== null && d.ultima_ha < 180 && !vivoAte) { vivoAte = Date.now() + (180 - d.ultima_ha) * 1000; subtitulo(); if (!ex.medidas.tem_sr) painel(); }
     }
     if (ex) {   // selo "novo" some depois de 3 min; "recebendo" depois de 3 min sem imagem
       const agora = Date.now(); let tirou = false;
       novos.forEach((t, id) => { if (agora - t > 180000) { novos.delete(id); tirou = true; } });
       if (tirou) desenharTiras();
-      if (vivoAte && agora > vivoAte) { vivoAte = 0; subtitulo(); }
+      if (vivoAte && agora > vivoAte) { vivoAte = 0; subtitulo(); if (!ex.medidas.tem_sr) painel(); }
     }
   } catch (e) {}
   sinalOcupado = false;
