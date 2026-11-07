@@ -690,7 +690,12 @@ async function abrirImpressao(d) {
   if (d === ex && sujo) { aviso("Salve a folha antes de imprimir: a impressão usa o exame salvo.", true); return; }
   if (!d.impressao) return;
   let outros = [];
-  try { outros = (await Promise.all(mesmoPaciente(d).map(detalheImp))).filter(Boolean); } catch (e) {}
+  try {
+    // tela aberta direto no exame (chegou imagem): a lista ainda nao foi lida e o outro exame do
+    // mesmo paciente (eco + carotidas) ficava de fora do Imprimir
+    if (!exames.length) { const r = await (await fetch("/api/exames")).json(); exames = r.exames || []; laudosSemImg = r.laudos_sem_imagens || []; }
+    outros = (await Promise.all(mesmoPaciente(d).map(detalheImp))).filter(Boolean);
+  } catch (e) {}
   montarImpressao([{d, junto: true}, ...outros.map(o => ({d: o, junto: true}))]);
 }
 function montarImpressao(lista) {
