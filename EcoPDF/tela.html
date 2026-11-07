@@ -700,7 +700,7 @@ async function abrirImpressao(d) {
 }
 function montarImpressao(lista) {
   imp = lista;
-  $("i-rapido").checked = false;  // padrao: alta qualidade
+  $("i-rapido").checked = false;  // padrao: papel foto, qualidade Padrao do driver
   const varios = lista.length > 1;
   $("i-titulo").textContent = varios ? `Imprimir ${lista.length} exames` : "Imprimir exame";
   $("i-expl").textContent = varios

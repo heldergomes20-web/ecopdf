@@ -3,16 +3,18 @@ Impressao direta pelo Windows, sem a janela de impressao do navegador.
 
 Acao do medico nao muda: coloca a(s) folha(s) de papel fotografico por cima do papel
 comum na bandeja e clica Imprimir. O EcoPDF manda DOIS envios para a impressora padrao:
-  1. folhas de fotos com o tipo de papel "fotografico" e qualidade alta do proprio driver;
+  1. folhas de fotos com o tipo de papel "fotografico" e a qualidade de FOTO_QUALIDADE
+     (padrao = qualidade Padrao do driver para papel foto; alta; driver = nao mexe);
   2. o laudo, com papel comum, SO depois que o envio das fotos terminou (fotos com erro
      ou canceladas = laudo nao sai, para nunca cair na folha de foto).
 Impressora sem modo foto (laser, preto e branco, driver sem papel fotografico): um envio
 so, fotos e depois laudo, como antes.
 
 Fila "EcoPDF Foto" (opcional, a mais estavel): se existir uma impressora com esse nome
-(a mesma impressora fisica adicionada de novo, com papel fotografico e qualidade alta
-salvos nas preferencias do proprio driver; criar com criar_fila_foto.bat), as fotos vao
-para ela com a configuracao salva e o laudo vai para a impressora padrao. Serve para
+(a mesma impressora fisica adicionada de novo, com papel fotografico salvo nas
+preferencias do proprio driver; criar com criar_fila_foto.bat), as fotos vao para ela com
+a configuracao salva, a qualidade trocada pela de FOTO_QUALIDADE (assim muda em todos os
+PCs pela atualizacao, sem abrir as preferencias em cada um), e o laudo vai para a padrao. Serve para
 drivers (ex.: Epson) que guardam o tipo de papel numa parte propria e nao obedecem ao
 pedido feito por programa.
 
@@ -41,7 +43,9 @@ ESPERA_FOTOS_S = 15 * 60       # foto em jato de tinta e lenta; depois disso o l
 # DEVMODEW (offsets fixos da estrutura publica)
 OFF_FIELDS, OFF_QUALITY, OFF_COLOR, OFF_MEDIA = 72, 90, 92, 196
 DM_PRINTQUALITY, DM_COLOR, DM_MEDIATYPE = 0x400, 0x800, 0x2000000
-DMRES_HIGH, DMCOLOR_COLOR = -4, 2
+DMRES_MEDIUM, DMRES_HIGH, DMCOLOR_COLOR = -3, -4, 2
+QUALIDADES = {"padrao": DMRES_MEDIUM, "alta": DMRES_HIGH, "driver": None}
+NOME_QUALIDADE = {-1: "rascunho", -2: "baixa", -3: "padrao", -4: "alta"}
 DMMEDIA_STANDARD, DMMEDIA_GLOSSY = 1, 3
 DM_OUT_BUFFER, DM_IN_BUFFER = 2, 8
 DC_COLORDEVICE, DC_MEDIATYPENAMES, DC_MEDIATYPES = 32, 34, 35
@@ -214,8 +218,24 @@ def modo_foto(nome):
     return foto, comum, f"papel fotografico do driver: {nome_foto}"
 
 
-def _devmode(nome, papel=None, alta=False):
-    """DEVMODE da impressora com tipo de papel/qualidade trocados (ou o padrao dela)."""
+def qualidade_foto(cfg):
+    """Codigo DMRES_* da FOTO_QUALIDADE do config.ini (None = deixa a do driver/fila)."""
+    return QUALIDADES.get(str(cfg.get("foto_qualidade", "padrao")).strip().lower(), DMRES_MEDIUM)
+
+
+def _qualidade_txt(dm):
+    """Texto da qualidade que o DEVMODE carrega, para o registro."""
+    campos = ctypes.c_uint32.from_buffer(dm, OFF_FIELDS).value
+    if not campos & DM_PRINTQUALITY:
+        return "nao informada pelo driver"
+    q = ctypes.c_int16.from_buffer(dm, OFF_QUALITY).value
+    return NOME_QUALIDADE.get(q, f"{q} dpi" if q > 0 else str(q))
+
+
+def _devmode(nome, papel=None, qualidade=None, log=None):
+    """DEVMODE da impressora com tipo de papel/qualidade trocados (ou o padrao dela).
+    qualidade = DMRES_* (None = a salva no driver). Com log, registra o que o driver devolveu
+    (driver que guarda a qualidade so na parte propria pode ignorar o pedido)."""
     ws, _ = _api()
     h = wintypes.HANDLE()
     if not ws.OpenPrinterW(nome, ctypes.byref(h), None):
@@ -231,14 +251,18 @@ def _devmode(nome, papel=None, alta=False):
         if papel is not None:
             ctypes.c_uint32.from_buffer(dm, OFF_MEDIA).value = papel
             campos.value |= DM_MEDIATYPE
-        if alta:
-            ctypes.c_int16.from_buffer(dm, OFF_QUALITY).value = DMRES_HIGH
+        antes = _qualidade_txt(dm) if log else ""
+        if qualidade is not None:
+            ctypes.c_int16.from_buffer(dm, OFF_QUALITY).value = qualidade
             ctypes.c_int16.from_buffer(dm, OFF_COLOR).value = DMCOLOR_COLOR
             campos.value |= DM_PRINTQUALITY | DM_COLOR
         # o driver junta a troca com a parte propria dele (qualidade de foto do fabricante)
         saida = ctypes.create_string_buffer(tam)
         if ws.DocumentPropertiesW(None, h, nome, saida, dm, DM_IN_BUFFER | DM_OUT_BUFFER) < 0:
-            return dm
+            saida = dm
+        if log and qualidade is not None:
+            log.info("Impressao: qualidade em %s: salva %s, pedida %s, driver ficou com %s", nome, antes,
+                     NOME_QUALIDADE.get(qualidade, qualidade), _qualidade_txt(saida))
         return saida
     finally:
         ws.ClosePrinter(h)
@@ -392,6 +416,7 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
                     _imprimir_paginas(nome, paginas_laudo, _devmode(nome, comum), "EcoPDF - laudo")
                 atualizar("pronto", f"Enviado para {nome} (baixa qualidade).")
                 return
+            qfoto = qualidade_foto(cfg)
             fila = None
             if paginas_fotos and existe_impressora(FILA_FOTO):
                 if fila_foto_valida(nome):
@@ -402,7 +427,7 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
             if fila:
                 log.info("Impressao direta: fotos em %s (configuracao salva no driver), laudo em %s", fila, nome)
                 atualizar("fotos", f"Imprimindo {txt_fotos} (papel fotográfico)...")
-                job = _imprimir_paginas(fila, paginas_fotos, _devmode(fila), "EcoPDF - fotos")
+                job = _imprimir_paginas(fila, paginas_fotos, _devmode(fila, None, qfoto, log), "EcoPDF - fotos")
                 if paginas_laudo:
                     if not esperar_trabalho(fila, job, lambda m: atualizar("fotos", m)):
                         log.warning("Impressao: fotos canceladas ou sem terminar; laudo nao enviado")
@@ -417,7 +442,7 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
             log.info("Impressao direta em %s (%s)", nome, como)
             if paginas_fotos and paginas_laudo and foto is not None:
                 atualizar("fotos", f"Imprimindo {txt_fotos} (papel fotográfico)...")
-                job = _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, alta=True), "EcoPDF - fotos")
+                job = _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, qfoto, log), "EcoPDF - fotos")
                 if not esperar_trabalho(nome, job, lambda m: atualizar("fotos", m)):
                     log.warning("Impressao: fotos canceladas ou sem terminar; laudo nao enviado")
                     atualizar("erro", "As fotos não terminaram (canceladas ou erro na impressora). "
@@ -427,7 +452,7 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
                 _imprimir_paginas(nome, paginas_laudo, _devmode(nome, comum), "EcoPDF - laudo")
             elif paginas_fotos and foto is not None:
                 atualizar("fotos", f"Imprimindo {txt_fotos} (papel fotográfico)...")
-                _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, alta=True), "EcoPDF - fotos")
+                _imprimir_paginas(nome, paginas_fotos, _devmode(nome, foto, qfoto, log), "EcoPDF - fotos")
             else:
                 # sem modo foto ou so o laudo: um envio so, na ordem fotos -> laudo
                 atualizar("laudo", "Imprimindo...")

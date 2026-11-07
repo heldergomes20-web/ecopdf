@@ -124,6 +124,16 @@ def area_de_trabalho():
         return Path.home() / "Desktop"
 
 
+def _foto_qualidade(v):
+    """FOTO_QUALIDADE: padrao (Padrao do driver em papel foto) | alta | driver (nao mexe)."""
+    v = (v or "").strip().lower().replace("ã", "a")
+    if v in ("alta", "alto", "high"):
+        return "alta"
+    if v in ("driver", "fila", "salva"):
+        return "driver"
+    return "padrao"
+
+
 def _modo_abrir(v):
     """TELA_ABRIR: ao_receber (abre quando chega imagem ou laudo) | sim (ao iniciar) | nao."""
     v = (v or "").strip().lower()
@@ -216,6 +226,7 @@ def carregar_config(caminho):
         "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "ocultar_pastas": c.get("OCULTAR_PASTAS", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "impressao_direta": c.get("IMPRESSAO_DIRETA", "sim").strip().lower() not in ("nao", "não", "0", "n"),
+        "foto_qualidade": _foto_qualidade(c.get("FOTO_QUALIDADE", "padrao")),
         "worklist": c.get("WORKLIST", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "medware_servidores_txt": c.get("MEDWARE_SERVIDORES", "127.0.0.1").strip(),
         "medware_banco": c.get("MEDWARE_BANCO", r"C:\Medware LaudosFlex\BD\Clinicas.fdb").strip(),
