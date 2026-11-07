@@ -2,6 +2,11 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.07
+- Painel das salas: a celula "Erros (24 h)" ganha uma nota com os ultimos 10 erros deste PC (hora e o que falhou, sem nome de paciente nem de arquivo). No computador aparece ao passar o mouse; no celular, tocando na celula.
+- Painel: a "Ultima conexao de aparelho" diz o que o aparelho fez: "imagem" (mandou imagem), "lista de pacientes" (consultou a worklist), "teste" (Verify) ou "conectou sem imagem". Antes a consulta da lista aparecia como "conexao".
+- Planilha (precisa colar o script novo): o "IP anterior" some sozinho quando o aparelho manda imagem depois que o IP do PC mudou (prova de que o aparelho ja esta com o IP novo). Antes ficava ate alguem apagar a celula.
+
 2026.11.06.2
 - Impressao em baixa qualidade: deixa de ser um botao e vira a caixinha "Baixa qualidade (mais rapido)" na janela de Imprimir, desmarcada a cada vez (o padrao continua alta qualidade). Marcada, a sequencia e a mesma do Imprimir normal: primeiro as fotos, depois o laudo em outro envio, entao a pilha sai igual (fotos embaixo, laudo em cima). Antes ia tudo num envio so e a impressora podia inverter a ordem.
 
