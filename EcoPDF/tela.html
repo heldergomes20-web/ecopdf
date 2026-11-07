@@ -509,14 +509,14 @@ function painel() {
       if (susp && l.suspeito !== ultimoMotivo) h += `<div class="susp-motivo">${esc(l.suspeito)}. Não entra no Copiar medidas até confirmar.</div>`;
       if (susp) ultimoMotivo = l.suspeito;
     }
-    if (m.categoria === "eco" && g.linhas.some(l => l.chave === "E")) h += linhaEe(m.linhas);
+    if (m.categoria === "eco" && g.linhas.some(l => l.chave === "E")) h += linhaEA(m.linhas) + linhaEe(m.linhas);
     const sem = g.linhas.filter(l => !l.valor);
     vazios += sem.length;
     if (sem.length) h += `<div class="sem-valor"><span>Sem valor:</span> ${sem.map(l => esc(l.rotulo)).join(", ")}</div>`;
     h += `</div>`;
   }
   h += `</div>`;
-  if (m.n_imagem) h += `<p class="quieto pq" style="margin-top:10px"><span class="img-tag">imagem</span> = lido da caixa de medida gravada na imagem${m.categoria === "carotidas" ? " (vaso pelo nome digitado na imagem: ACCD, ACID, ACED, AVD...)" : " (não veio no relatório do aparelho)"}. Confira antes de liberar o laudo.</p>`;
+  if (m.n_imagem) h += `<p class="quieto pq" style="margin-top:10px"><span class="img-tag">imagem</span> = lido da caixa de medida gravada na imagem${m.categoria === "carotidas" ? " (vaso pelo nome digitado na imagem: ACCD, ACID, ACED, AVD...)" : " (não veio no relatório do aparelho)"}. Entra no Copiar medidas (o que está em vermelho, só depois de Confirmar). Confira antes de liberar o laudo.</p>`;
   if (vazios) h += `<p class="quieto pq" style="margin-top:10px">Sem valor = não medido com a medida identificada do aparelho, ou valor duvidoso. Não entra no texto copiado.</p>`;
   p.innerHTML = h;
   const b = $("b-copiar"); if (b) b.onclick = copiar;
@@ -542,6 +542,16 @@ function calculoEe(linhas) {
   if (s.v) return {motivo: "falta o e′ lateral", extra: um(s, "septal")};
   if (l.v) return {motivo: "falta o e′ septal", extra: um(l, "lateral")};
   return {motivo: "e′ septal e lateral não medidos (ou não vieram no relatório do aparelho)"};
+}
+// E/A com o mesmo raciocinio (Helder 07/11): so para ver, 2 casas (corte 0,8 do guideline)
+function linhaEA(linhas) {
+  const E = valorAceito(linhas, "E"), A = valorAceito(linhas, "A");
+  const tag = `<span class="img-tag calc" title="Calculado pelo EcoPDF: onda E ÷ onda A. Não entra no Copiar medidas.">calculado</span>`;
+  const motivo = E.falta ? "falta a onda E mitral" : E.pendente ? "confirme a onda E (em vermelho)"
+    : A.falta ? "falta a onda A mitral (não medida, fibrilação atrial ou fusão E-A)" : A.pendente ? "confirme a onda A (em vermelho)" : "";
+  if (!motivo)
+    return `<div class="lin calc"><span>E/A ${tag}</span><span class="val"><b>${(E.v / A.v).toFixed(2).replace(".", ",")}</b></span></div>`;
+  return `<div class="lin calc"><span>E/A ${tag}</span><span class="val quieto">não calculado</span></div><div class="calc-motivo">${esc(motivo)}</div>`;
 }
 function linhaEe(linhas) {
   const c = calculoEe(linhas);
