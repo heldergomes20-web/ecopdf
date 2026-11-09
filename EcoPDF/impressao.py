@@ -374,10 +374,12 @@ def disponivel(cfg):
     return True, nome
 
 
-def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
+def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False, qualidade="normal"):
     """Comeca a impressao em segundo plano. Devolve o id para acompanhar ou None (usar o jeito antigo).
     rapido = caixinha "Baixa qualidade": mesma sequencia (fotos, depois laudo em outro envio), mas
-    tudo na impressora padrao com papel comum e qualidade padrao do driver (sem EcoPDF Foto)."""
+    tudo na impressora padrao com papel comum e qualidade padrao do driver (sem EcoPDF Foto).
+    qualidade = seletor da janela Imprimir: "alta" pede qualidade Alta nas fotos; "normal" usa
+    FOTO_QUALIDADE do config.ini (padrao)."""
     ok, nome = disponivel(cfg)
     if not ok:
         log.info("Impressao direta indisponivel: %s", nome)
@@ -416,7 +418,7 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False):
                     _imprimir_paginas(nome, paginas_laudo, _devmode(nome, comum), "EcoPDF - laudo")
                 atualizar("pronto", f"Enviado para {nome} (baixa qualidade).")
                 return
-            qfoto = qualidade_foto(cfg)
+            qfoto = DMRES_HIGH if qualidade == "alta" else qualidade_foto(cfg)
             fila = None
             if paginas_fotos and existe_impressora(FILA_FOTO):
                 if fila_foto_valida(nome):
