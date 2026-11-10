@@ -122,16 +122,25 @@ def _situacao(pasta, tipo, g, reg, ep, cfg):
     return "Fora da pasta 2"
 
 
-def _subir_de_novo(g, reg, ep):
-    """Final refeito nos ultimos 3 dias (mesma regra do PENDENTES): motivo, senao ''."""
+def _subir_de_novo(g, reg, ep, cfg):
+    """Final refeito ainda sem "Ja subi" (mesma regra do PENDENTES): motivo, senao ''."""
     r = ep.registro_do_grupo(g, reg) if g else None
-    em = (r or {}).get("corrigido_em")
-    try:
-        if em and time.time() - datetime.fromisoformat(em).timestamp() < 3 * 86400:
-            return f"{(r.get('motivo') or 'LAUDO CORRIGIDO').capitalize()} em {datetime.fromisoformat(em):%d/%m %H:%M}"
-    except ValueError:
-        pass
-    return ""
+    if not ep.subir_de_novo(r, cfg):
+        return ""
+    em = datetime.fromisoformat(r["corrigido_em"])
+    return f"{(r.get('motivo') or 'LAUDO CORRIGIDO').capitalize()} em {em:%d/%m %H:%M}"
+
+
+def ja_subi(estudo, tipo, ep, cfg):
+    """Botao "Ja subi": tira o exame do "Subir de novo"."""
+    p = _pasta(estudo, cfg)
+    g = next((x for x in ep._ler_grupos(p) if (x["tipo"] or "") == (tipo or "")), None) if p else None
+    r = ep.registro_do_grupo(g, ep._ler_registro(cfg)) if g else None
+    if not r or not ep.subir_de_novo(r, cfg):
+        return False, "Este exame não está para subir de novo."
+    if not ep.marcar_subido(cfg, r["final"]):
+        return False, "Não achei o registro deste exame."
+    return True, "Pronto: saiu dos pendentes."
 
 
 def _reenvio(data, chegou):
@@ -185,7 +194,7 @@ def listar_exames(ep, cfg):
                 "chegou": info["chegou"], "chegou_hora": info["chegou_hora"], "finalizado": fin,
                 "reenvio": _reenvio(t["data"], info["chegou"]),
                 "situacao": _situacao(pasta, tipo, g, reg, ep, cfg),
-                "subir_de_novo": _subir_de_novo(g, reg, ep),
+                "subir_de_novo": _subir_de_novo(g, reg, ep, cfg),
             })
     exames.sort(key=lambda e: (e["data"], e["hora"]), reverse=True)
     return exames
@@ -428,6 +437,7 @@ def detalhe(pasta, tipo, ep, cfg):
         "hora": str(ref.get("StudyTime", "") or "")[:4],
         "sigla": ep.sigla(ref), "aparelho": ep.aparelho(ref, cfg),
         "situacao": situacao, "final": r["final"] if r else "",
+        "subir_de_novo": _subir_de_novo(g, reg, ep, cfg),
         "impressao": _paginas_impressao(r, ep, cfg) if situacao == "Finalizado" else None,
         "por_pagina": max(1, cfg["colunas"]) * max(1, cfg["linhas"]),
         "imagens": imagens,
@@ -694,6 +704,9 @@ def _handler(ep, cfg):
                 corpo = json.loads(self.rfile.read(n) or b"{}")
                 if u.path == "/api/abrir_pasta":
                     ok, msg = abrir_pasta_final(str(corpo.get("e", "")), str(corpo.get("t", "")), ep, cfg)
+                    return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
+                if u.path == "/api/ja_subi":
+                    ok, msg = ja_subi(str(corpo.get("e", "")), str(corpo.get("t", "")), ep, cfg)
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
                 if u.path == "/api/atualizar":
                     ok, msg = iniciar_atualizacao()
