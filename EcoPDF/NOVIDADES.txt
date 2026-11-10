@@ -5,6 +5,7 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 2026.11.10.1
 - Painel: os avisos "Tela: erro ... 10053" (navegador fechou a conexao com a tela ao recarregar, fechar a aba ou trocar de exame) deixam de contar como erro. Nao afetavam exame, PDF nem impressao; so escondiam os erros de verdade na nota "Ultimos erros" da planilha.
 - Planilha (precisa colar o script novo): a coluna Versao deixa de virar data (aparecia "versao antiga (Tue Nov 10 2026 ...)" em PC ja atualizado).
+- Lista de pacientes (worklist): o aviso de banco do Medware fora diz a causa: "nome nao encontrado na rede" (o PC nao achou o servidor pelo nome) ou "sem resposta na porta 3050" com o IP do servidor (bloqueio no caminho ou no firewall do servidor). O EcoPDF guarda o ultimo IP em que o servidor do Medware respondeu e, se um dia o nome falhar, tenta esse IP sozinho. Nada para configurar.
 
 2026.11.10
 - Imprimir: o seletor de qualidade das fotos fica com dois botoes, "Baixa | Alta", e abre sempre em Baixa (papel foto tratado como papel comum: mais rapido, cor mais fraca). Alta = papel fotografico pela impressora EcoPDF Foto (mais lenta, melhor acabamento). Sai o "Normal": a impressora Epson ignora a qualidade pedida pelo programa, entao Normal e Alta saiam iguais. A acao nao muda: papel foto por cima do comum, fotos e depois o laudo.

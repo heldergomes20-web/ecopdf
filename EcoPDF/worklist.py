@@ -94,16 +94,52 @@ def _alvos(cfg):
         yield item, host, banco
 
 
-def _porta_responde(host, porta=PORTA_FIREBIRD, segundos=2.0):
+def _eh_ip(host):
     try:
-        with socket.create_connection((host, porta), timeout=segundos):
-            return True
+        socket.inet_aton(host)
+        return host.count(".") == 3
     except OSError:
         return False
 
 
+def _testar(host, porta=PORTA_FIREBIRD, segundos=2.0):
+    """(ip, None) se a porta responde; senao (ip ou None, motivo legivel)."""
+    try:
+        ip = socket.gethostbyname(host)
+    except OSError:
+        return None, "nome nao encontrado na rede"
+    try:
+        with socket.create_connection((ip, porta), timeout=segundos):
+            return ip, None
+    except OSError:
+        return ip, f"sem resposta na porta {porta}"
+
+
+def _ips_conhecidos(cfg):
+    """log/medware_ip.json: {nome do servidor: ultimo IP que respondeu}."""
+    try:
+        return json.loads((cfg["pasta_log"] / "medware_ip.json").read_text("utf-8"))
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def _guardar_ip(cfg, host, ip):
+    if _eh_ip(host) or not ip or ip.startswith("127."):
+        return
+    ips = _ips_conhecidos(cfg)
+    if ips.get(host.lower()) == ip:
+        return
+    ips[host.lower()] = ip
+    try:
+        (cfg["pasta_log"] / "medware_ip.json").write_text(json.dumps(ips), "utf-8")
+    except (OSError, KeyError, TypeError):
+        pass
+
+
 def _conectar(cfg):
-    """(conexao, item). Tenta primeiro o ultimo que funcionou."""
+    """(conexao, item). Tenta primeiro o ultimo que funcionou.
+    Servidor por nome: se o nome nao achar ou nao responder, tenta o ultimo IP em que ele
+    respondeu (log/medware_ip.json), para nao depender da resolucao de nomes da rede."""
     import firebirdsql
     alvos = list(_alvos(cfg))
     ok = _SERVIDOR_OK["item"]
@@ -111,17 +147,31 @@ def _conectar(cfg):
         alvos.sort(key=lambda a: a[0] != ok)
     erros = []
     porta = cfg.get("medware_porta") or PORTA_FIREBIRD
+    conhecidos = _ips_conhecidos(cfg)
     for item, host, banco in alvos:
-        if not _porta_responde(host, porta):
-            erros.append(f"{host}: sem resposta na porta {porta}")
+        ip, motivo = _testar(host, porta)
+        rotulo = host if (not ip or ip == host) else f"{host} ({ip})"
+        if motivo:
+            guardado = None if _eh_ip(host) else conhecidos.get(host.lower())
+            if guardado and guardado != ip:
+                ip2, motivo2 = _testar(guardado, porta)
+                if not motivo2:
+                    log.warning("Medware: %s %s; usando o IP guardado %s", host, motivo, guardado)
+                    ip, motivo = ip2, None
+                    rotulo = f"{host} ({guardado}, IP guardado)"
+                else:
+                    motivo += f"; IP guardado {guardado}: {motivo2}"
+        if motivo:
+            erros.append(f"{rotulo}: {motivo}")
             continue
         try:
-            con = firebirdsql.connect(host=host, port=porta, database=banco, user="SYSDBA",
+            con = firebirdsql.connect(host=ip, port=porta, database=banco, user="SYSDBA",
                                       password=cfg["medware_senha"], charset="WIN1252", timeout=10)
             _SERVIDOR_OK.update(item=item, em=time.time())
+            _guardar_ip(cfg, host, ip)
             return con, item
         except Exception as e:
-            erros.append(f"{host}: {type(e).__name__}: {str(e)[:120]}")
+            erros.append(f"{rotulo}: {type(e).__name__}: {str(e)[:120]}")
     raise ConnectionError("; ".join(erros) or "nenhum servidor do Medware configurado")
 
 
