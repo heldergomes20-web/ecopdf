@@ -85,7 +85,8 @@ function doPost(e) {
     v['Sala'] = salaOuManual_(pc, i < 0 ? '' : antes[col('Sala') - 1], mapaSalas_());
     v['Último envio'] = agora;
     v['PC'] = pc;
-    v['Versão'] = limpo(d.versao, 20);
+    // apostrofo = texto: sem ele o Sheets pt-BR le "2026.11.10" como data e a comparacao falha
+    v['Versão'] = "'" + limpo(d.versao, 20);
     v['IP do PC'] = ip;
     v['AE Title : porta'] = limpo(d.ae_title, 16) + ' : ' + num(d.porta) + (d.ecopdf_rodando === false ? ' (FECHADA)' : '');
     v['Última conexão de aparelho'] = conexao;
@@ -208,7 +209,7 @@ function conferir_() {
       var msg = 'sem envio desde ' + fmt(envio) + ' (PC desligado, sem internet ou EcoPDF parado)';
       if (r[col('Situação') - 1] !== 'SEM SINAL') {  // so na passagem para SEM SINAL
         var pcx = String(r[col('PC') - 1]);
-        historico_([new Date(), salaDe_(pcx), pcx, r[col('Versão') - 1], 'SEM SINAL', msg, r[col('IP do PC') - 1], '', '']);
+        historico_([new Date(), salaDe_(pcx), pcx, "'" + versaoTxt_(r[col('Versão') - 1]), 'SEM SINAL', msg, r[col('IP do PC') - 1], '', '']);
       }
       return ['SEM SINAL', msg];
     }
@@ -225,7 +226,7 @@ function conferir_() {
     if (mn && modelos[mn] && Date.now() - modelos[mn] < MODELO_NOVO_HORAS * 3600000) {
       aten.push('impressora de modelo novo (' + mn + '): conferir a qualidade da foto impressa');
     }
-    var v = String(r[col('Versão') - 1] || '');
+    var v = versaoTxt_(r[col('Versão') - 1]);
     if (publicada && compVersao(v, publicada) < 0) aten.push('versao antiga (' + v + ')');
     prob = prob.filter(String); aten = aten.filter(String);
     var sit = prob.length ? 'PROBLEMA' : aten.length ? 'ATENÇÃO' : 'OK';
@@ -267,6 +268,13 @@ function versaoPublicada() {
     }
   } catch (err) {}
   return p.getProperty('VERSAO') || '';
+}
+
+/** Versao da celula como texto. Celula antiga gravada sem apostrofo pode ter virado data
+ *  (2026.11.10 -> 10/11/2026): volta para AAAA.MM.DD. */
+function versaoTxt_(x) {
+  if (x instanceof Date) return Utilities.formatDate(x, TZ, 'yyyy.MM.dd');
+  return String(x || '').replace(/^'/, '');
 }
 
 function compVersao(a, b) {

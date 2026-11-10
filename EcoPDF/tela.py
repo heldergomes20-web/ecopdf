@@ -576,14 +576,20 @@ def _handler(ep, cfg):
                 corpo = json.dumps(corpo, ensure_ascii=False).encode("utf-8")
             elif isinstance(corpo, str):
                 corpo = corpo.encode("utf-8")
-            self.send_response(codigo)
-            self.send_header("Content-Type", tipo)
-            self.send_header("Content-Length", str(len(corpo)))
-            self.send_header("Cache-Control", "max-age=86400" if tipo.startswith("image/") else "no-store")
-            for k, v in (extra or {}).items():
-                self.send_header(k, v)
-            self.end_headers()
-            self.wfile.write(corpo)
+            try:
+                self.send_response(codigo)
+                self.send_header("Content-Type", tipo)
+                self.send_header("Content-Length", str(len(corpo)))
+                self.send_header("Cache-Control", "max-age=86400" if tipo.startswith("image/") else "no-store")
+                for k, v in (extra or {}).items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(corpo)
+            except ConnectionError:
+                # navegador fechou a conexao antes da resposta terminar (recarregar, fechar a aba,
+                # trocar de exame): WinError 10053/10054 ou BrokenPipe. Normal, nao e erro do EcoPDF.
+                self.close_connection = True
+                ep.log.debug("Tela: navegador desconectou em %s", self.path)
 
         def _ok_host(self):
             # so atende pelo proprio PC (protege contra paginas de fora usando o endereco local)
