@@ -17,6 +17,7 @@ button{font:inherit;cursor:pointer}
 .topo{background:var(--branco);border-bottom:1px solid var(--borda);height:52px;display:flex;align-items:center;padding:0 22px;gap:16px}
 .logo{font-weight:700;color:var(--vinho);font-size:17px;display:flex;align-items:center;gap:8px}.logo img{height:26px;width:auto}.logo span{color:var(--tinta);font-weight:400}
 .quieto{color:var(--quieto)}.pq{font-size:12.5px}
+.como-ap{color:var(--quieto);font-size:11.5px;font-weight:400;font-style:italic;letter-spacing:0;margin-top:1px}
 .btn{border:1px solid #c3c9d2;background:var(--branco);border-radius:7px;padding:7px 14px;color:var(--tinta);text-decoration:none}
 .btn:hover{border-color:#8f97a3}
 .topo .btn,.topo .logo,.topo .wl-rot{white-space:nowrap;flex-shrink:0}
@@ -258,7 +259,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
 <div class="fundo" id="m-wl"><div class="caixa" style="max-width:900px;max-height:85vh;overflow:auto">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><b style="font-size:16px">Worklist de hoje</b><div style="flex:1"></div>
   <button class="btn" id="wl-atu">Atualizar</button><button class="btn" id="wl-fechar">Fechar</button></div>
-  <p class="quieto pq" id="wl-info" style="margin:0 0 10px">O aparelho mostra só quem está “na lista”. Sai sozinho quando chegam as imagens de todos os exames do paciente.</p>
+  <p class="quieto pq" id="wl-info" style="margin:0 0 10px">O aparelho mostra só quem está “na lista”. Sai sozinho quando todos os exames do paciente estão feitos (imagens com o nome igual ou parecido, ou laudo já juntado).</p>
   <table class="tab" style="width:100%"><thead><tr><th>Hora</th><th>Paciente</th><th>Exames</th><th>Médico</th><th>Situação</th><th></th></tr></thead><tbody id="wl-linhas"></tbody></table>
 </div></div>
 
@@ -345,11 +346,11 @@ function desenharLista() {
   // Descartado (teste, duplicado) some de Hoje/7/30 dias; continua em 6 meses (tudo) e na busca
   const visivel = e => e.situacao !== "Descartado" || filtro.dias >= 9999;
   let lista = (filtro.semLaudo ? semLaudo : exames).filter(e => noPeriodo(e) && visivel(e)).sort((x, y) => quando(y).localeCompare(quando(x)));
-  if (b) lista = exames.filter(e => (e.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") + " " + (e.sigla || "").toLowerCase()).includes(b));
+  if (b) lista = exames.filter(e => ((e.paciente + " " + (e.nome_aparelho || "")).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") + " " + (e.sigla || "").toLowerCase()).includes(b));
   document.querySelectorAll("[data-dias]").forEach(x => x.classList.toggle("on", Number(x.dataset.dias) === filtro.dias));
   $("b-semlaudo").classList.toggle("on", filtro.semLaudo);
   $("linhas").innerHTML = lista.map((e, k) => `<tr data-k="${exames.indexOf(e)}">
-    <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b></td><td title="${esc(e.tipo_nome)}">${esc(tipoCurto(e.tipo_nome))}</td>
+    <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b>${comoAparelho(e)}</td><td title="${esc(e.tipo_nome)}">${esc(tipoCurto(e.tipo_nome))}</td>
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
     <td><span class="selo ${classe(e.situacao)}"${DICA[e.situacao] ? ` title="${esc(DICA[e.situacao])}"` : ""}>${esc(rotulo(e.situacao))}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${e.reenvio ? ` <span class="selo s-Reenvio" title="Exame de ${dataBr(e.data)}, imagens recebidas em ${dataBr(e.chegou)}">Reenvio ${dataBr(e.chegou).slice(0,5)}</span>` : ""}${proximoPasso(e)}</td>
     <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<input type="checkbox" class="sel-imp" data-sel="${esc(chaveEx(e))}" ${selImp.has(chaveEx(e)) ? "checked" : ""} title="Marcar para imprimir junto com outros exames"><a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
@@ -403,11 +404,15 @@ async function abrirExame(estudo, tipo) {
   ordem = ex.imagens.map(i => i.id); fora = new Set(ex.imagens.filter(i => i.fora).map(i => i.id));
   atual = 0; sujo = false;
   if (avisoNovo && avisoNovo.estudo === ex.estudo && avisoNovo.tipo === ex.tipo) fecharAvisoNovo();
-  $("e-nome").textContent = ex.paciente; $("e-nome").title = ex.paciente;
+  $("e-nome").innerHTML = esc(ex.paciente) + comoAparelho(ex); $("e-nome").title = ex.paciente;
   subtitulo();
   $("e-sub").title = `aparelho ${ex.sigla || "?"}${ex.aparelho ? " · " + ex.aparelho : ""}`;
   botaoImprimir();
   painel(); desenharTiras(); mostrar(0);
+}
+// nome do laudo diferente do digitado no aparelho (Helder 10/11/2026): mostra os dois
+function comoAparelho(e) {
+  return e.nome_aparelho ? `<div class="como-ap" title="Nome que veio do aparelho; o PDF final usa o nome do laudo">Imagens enviadas como: ${esc(e.nome_aparelho)}</div>` : "";
 }
 function subtitulo() {
   const vivo = Date.now() < vivoAte ? ` <span class="vivo" title="Imagens chegando do aparelho: aparecem aqui sozinhas"><i></i>recebendo</span>` : "";
