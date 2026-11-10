@@ -143,6 +143,19 @@ def _reenvio(data, chegou):
         return False
 
 
+def nomes_do_exame(do_aparelho, r, ep):
+    """(nome para mostrar, nome do aparelho se diferente ou ""). Finalizado mostra o nome do
+    laudo (Medware); o do aparelho so aparece a parte quando e outro (Helder 10/11/2026: cadastro
+    a mao abreviado). Laudo cortado pelo Medware e o aparelho com o nome inteiro: fica o do aparelho."""
+    laudo = " ".join(str((r or {}).get("nome") or "").split()).upper()
+    if not laudo:
+        return do_aparelho, ""
+    a, b = ep.normalizar(do_aparelho), ep.normalizar(laudo)
+    if a == b or a.startswith(b + " "):
+        return do_aparelho, ""
+    return laudo, do_aparelho
+
+
 def listar_exames(ep, cfg):
     reg = ep._ler_registro(cfg)
     exames = []
@@ -161,10 +174,11 @@ def listar_exames(ep, cfg):
             fora = len(ep._ler_ocultas(pasta).get(tipo or "", []))
             r = ep.registro_do_grupo(g, reg) if g else None
             fin = ((r or {}).get("corrigido_em") or (r or {}).get("em") or "")[:10].replace("-", "")
+            paciente, como = nomes_do_exame(t["paciente"], r, ep)
             exames.append({
                 "estudo": pasta.name, "tipo": tipo or "",
                 "tipo_nome": (tipo or "Exame").replace("_", " "),
-                "paciente": t["paciente"], "data": t["data"], "hora": t["hora"],
+                "paciente": paciente, "nome_aparelho": como, "data": t["data"], "hora": t["hora"],
                 "sigla": t["sigla"], "n": t["n"], "na_folha": t["n"] - fora,
                 "medidas": med.categoria(tipo) != "" and info["srs"] > 0,
                 "sem_medidas": med.categoria(tipo) == "",
@@ -406,9 +420,10 @@ def detalhe(pasta, tipo, ep, cfg):
     g = next((x for x in ep._ler_grupos(pasta) if (x["tipo"] or "") == t), None)
     situacao = _situacao(pasta, tipo, g, reg, ep, cfg)
     r = ep.registro_do_grupo(g, reg) if g else None
+    paciente, como = nomes_do_exame((ep.nome_paciente(ref.get("PatientName")) or "SEM NOME").upper(), r, ep)
     return {
         "estudo": pasta.name, "tipo": t, "tipo_nome": (tipo or "Exame").replace("_", " "),
-        "paciente": (ep.nome_paciente(ref.get("PatientName")) or "SEM NOME").upper(),
+        "paciente": paciente, "nome_aparelho": como,
         "data": ep.data_br(ref.get("StudyDate", "")),
         "hora": str(ref.get("StudyTime", "") or "")[:4],
         "sigla": ep.sigla(ref), "aparelho": ep.aparelho(ref, cfg),

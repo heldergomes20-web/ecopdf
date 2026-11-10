@@ -21,6 +21,7 @@ import os
 import xml.etree.ElementTree as ET
 import logging
 import socket
+import sys
 import threading
 import time
 import unicodedata
@@ -373,12 +374,80 @@ def _recebidos(cfg, dia):
     return feitos
 
 
-def _atendido(p, feitos):
-    """Todas as siglas do paciente ja tem imagens (pelo estudo da worklist ou pelo nome,
-    se o cadastro foi feito a mao no aparelho)."""
-    chaves = (uid_do_estudo(p), p["nome"])
-    siglas = [sigla(x) for x in p["procs"]] or [""]
-    return all(any((c, sg) in feitos or (c, "") in feitos for c in chaves) for sg in siglas)
+def _ep():
+    """Modulo principal do EcoPDF (regra de nome parecido e registro dos finalizados)."""
+    m = sys.modules.get("__main__")
+    if hasattr(m, "_mesmo_paciente"):
+        return m
+    import ecopdf
+    return ecopdf
+
+
+def _nomes_do_dia(cfg, dia):
+    """Nomes de hoje para tirar da lista quem foi cadastrado a mao no aparelho (Helder
+    10/11/2026): ([(nome das imagens, sigla)], [(nome do laudo finalizado, sigla)])."""
+    imagens, laudos = [], []
+    inicio = datetime.datetime.combine(dia, datetime.time()).timestamp()
+    data = dia.strftime("%Y%m%d")
+    raiz = cfg.get("pasta_dicom")
+    for pasta in raiz.iterdir() if raiz and raiz.is_dir() else []:
+        try:
+            if not pasta.is_dir() or pasta.stat().st_mtime < inicio:
+                continue
+            grupos = json.loads((pasta / "grupos.json").read_text("utf-8"))
+        except (OSError, ValueError):
+            continue
+        imagens += [(ascii_maiusculo(g.get("paciente", "")), _sigla_do_tipo(g.get("tipo")))
+                    for g in grupos if str(g.get("data", "")) == data]
+    try:
+        reg = _ep()._ler_registro(cfg)
+    except Exception:
+        log.exception("Worklist: nao li o registro dos finalizados")
+        reg = []
+    laudos = [(ascii_maiusculo(r.get("nome", "")), _sigla_do_tipo(r.get("tipo")))
+              for r in reg if str(r.get("data", "")) == data]
+    return imagens, laudos
+
+
+def _mesmo_nome(laudo, medware):
+    """Nome do laudo (vem do Medware) = nome da agenda; o laudo pode vir cortado."""
+    return bool(laudo) and (laudo == medware or medware.startswith(laudo + " "))
+
+
+def atendidos(lista, cfg, dia):
+    """Codigos dos pacientes do dia em que TODOS os exames ja foram feitos. Um exame conta como
+    feito se: (a) chegaram imagens com o estudo da worklist; (b) chegaram imagens com o nome
+    igual; (c) ha laudo finalizado com o nome do paciente; (d) chegaram imagens com nome
+    parecido (regra que junta laudo e foto: iniciais, 1-2 letras de diferenca) e esse nome so
+    casa com UM paciente da lista do dia (com dois, nao tira nenhum)."""
+    do_dia = [p for p in lista if p["dia"] == dia]
+    if not do_dia:
+        return set()
+    feitos = _recebidos(cfg, dia)
+    imagens, laudos = _nomes_do_dia(cfg, dia)
+    ep = _ep()
+    parecido = {}   # nome das imagens -> codpac, se casa com um so paciente
+    for nome, _ in imagens:
+        if nome in parecido:
+            continue
+        try:
+            quem = [p["codpac"] for p in do_dia if ep._mesmo_paciente(nome, p["nome"], cfg)]
+        except Exception:
+            quem = []
+        parecido[nome] = quem[0] if len(quem) == 1 else None
+    saida = set()
+    for p in do_dia:
+        chaves = (uid_do_estudo(p), p["nome"])
+
+        def feito(sg):
+            def vale(s):
+                return s == sg or s == ""
+            return (any((c, sg) in feitos or (c, "") in feitos for c in chaves)
+                    or any(vale(s) and _mesmo_nome(n, p["nome"]) for n, s in laudos)
+                    or any(vale(s) and parecido.get(n) == p["codpac"] for n, s in imagens))
+        if all(feito(sg) for sg in ([sigla(x) for x in p["procs"]] or [""])):
+            saida.add(p["codpac"])
+    return saida
 
 
 def _arq_excluidos(cfg):
@@ -419,10 +488,10 @@ def lista_da_tela(cfg):
         lista, _ = buscar(cfg, hoje, hoje)
     except Exception as e:
         return {"ok": False, "erro": f"Não consegui ler a agenda do Medware: {str(e)[:150]}"}
-    feitos, fora = _recebidos(cfg, hoje), ler_excluidos(cfg, hoje)
+    feitos, fora = atendidos(lista, cfg, hoje), ler_excluidos(cfg, hoje)
     saida = []
     for p in sorted(lista, key=lambda x: x["hora"]):
-        sit = "excluido" if str(p["codpac"]) in fora else ("atendido" if _atendido(p, feitos) else "na lista")
+        sit = "excluido" if str(p["codpac"]) in fora else ("atendido" if p["codpac"] in feitos else "na lista")
         saida.append({"codpac": str(p["codpac"]), "hora": p["hora"].strftime("%H:%M"), "nome": p["nome"],
                       "exames": descricao(p["procs"]), "medico": p["medico"], "situacao": sit})
     return {"ok": True, "pacientes": saida, "consulta": ler_situacao(cfg)}
@@ -515,11 +584,11 @@ def _consultar(event, cfg):
         _anotar(cfg, erro=str(e)[:200], erro_em=agora, ultima_consulta=agora, ip=ip, ae=ae, n=None)
         yield 0xC001, None
         return
-    # sai da lista quem ja mandou as imagens de todos os exames do dia e quem foi tirado na tela
+    # sai da lista quem ja fez todos os exames do dia (imagens ou laudo) e quem foi tirado na tela
     hoje = datetime.date.today()
-    feitos = _recebidos(cfg, hoje)
+    feitos = atendidos(lista, cfg, hoje)
     fora = ler_excluidos(cfg, hoje)
-    lista = [p for p in lista if p["dia"] != hoje or (str(p["codpac"]) not in fora and not _atendido(p, feitos))]
+    lista = [p for p in lista if p["dia"] != hoje or (str(p["codpac"]) not in fora and p["codpac"] not in feitos)]
     medico = medico_ativo(cfg)
     if medico:
         lista = [p for p in lista if not p["medico"] or p["medico"] == medico]
