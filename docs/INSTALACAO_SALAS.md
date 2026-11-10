@@ -96,7 +96,7 @@ Medware ──imprime na PDF24──► pasta 0 ──────►│  renome
 | --- | --- |
 | Impressora | Epson EcoTank L3250, **USB**. Padrão do Windows = fila **"EPSON L3250 Series"**, porta **USB001** |
 | Filas a não usar | EPSON4EEDCE e EPSON36EC7C (portas WSD, achadas sozinhas pelo Windows; duas impressoras de rede diferentes). Não podem virar padrão |
-| Fila de fotos | **"EcoPDF Foto"**: mesmo driver e porta USB001, preferências Epson Premium Photo Paper Glossy (a qualidade vem do config.ini, `FOTO_QUALIDADE = padrao` desde a 2026.11.07). Criada pela instalação; refazer com `criar_fila_foto.bat` |
+| Fila de fotos | **"EcoPDF Foto"**: mesmo driver e porta USB001, preferências Epson Premium Photo Paper Glossy + qualidade Alta (é o botão "Alta" do Imprimir; o driver Epson ignora a qualidade pedida por programa). Criada pela instalação; refazer com `criar_fila_foto.bat` |
 | Como imprime | Impressão direta (IMPRESSAO_DIRETA = sim): um envio com as fotos na "EcoPDF Foto" e, depois que ele sai da fila, um envio com o laudo na padrão. "Imprimir selecionados" junta as fotos de vários exames num envio e depois os laudos na mesma ordem. Papel foto por cima do comum, bandeja única |
 
 ### 1.7 Painel das salas
@@ -144,7 +144,7 @@ Medware ──imprime na PDF24──► pasta 0 ──────►│  renome
 2. **PC do laudo**
    1. IP do PC: fixo no Windows (como no Bessa) ou reserva no roteador. Anotar IP, máscara, gateway, MAC.
    2. Impressora da sala como **padrão** do Windows, na porta física (USB ou porta da marca). Rodar `Get-Printer | ft Name,DriverName,PortName -auto` e conferir que a padrão não é WSD nem PDF24.
-   3. Pendrive → `INSTALAR ECOPDF.bat` → T. Copiar `painel.ini` para `C:\EcoPDF`. A instalação cria venv, pastas, firewall, tarefa agendada e a "EcoPDF Foto" (escolher papel foto; qualidade Padrão). Guardar foto do `DADOS DESTE PC.txt`.
+   3. Pendrive → `INSTALAR ECOPDF.bat` → T. Copiar `painel.ini` para `C:\EcoPDF`. A instalação cria venv, pastas, firewall, tarefa agendada e a "EcoPDF Foto" (escolher papel foto + Alta). Guardar foto do `DADOS DESTE PC.txt`.
    4. PDF24: salvamento automático em `0 - Entrada PDF24` (caminho no DADOS DESTE PC.txt, a pasta é oculta).
    5. Medware: só se o banco não estiver neste PC, pôr `MEDWARE_SERVIDORES` e `MEDWARE_SENHA` no `painel.ini` e liberar a porta 3050 no firewall do servidor.
 3. **Aparelho**
