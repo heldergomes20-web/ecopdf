@@ -378,8 +378,8 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False, qualidade="nor
     """Comeca a impressao em segundo plano. Devolve o id para acompanhar ou None (usar o jeito antigo).
     rapido = caixinha "Baixa qualidade": mesma sequencia (fotos, depois laudo em outro envio), mas
     tudo na impressora padrao com papel comum e qualidade padrao do driver (sem EcoPDF Foto).
-    qualidade = seletor da janela Imprimir: "alta" pede qualidade Alta nas fotos; "normal" usa
-    FOTO_QUALIDADE do config.ini (padrao)."""
+    qualidade = seletor da janela Imprimir (Baixa = rapido; Alta = "alta", pede qualidade Alta nas
+    fotos). O driver Epson ignora esse pedido (log 10/11): a qualidade real e a salva na EcoPDF Foto."""
     ok, nome = disponivel(cfg)
     if not ok:
         log.info("Impressao direta indisponivel: %s", nome)

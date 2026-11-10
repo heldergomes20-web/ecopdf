@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.10
+- Imprimir: o seletor de qualidade das fotos fica com dois botoes, "Baixa | Alta", e abre sempre em Baixa (papel foto tratado como papel comum: mais rapido, cor mais fraca). Alta = papel fotografico pela impressora EcoPDF Foto (mais lenta, melhor acabamento). Sai o "Normal": a impressora Epson ignora a qualidade pedida pelo programa, entao Normal e Alta saiam iguais. A acao nao muda: papel foto por cima do comum, fotos e depois o laudo.
+
 2026.11.09
 - Imprimir: a caixinha "Baixa qualidade" vira o seletor "Qualidade das fotos: Rapida | Normal | Alta", na mesma janela, logo acima dos botoes. Abre sempre em Normal (papel fotografico, qualidade Padrao, como hoje). Rapida = a antiga caixinha (impressora tratando o papel foto como papel comum: mais rapida, cor mais fraca). Alta = papel fotografico em qualidade Alta (mais lenta, melhor acabamento). O resto nao muda: papel foto por cima do comum, fotos primeiro e depois o laudo. Se so o laudo estiver marcado, o seletor some.
 
