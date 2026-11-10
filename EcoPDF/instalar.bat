@@ -53,6 +53,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'py*' -and $_.CommandLine -like '*renomear_laudos*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue };" ^
   "Get-ChildItem ([Environment]::GetFolderPath('Startup')) -Filter '*renomead*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue"
 
+rem O Ctrl+Alt+L (laudo do site -> Medware) agora e do EcoPDF: tira a tecla de atalho dos
+rem atalhos antigos do Medware.bat/medware.ps1 (o atalho continua, so sem a tecla), senao os dois disputam a tecla.
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$w=New-Object -ComObject WScript.Shell;" ^
+  "foreach ($p in 'Desktop','CommonDesktopDirectory','Programs','CommonPrograms','Startup','CommonStartup') { $d=[Environment]::GetFolderPath($p); if (-not $d) { continue };" ^
+  "  Get-ChildItem $d -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object { try { $l=$w.CreateShortcut($_.FullName);" ^
+  "    if (($l.Hotkey -match 'Ctrl') -and ($l.Hotkey -match 'Alt') -and ($l.Hotkey -match '\+L$') -and (($l.TargetPath + ' ' + $l.Arguments) -match 'medware[^\\]*\.(bat|ps1)')) { $l.Hotkey=''; $l.Save(); Write-Host ('  Tecla Ctrl+Alt+L tirada do atalho antigo: ' + $_.Name) } } catch {} } }"
+
 set PORTA=11112
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"PORTA" config.ini') do set PORTA=%%b
 

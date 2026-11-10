@@ -1939,6 +1939,11 @@ def main():
         log.exception("Painel das salas nao iniciou (o resto continua funcionando)")
 
     threading.Thread(target=vigiar_atualizacao, args=(parar,), daemon=True, name="atualizacao").start()
+    try:
+        import medware_rtf  # Ctrl+Alt+L: laudo copiado do site -> formato RTF para colar no Medware
+        medware_rtf.iniciar()
+    except Exception:
+        log.exception("Conversor Ctrl+Alt+L nao iniciou (o resto continua funcionando)")
 
     log.info("EcoPDF %s ouvindo: AE=%s porta=%d | fotos em %s | laudos em %s -> %s",
              versao(), cfg["ae_title"], cfg["porta"], cfg["pasta_imagens"],
