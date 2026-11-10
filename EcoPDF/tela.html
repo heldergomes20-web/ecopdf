@@ -18,6 +18,7 @@ button{font:inherit;cursor:pointer}
 .logo{font-weight:700;color:var(--vinho);font-size:17px;display:flex;align-items:center;gap:8px}.logo img{height:26px;width:auto}.logo span{color:var(--tinta);font-weight:400}
 .quieto{color:var(--quieto)}.pq{font-size:12.5px}
 .como-ap{color:var(--quieto);font-size:11.5px;font-weight:400;font-style:italic;letter-spacing:0;margin-top:1px}
+.btn.btn-pq{padding:2px 8px;font-size:12px;margin-left:4px;vertical-align:middle}
 .btn{border:1px solid #c3c9d2;background:var(--branco);border-radius:7px;padding:7px 14px;color:var(--tinta);text-decoration:none}
 .btn:hover{border-color:#8f97a3}
 .topo .btn,.topo .logo,.topo .wl-rot{white-space:nowrap;flex-shrink:0}
@@ -178,7 +179,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
     </table>
     <div class="vazio" id="vazio" style="display:none">Nenhum exame neste filtro.</div>
   </div>
-  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” liga e desliga e soma com o período (Hoje + Pendentes = o que falta de hoje; o número no botão conta todas) = imagens ainda sem laudo, laudos ainda sem imagens e finais refeitos para subir de novo no prontuário (3 dias). Para imprimir vários exames de uma vez, marque a caixinha ao lado de “Ver final” de cada um e clique em “Imprimir selecionados”: saem as fotos de todos e depois os laudos, na mesma ordem. A lista se atualiza sozinha.</p>
+  <p class="quieto pq">Clique no paciente para abrir. “Pendentes” liga e desliga e soma com o período (Hoje + Pendentes = o que falta de hoje; o número no botão conta as do período escolhido) = imagens ainda sem laudo, laudos ainda sem imagens e finais refeitos para subir de novo no prontuário (até clicar em “Já subi”). Para imprimir vários exames de uma vez, marque a caixinha ao lado de “Ver final” de cada um e clique em “Imprimir selecionados”: saem as fotos de todos e depois os laudos, na mesma ordem. A lista se atualiza sozinha.</p>
 </div>
 
 <div id="exame">
@@ -189,6 +190,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
     <span class="quieto pq" id="e-cont"></span>
     <span class="sujo pq" id="e-sujo" style="display:none">alterações não salvas</span>
     <button class="btn acao" id="b-descartar" style="display:none" title="Imagens que nunca terão laudo (teste, duplicado, paciente que saiu)">Descartar</button>
+    <button class="btn acao" id="b-jasubi" style="display:none" title="Já subi o PDF refeito no prontuário: tira dos pendentes">Já subi</button>
     <button class="btn acao" id="b-mostrar" style="display:none" title="Abre a pasta 3 com este PDF já selecionado">Mostrar na pasta</button>
     <a class="btn acao" id="b-final" style="display:none" target="_blank" title="Abre o PDF da pasta 3 - Finalizados (o que sobe no prontuário)">Ver final</a>
     <button class="btn acao" id="b-imprimir" style="display:none">Imprimir</button>
@@ -335,12 +337,14 @@ function desenharLista() {
   const limite = new Date(hoje); limite.setDate(limite.getDate() - (filtro.dias >= 9999 ? 100000 : filtro.dias));
   const lim = `${limite.getFullYear()}${String(limite.getMonth()+1).padStart(2,"0")}${String(limite.getDate()).padStart(2,"0")}`;
   const semLaudo = exames.filter(e => SEM_LAUDO.includes(e.situacao) || e.subir_de_novo);
-  const nPend = semLaudo.length + laudosSemImg.length;
-  $("n-semlaudo").textContent = nPend;
-  document.title = (nPend ? `(${nPend}) ` : "") + "EcoPDF – Exames";
-  const b = filtro.busca.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   // data do exame no periodo OU imagens chegaram / exame finalizado no periodo (reenvio de exame antigo)
   const noPeriodo = e => (e.data || "99999999") >= lim || (e.chegou || "") >= lim || (e.finalizado || "") >= lim;
+  // numero do botao Pendentes = pendencias do periodo escolhido (Helder 10/11/2026)
+  const nPend = contarPendentes(lim);
+  $("n-semlaudo").textContent = nPend;
+  $("b-semlaudo").title = `Imagens sem laudo, laudos sem imagens e finais para subir de novo, no período escolhido (${nPend})`;
+  document.title = (nPend ? `(${nPend}) ` : "") + "EcoPDF – Exames";
+  const b = filtro.busca.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   const quando = e => e.reenvio ? e.chegou + (e.chegou_hora || "") : e.data + (e.hora || "");  // reenvio: na hora em que chegou
   // Pendentes soma com o periodo (Helder 03/11): Hoje + Pendentes = pendencias de hoje
   // Descartado (teste, duplicado) some de Hoje/7/30 dias; continua em 6 meses (tudo) e na busca
@@ -352,10 +356,9 @@ function desenharLista() {
   $("linhas").innerHTML = lista.map((e, k) => `<tr data-k="${exames.indexOf(e)}">
     <td>${dataBr(e.data)}</td><td>${hora(e.hora)}</td><td><b>${esc(e.paciente)}</b>${comoAparelho(e)}</td><td title="${esc(e.tipo_nome)}">${esc(tipoCurto(e.tipo_nome))}</td>
     <td class="quieto">${esc(e.sigla || "—")}</td><td>${e.n} (${e.na_folha} na folha)</td>
-    <td><span class="selo ${classe(e.situacao)}"${DICA[e.situacao] ? ` title="${esc(DICA[e.situacao])}"` : ""}>${esc(rotulo(e.situacao))}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span>` : ""}${e.reenvio ? ` <span class="selo s-Reenvio" title="Exame de ${dataBr(e.data)}, imagens recebidas em ${dataBr(e.chegou)}">Reenvio ${dataBr(e.chegou).slice(0,5)}</span>` : ""}${proximoPasso(e)}</td>
+    <td><span class="selo ${classe(e.situacao)}"${DICA[e.situacao] ? ` title="${esc(DICA[e.situacao])}"` : ""}>${esc(rotulo(e.situacao))}</span>${e.subir_de_novo ? ` <span class="selo s-Subir" title="${esc(e.subir_de_novo)}">Subir de novo</span> <button class="btn btn-pq" data-subi="${exames.indexOf(e)}" title="Já subi o PDF refeito no prontuário: tira dos pendentes">Já subi</button>` : ""}${e.reenvio ? ` <span class="selo s-Reenvio" title="Exame de ${dataBr(e.data)}, imagens recebidas em ${dataBr(e.chegou)}">Reenvio ${dataBr(e.chegou).slice(0,5)}</span>` : ""}${proximoPasso(e)}</td>
     <td style="text-align:right;white-space:nowrap">${e.situacao === "Finalizado" ? `<input type="checkbox" class="sel-imp" data-sel="${esc(chaveEx(e))}" ${selImp.has(chaveEx(e)) ? "checked" : ""} title="Marcar para imprimir junto com outros exames"><a class="btn" data-final href="${urlFinal(e)}" target="_blank" title="Abre o PDF da pasta 3 - Finalizados">Ver final</a> <button class="btn" data-imp="${exames.indexOf(e)}">Imprimir</button>` : ""}</td></tr>`).join("");
-  const chegouLaudo = l => { const d = new Date(Date.now() - (l.minutos || 0) * 60000); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; };
-  let laudos = laudosSemImg.filter(l => (l.data || "99999999") >= lim || chegouLaudo(l) >= lim);
+  let laudos = laudosSemImg.filter(l => laudoNoPeriodo(l, lim));
   if (b) laudos = laudosSemImg.filter(l => l.paciente.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(b));
   $("linhas").insertAdjacentHTML("afterbegin", laudos.map(l => `<tr class="sem-img">
     <td>${dataBr(l.data)}</td><td class="quieto">—</td><td><b>${esc(l.paciente)}</b></td><td title="${esc(l.tipo_nome)}">${esc(tipoCurto(l.tipo_nome))}</td>
@@ -365,6 +368,30 @@ function desenharLista() {
   botaoSelecionados();
   $("vazio").style.display = lista.length + laudos.length ? "none" : "block";
   $("vazio").textContent = filtro.semLaudo && filtro.dias < 9999 ? "Nenhuma pendência neste período (veja as mais antigas em 6 meses)." : "Nenhum exame neste filtro.";
+}
+function chegouLaudo(l) { const d = new Date(Date.now() - (l.minutos || 0) * 60000); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; }
+function laudoNoPeriodo(l, lim) { return (l.data || "99999999") >= lim || chegouLaudo(l) >= lim; }
+function limitePeriodo() {
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const limite = new Date(hoje); limite.setDate(limite.getDate() - (filtro.dias >= 9999 ? 100000 : filtro.dias));
+  return `${limite.getFullYear()}${String(limite.getMonth()+1).padStart(2,"0")}${String(limite.getDate()).padStart(2,"0")}`;
+}
+// mesma regra da lista: pendencia cujo exame, chegada ou finalizacao cai no periodo
+function contarPendentes(lim) {
+  lim = lim || limitePeriodo();
+  const noP = e => (e.data || "99999999") >= lim || (e.chegou || "") >= lim || (e.finalizado || "") >= lim;
+  return exames.filter(e => (SEM_LAUDO.includes(e.situacao) || e.subir_de_novo) && noP(e)).length
+       + laudosSemImg.filter(l => laudoNoPeriodo(l, lim)).length;
+}
+async function jaSubi(x, bt) {
+  if (bt) bt.disabled = true;
+  try {
+    const r = await fetch("/api/ja_subi", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({e: x.estudo, t: x.tipo})});
+    const d = await r.json();
+    aviso(d.ok ? d.mensagem : "Não foi: " + d.erro, !d.ok);
+    if (d.ok && ex && ex.estudo === x.estudo && ex.tipo === x.tipo) { ex.subir_de_novo = ""; botaoImprimir(); }
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+  carregarLista();
 }
 function tempo(m) { return m >= 1440 ? `${Math.floor(m / 1440)} d` : m >= 60 ? `${Math.floor(m / 60)} h` : `${m} min`; }
 async function liberar(bt) {
@@ -387,6 +414,8 @@ $("busca").oninput = e => { filtro.busca = e.target.value; desenharLista(); };
 $("linhas").onclick = e => {
   const bl = e.target.closest("[data-lib]");
   if (bl) { liberar(bl); return; }
+  const bs = e.target.closest("[data-subi]");
+  if (bs) { jaSubi(exames[Number(bs.dataset.subi)], bs); return; }
   const cs = e.target.closest("[data-sel]");
   if (cs) { if (cs.checked) selImp.add(cs.dataset.sel); else selImp.delete(cs.dataset.sel); botaoSelecionados(); return; }
   if (e.target.closest("tr.sem-img") || e.target.closest("[data-final]")) return;
@@ -695,11 +724,13 @@ async function abrirPasta(x) {
 }
 $("b-pasta3").onclick = () => abrirPasta(null);
 $("b-mostrar").onclick = () => abrirPasta(ex);
+$("b-jasubi").onclick = e => jaSubi(ex, e.currentTarget);
 function urlFinal(x) { return `/final?e=${encodeURIComponent(x.estudo)}&t=${encodeURIComponent(x.tipo)}`; }
 function botaoImprimir() {
   botaoDescartar();
   const f = $("b-final"); f.style.display = ex.situacao === "Finalizado" ? "" : "none"; f.href = urlFinal(ex);
   $("b-mostrar").style.display = ex.situacao === "Finalizado" ? "" : "none";
+  $("b-jasubi").style.display = ex.subir_de_novo ? "" : "none";
   const b = $("b-imprimir"); b.style.display = "";
   b.disabled = !ex.impressao;
   b.textContent = ex.impressao ? "Imprimir" : "Imprimir (aguardando laudo)";
@@ -1063,7 +1094,7 @@ function rota() {
   }
 }
 window.addEventListener("hashchange", rota);
-setInterval(() => { if (!ex) carregarLista(); else fetch("/api/exames").then(r => r.json()).then(d => { exames = d.exames || []; laudosSemImg = d.laudos_sem_imagens || []; const n = exames.filter(e => SEM_LAUDO.includes(e.situacao) || e.subir_de_novo).length + laudosSemImg.length; document.title = (n ? `(${n}) ` : "") + "EcoPDF – Exames"; }).catch(() => {}); }, 15000);
+setInterval(() => { if (!ex) carregarLista(); else fetch("/api/exames").then(r => r.json()).then(d => { exames = d.exames || []; laudosSemImg = d.laudos_sem_imagens || []; const n = contarPendentes(); document.title = (n ? `(${n}) ` : "") + "EcoPDF – Exames"; }).catch(() => {}); }, 15000);
 rota();
 </script>
 </body>

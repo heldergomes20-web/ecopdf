@@ -474,12 +474,8 @@ def coletar(cfg, ep, manual=False):
     ultima_juncao = max(juncoes) if juncoes else ""
     retificados = 0
     for r in reg:
-        em = r.get("corrigido_em")
-        try:
-            if em and agora - datetime.fromisoformat(em).timestamp() < 3 * 86400:
-                retificados += 1
-        except ValueError:
-            pass
+        if ep.subir_de_novo(r, cfg, agora):
+            retificados += 1
     lim = cfg["pendentes_minutos"] * 60
     img = [s for s in _idades([p for p in _pdfs(cfg["pasta_imagens"])], agora) if s > lim]
     lau = [s for s in _idades(_pdfs(cfg["pasta_laudos"]), agora) if s > lim]

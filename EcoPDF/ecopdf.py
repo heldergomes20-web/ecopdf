@@ -955,6 +955,39 @@ def _ler_registro(cfg):
         return []
 
 
+# "Subir de novo" (Helder 10/11/2026): fica ate alguem clicar em "Ja subi" na tela, sem vencer
+# sozinho. Correcao de antes desta regra segue a regra antiga (3 dias), para nao voltarem todas.
+REGRA_JA_SUBI = "2026-11-10T00:00:00"
+
+
+def subir_de_novo(r, cfg, agora=None):
+    """True se o final deste registro foi refeito e ainda nao teve baixa ("Ja subi")."""
+    em = str((r or {}).get("corrigido_em") or "")
+    if not em or str(r.get("subido_em") or "") >= em:
+        return False
+    try:
+        idade = (agora or time.time()) - datetime.fromisoformat(em).timestamp()
+    except ValueError:
+        return False
+    if em < REGRA_JA_SUBI:
+        return idade < 3 * 86400
+    return idade < cfg.get("manter_dicom_dias", 180) * 86400   # exame apagado da tela some daqui tambem
+
+
+def marcar_subido(cfg, final):
+    """Botao "Ja subi" da tela: da baixa no "Subir de novo" do final (nome na pasta 3)."""
+    with TRAVA:
+        reg = _ler_registro(cfg)
+        achou = [r for r in reg if r.get("final") == final and r.get("corrigido_em")]
+        if not achou:
+            return False
+        for r in achou:
+            r["subido_em"] = datetime.now().isoformat(timespec="seconds")
+        _gravar_registro(cfg, reg)
+    log.info("Tela: subir de novo marcado como feito (%d registro)", len(achou))
+    return True
+
+
 def _gravar_registro(cfg, reg):
     cfg["pasta_processados"].mkdir(parents=True, exist_ok=True)
     gravar_atomico(cfg["pasta_processados"] / "finalizados.json",
@@ -1246,10 +1279,10 @@ def juntar_laudos(cfg):
             pendentes.append((f[0], "sem laudo correspondente em aguardando imagens"))
     pendentes = [(a, m) for a, m in pendentes
                  if a.exists() and agora - a.stat().st_mtime > cfg["pendentes_minutos"] * 60]
-    # correcoes dos ultimos 3 dias: lembrar de subir de novo no prontuario
+    # finais refeitos ainda sem "Ja subi" na tela: lembrar de subir de novo no prontuario
     for r in _ler_registro(cfg):
         em = r.get("corrigido_em")
-        if em and agora - datetime.fromisoformat(em).timestamp() < 3 * 86400:
+        if subir_de_novo(r, cfg, agora):
             pendentes.append((cfg["pasta_final"] / r["final"],
                               f"{r.get('motivo', 'LAUDO CORRIGIDO')} em {datetime.fromisoformat(em):%d/%m %H:%M}: subir novamente no prontuario"))
     _escrever_pendentes(cfg, erros + pendentes)
