@@ -404,7 +404,8 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False, qualidade="nor
                 # mesma sequencia do modo normal (fotos, espera, laudo em outro envio): a pilha sai
                 # igual (fotos embaixo, laudo em cima) mesmo com driver em "ordem inversa"
                 _, comum, _ = modo_foto(nome)
-                log.info("Impressao direta em baixa qualidade em %s (papel comum, qualidade padrao)", nome)
+                log.info("Impressao direta em baixa qualidade em %s (papel comum, qualidade padrao)%s", nome,
+                         "" if paginas_fotos else ": so o laudo")
                 if paginas_fotos:
                     atualizar("fotos", f"Imprimindo {txt_fotos} (baixa qualidade)...")
                     job = _imprimir_paginas(nome, paginas_fotos, _devmode(nome, comum), "EcoPDF - fotos")
@@ -416,7 +417,7 @@ def iniciar(paginas_fotos, paginas_laudo, cfg, log, rapido=False, qualidade="nor
                 if paginas_laudo:
                     atualizar("laudo", f"Imprimindo {txt_laudo} (papel comum)...")
                     _imprimir_paginas(nome, paginas_laudo, _devmode(nome, comum), "EcoPDF - laudo")
-                atualizar("pronto", f"Enviado para {nome} (baixa qualidade).")
+                atualizar("pronto", f"Enviado para {nome}" + (" (fotos em baixa qualidade)." if paginas_fotos else "."))
                 return
             qfoto = DMRES_HIGH if qualidade == "alta" else qualidade_foto(cfg)
             fila = None

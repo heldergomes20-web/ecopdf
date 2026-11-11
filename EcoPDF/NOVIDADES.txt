@@ -7,6 +7,8 @@ Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat
 - Laudo junta na hora: assim que o PDF24 salva o laudo (ou a folha fica pronta, se o laudo chegou antes), o EcoPDF junta em 1 a 2 s (antes: 20 a 30 s). PDF colocado a mao nas pastas continua esperando 20 s para nao pegar arquivo pela metade.
 - O relatorio de medidas (SR) que chega depois, ou repetido, nao refaz a folha; so imagem nova refaz.
 - Log: uma linha por envio do aparelho (quantas imagens, quantos SR, quanto tempo levou e se terminou normalmente).
+- Tela: abre no exame quando o aparelho termina de mandar (ja com todas as imagens e as medidas), e nao mais na primeira imagem. A marca verde "novo" fica so para imagem que chega depois (complemento). Se a conexao cair no meio, abre depois de 20 s sem chegar nada. A faixa "Novo exame chegou" segue a mesma regra.
+- Imprimir so o laudo: a mensagem final nao diz mais "baixa qualidade" (o laudo sempre sai em papel comum).
 
 2026.11.10.1
 - Painel: os avisos "Tela: erro ... 10053" (navegador fechou a conexao com a tela ao recarregar, fechar a aba ou trocar de exame) deixam de contar como erro. Nao afetavam exame, PDF nem impressao; so escondiam os erros de verdade na nota "Ultimos erros" da planilha.
