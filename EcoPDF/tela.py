@@ -811,6 +811,12 @@ def sinal(estudo, ep, cfg):
         ass = _assinatura(p)
         r["ass"] = "-".join(str(x) for x in ass)
         r["ultima_ha"] = int(agora - ass[-1]) if ass[-1] else None
+        # aparelho ja encerrou o envio depois da ultima imagem: nao esta mais "recebendo"
+        try:
+            mi = (p / ep.ULTIMA_IMG).stat().st_mtime
+            r["envio_ok"] = ep.FIM_ENVIO.get(p.name, 0) >= mi
+        except (OSError, AttributeError):
+            r["envio_ok"] = False
     return r
 
 

@@ -429,7 +429,7 @@ async function abrirExame(estudo, tipo) {
   const r = await fetch(`/api/exame?e=${encodeURIComponent(estudo)}&t=${encodeURIComponent(tipo)}`);
   if (!r.ok) { aviso("Exame não encontrado (pode ter passado do prazo de guarda).", true); location.hash = ""; return; }
   ex = await r.json();
-  confirmados = new Set(); copiado = null; novos = new Map(); assVista = ex.ass || ""; vivoAte = 0;
+  confirmados = new Set(); copiado = null; novos = new Map(); assVista = ex.ass || ""; vivoAte = 0; envioOk = false;
   ordem = ex.imagens.map(i => i.id); fora = new Set(ex.imagens.filter(i => i.fora).map(i => i.id));
   atual = 0; sujo = false;
   if (avisoNovo && avisoNovo.estudo === ex.estudo && avisoNovo.tipo === ex.tipo) fecharAvisoNovo();
@@ -444,7 +444,7 @@ function comoAparelho(e) {
   return e.nome_aparelho ? `<div class="como-ap" title="Nome que veio do aparelho; o PDF final usa o nome do laudo">Imagens enviadas como: ${esc(e.nome_aparelho)}</div>` : "";
 }
 function subtitulo() {
-  const vivo = Date.now() < vivoAte ? ` <span class="vivo" title="Imagens chegando do aparelho: aparecem aqui sozinhas"><i></i>recebendo</span>` : "";
+  const vivo = Date.now() < vivoAte && !envioOk ? ` <span class="vivo" title="Imagens chegando do aparelho: aparecem aqui sozinhas"><i></i>recebendo</span>` : "";
   $("e-sub").innerHTML = `${esc(ex.tipo_nome)} · ${esc(ex.data)} ${hora(ex.hora)} · ${esc(rotulo(ex.situacao))} · ${ordem.length} imagens${vivo}`;
 }
 function horaDe(id) { const i = ex.imagens.find(x => x.id === id); return i ? i.hora : ""; }
@@ -1001,6 +1001,7 @@ window.addEventListener("beforeunload", e => { if (sujo) { e.preventDefault(); e
 // sozinha; mostra o aviso "Novo exame chegou" (Abrir / Depois).
 let novos = new Map();          // id -> quando chegou (selo "novo" por 3 min)
 let assVista = "", vivoAte = 0, ultimoVisto = null, avisoNovo = null, sinalOcupado = false;
+let envioOk = false;   // o aparelho ja terminou de mandar este exame (sem selo "recebendo")
 const chaveU = u => u ? `${u.estudo}|${u.tipo}` : "";
 function fecharAvisoNovo() { avisoNovo = null; $("novo-aviso").style.display = "none"; }
 function mostrarAvisoNovo(u) {
@@ -1056,6 +1057,7 @@ async function sinal() {
       else if (ex && (u.estudo !== ex.estudo || u.tipo !== ex.tipo)) mostrarAvisoNovo(u);
     } else if (avisoNovo && chaveU(avisoNovo) === chaveU(u) && !avisoNovo.paciente && u.paciente) mostrarAvisoNovo(u);
     if (ex && d.ass) {
+      if (!!d.envio_ok !== envioOk) { envioOk = !!d.envio_ok; subtitulo(); }
       if (d.ass !== assVista) await recarregarExame();
       if (d.ultima_ha !== null && d.ultima_ha < 180 && !vivoAte) { vivoAte = Date.now() + (180 - d.ultima_ha) * 1000; subtitulo(); if (!ex.medidas.tem_sr) painel(); }
     }

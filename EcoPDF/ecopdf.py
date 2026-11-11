@@ -156,6 +156,8 @@ ACORDAR = threading.Event()  # acorda o vigia na hora (fim do envio, laudo novo)
 # PDFs que o proprio EcoPDF acabou de pôr nas pastas 1/2 (gravacao atomica ou ja conferido pelo
 # renomeador): juntam na hora. Arquivo colocado por outro caminho ainda espera 20 s estabilizar.
 _PRONTOS = {}       # caminho -> mtime
+# Tela (Helder 11/11/2026): abre no exame quando o aparelho termina o envio, nao na 1a imagem.
+_TELA_PENDENTE = {}  # pasta do estudo -> tipo da ultima imagem recebida, ainda sem avisar a tela
 _PRONTOS_TRAVA = threading.Lock()
 TELA = None  # modulo da tela, quando ela esta ligada (para abrir ao receber)
 
@@ -481,16 +483,18 @@ def _contar_na_conexao(event, estudo, chave):
         c[chave] += 1
 
 
-def on_encerrou(event):
-    """A-RELEASE: o aparelho terminou de mandar. Marca o fim do envio dos estudos desta conexao
-    e acorda o vigia depois de FIM_ENVIO_S (a folha fecha sem esperar ESPERA_SEGUNDOS)."""
+def on_encerrou(event, cfg):
+    """A-RELEASE: o aparelho terminou de mandar. Marca o fim do envio dos estudos desta conexao,
+    acorda o vigia depois de FIM_ENVIO_S (a folha fecha sem esperar ESPERA_SEGUNDOS) e abre a
+    tela no exame, ja com todas as imagens."""
     with _CONEXOES_TRAVA:
         c = _CONEXOES.get(id(event.assoc))
         if c is None:
             return  # teste (Echo), lista de pacientes ou conexao sem imagem
         c["encerrada"] = True
         agora = time.time()
-        for estudo in c["estudos"]:
+        estudos = sorted(c["estudos"])
+        for estudo in estudos:
             FIM_ENVIO[estudo] = agora
         if len(FIM_ENVIO) > 500:  # so os recentes importam
             for k, _ in sorted(FIM_ENVIO.items(), key=lambda kv: kv[1])[:250]:
@@ -498,6 +502,15 @@ def on_encerrou(event):
     t = threading.Timer(FIM_ENVIO_S + 0.2, ACORDAR.set)
     t.daemon = True
     t.start()
+    for estudo in estudos:
+        avisar_tela_pendente(cfg, estudo)
+
+
+def avisar_tela_pendente(cfg, estudo):
+    """Envio do exame terminou (ou a reserva venceu): a tela abre (ou avisa) neste exame."""
+    tipo = _TELA_PENDENTE.pop(estudo, None)
+    if tipo is not None:
+        _avisar_tela(cfg, estudo, tipo)
 
 
 def on_fechou(event):
@@ -608,7 +621,8 @@ def on_store(event, cfg):
                 tipo = tipo_da_imagem(ds, cfg["tipos"], regra_freq(pasta, cfg)) or ""
             except Exception:
                 tipo = None
-        _avisar_tela(cfg, pasta.name, tipo)
+        if tipo is not None:   # a tela abre neste exame quando o envio terminar (on_encerrou/vigiar)
+            _TELA_PENDENTE[pasta.name] = tipo
         log.info("Recebida de %s: %s | %s | quadros=%s | aparelho: %s | campos de tipo: %s",
                  event.assoc.requestor.ae_title, nome_paciente(ds.get("PatientName")),
                  ds.get("Modality", "?"), ds.get("NumberOfFrames", 1), aparelho(ds, cfg),
@@ -1058,7 +1072,8 @@ def subir_de_novo(r, cfg, agora=None):
         return False
     if em < REGRA_JA_SUBI:
         return idade < 3 * 86400
-    return idade < cfg.get("manter_dicom_dias", 180) * 86400   # exame apagado da tela some daqui tambem
+    dias = cfg.get("manter_dicom_dias", 180)
+    return dias <= 0 or idade < dias * 86400   # exame apagado da tela some daqui tambem (0 = nunca apaga)
 
 
 def marcar_subido(cfg, final):
@@ -1867,6 +1882,7 @@ def vigiar(cfg, parar):
                         except Exception:
                             log.exception("Falha ao gerar PDF do estudo %s", pasta.name)
                         m.touch()  # nao repete em laco; imagem nova reabre o estudo
+                    avisar_tela_pendente(cfg, pasta.name)  # conexao caiu sem encerrar: abre pela reserva
             with TRAVA:
                 juntar_laudos(cfg)
                 if agora - ultima_limpeza > 3600:
@@ -2080,7 +2096,7 @@ def main():
     CFG_ESPERA[0] = cfg["espera"]
     handlers = [(evt.EVT_C_ECHO, on_echo), (evt.EVT_C_STORE, on_store, [cfg]),
                 (evt.EVT_ACCEPTED, on_conectou, [cfg]), (evt.EVT_REJECTED, on_recusou, [cfg]),
-                (evt.EVT_RELEASED, on_encerrou), (evt.EVT_CONN_CLOSE, on_fechou)]
+                (evt.EVT_RELEASED, on_encerrou, [cfg]), (evt.EVT_CONN_CLOSE, on_fechou)]
     if cfg["worklist"]:
         try:
             import worklist
