@@ -29,7 +29,7 @@ var HIST_COLS = ['Quando', 'Sala', 'PC', 'Versão', 'Situação', 'O que olhar',
 var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão',
   'IP do PC', 'AE Title : porta', 'Última conexão de aparelho', 'Última imagem', 'Aparelho (série)',
   'Última junção', 'Imagens sem laudo', 'Laudos sem imagens', 'Motivo do laudo sem imagens',
-  '9 - Revisar', 'Retificados (3 dias)', 'Liberados sem imagens (7 dias)', 'Descartados (7 dias)',
+  '9 - Revisar', 'Para subir de novo', 'Liberados sem imagens (7 dias)', 'Descartados (7 dias)',
   'Sumiram da pasta 2 (7 dias)', 'Erros (24 h)', 'Disco livre (GB)', 'Disco enche em (dias)', 'Imagens guardadas (GB)', 'MB por exame',
   'Memória EcoPDF (MB)', 'CPU média (%)', 'Folha pronta em (s, média / máx 24 h)', 'Impressora', 'Ligado desde',
   'IP anterior (apague depois de conferir o aparelho)', 'nivel_pc', 'problemas_pc', 'relogio_min', 'modelo_novo'];
@@ -100,7 +100,7 @@ function doPost(e) {
     v['Liberados sem imagens (7 dias)'] = num(d.liberados_sem_imagens_7d);
     v['Descartados (7 dias)'] = num(d.descartados_7d);
     v['Sumiram da pasta 2 (7 dias)'] = num(d.fora_pasta2_7d);
-    v['Retificados (3 dias)'] = num(d.retificados_3d);
+    v['Para subir de novo'] = num(d.retificados_3d);
     v['Erros (24 h)'] = num(d.erros_24h);
     v['Disco livre (GB)'] = num(d.disco_livre_gb);
     v['Disco enche em (dias)'] = d.disco_dias === null || d.disco_dias === undefined ? '— (não está enchendo)' : num(d.disco_dias);
