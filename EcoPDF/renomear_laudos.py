@@ -36,6 +36,7 @@ ENTRADA = BASE / "0 - Entrada PDF24"
 PRONTOS = BASE / "1 - Laudos aguardando imagens"
 REVISAR = BASE / "9 - Revisar"
 AO_REVISAR = None  # o EcoPDF preenche: aviso de impressora errada
+AO_PRONTO = None   # o EcoPDF preenche: laudo entregue na pasta 1 (junta na hora)
 LOG = BASE / "log.txt"
 
 MANTER_ACENTOS = False  # False: "JOAO" em vez de "JOAO" com til (mais seguro p/ upload/e-mail)
@@ -295,6 +296,11 @@ def processar(pdf: Path):
     novo = f"{formatar_data(data)}_{formatar_nome(nome)}_{formatar_tipo(titulo)}.pdf"
     alvo = mover(pdf, PRONTOS, novo)
     logging.info("%s -> %s", pdf.name, alvo.name)
+    if AO_PRONTO:
+        try:
+            AO_PRONTO(alvo)
+        except Exception:
+            pass
 
 
 class Handler(FileSystemEventHandler):

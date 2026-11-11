@@ -5,7 +5,7 @@ por exame e junta esse PDF ao laudo.
 Fluxo:
   aparelho (P1 / enviar selecionadas -> DICOM storage) --> este programa
   1. cada imagem recebida e gravada em PASTA_DICOM/<estudo>/<imagem>.dcm
-  2. quando um estudo fica ESPERA_SEGUNDOS sem receber imagem nova, gera um
+  2. quando o aparelho encerra o envio (A-RELEASE; reserva: ESPERA_SEGUNDOS sem imagem nova), gera um
      PDF por tipo de exame (a sonda separa eco de carotidas) em
      PASTA_AGUARDANDO_FOTOS, com nome no padrao dos laudos:
        2026_10_29_Larissa_Braga_Fernandes_Ecocardiograma.pdf
@@ -91,6 +91,7 @@ CAMPOS_TIPO = ("TransducerData", "StudyDescription", "SeriesDescription",
                "ProtocolName", "BodyPartExamined")
 
 GERADO = ".gerado"
+ULTIMA_IMG = ".ultima_imagem"  # tocado a cada imagem (o SR nao reabre a folha)
 GRUPOS = "grupos.json"
 OCULTAS = "ocultas.json"   # {tipo: [ids fora da folha]}
 ORDEM = "ordem.json"       # {tipo: [ids na ordem da folha]} (definida na tela)
@@ -145,6 +146,17 @@ def _modo_abrir(v):
 
 
 TEMPOS_FOLHA = collections.deque(maxlen=300)  # (quando, segundos) para gerar a folha: painel
+# Fim do envio: o aparelho manda o exame inteiro numa conexao DICOM e a encerra (A-RELEASE).
+# A folha fecha FIM_ENVIO_S depois disso; sem esse sinal (conexao caiu), vale ESPERA_SEGUNDOS.
+FIM_ENVIO_S = 3
+FIM_ENVIO = {}      # pasta do estudo -> quando a conexao que trouxe imagens dele foi encerrada
+_CONEXOES = {}      # id da conexao -> {"inicio", "estudos", "imagens", "sr", "outros", "encerrada"}
+_CONEXOES_TRAVA = threading.Lock()
+ACORDAR = threading.Event()  # acorda o vigia na hora (fim do envio, laudo novo) em vez de esperar 10 s
+# PDFs que o proprio EcoPDF acabou de pôr nas pastas 1/2 (gravacao atomica ou ja conferido pelo
+# renomeador): juntam na hora. Arquivo colocado por outro caminho ainda espera 20 s estabilizar.
+_PRONTOS = {}       # caminho -> mtime
+_PRONTOS_TRAVA = threading.Lock()
 TELA = None  # modulo da tela, quando ela esta ligada (para abrir ao receber)
 
 
@@ -203,7 +215,7 @@ def carregar_config(caminho):
         "pasta_imagens": pasta("PASTA_AGUARDANDO_FOTOS"),
         "pasta_laudos": pasta("PASTA_AGUARDANDO_IMAGENS"),
         "pasta_final": pasta("PASTA_FINALIZADOS"),
-        "espera": c.getint("ESPERA_SEGUNDOS", 150),
+        "espera": c.getint("ESPERA_SEGUNDOS", 20),
         "colunas": c.getint("COLUNAS", 2),
         "linhas": c.getint("LINHAS", 3),
         "quadro_loop": c.get("QUADRO_LOOP", "ignorar").strip().lower(),
@@ -460,6 +472,74 @@ def _anotar_conexao(event, tipo):
 BASE_CONEXAO = [None]  # log/conexao.json (definido no main)
 
 
+def _contar_na_conexao(event, estudo, chave):
+    with _CONEXOES_TRAVA:
+        c = _CONEXOES.setdefault(id(event.assoc), {
+            "inicio": time.time(), "estudos": set(), "imagens": 0, "sr": 0, "outros": 0,
+            "encerrada": False})
+        c["estudos"].add(estudo)
+        c[chave] += 1
+
+
+def on_encerrou(event):
+    """A-RELEASE: o aparelho terminou de mandar. Marca o fim do envio dos estudos desta conexao
+    e acorda o vigia depois de FIM_ENVIO_S (a folha fecha sem esperar ESPERA_SEGUNDOS)."""
+    with _CONEXOES_TRAVA:
+        c = _CONEXOES.get(id(event.assoc))
+        if c is None:
+            return  # teste (Echo), lista de pacientes ou conexao sem imagem
+        c["encerrada"] = True
+        agora = time.time()
+        for estudo in c["estudos"]:
+            FIM_ENVIO[estudo] = agora
+        if len(FIM_ENVIO) > 500:  # so os recentes importam
+            for k, _ in sorted(FIM_ENVIO.items(), key=lambda kv: kv[1])[:250]:
+                FIM_ENVIO.pop(k, None)
+    t = threading.Timer(FIM_ENVIO_S + 0.2, ACORDAR.set)
+    t.daemon = True
+    t.start()
+
+
+def on_fechou(event):
+    """Conexao TCP fechada (depois do A-RELEASE, de um abort ou de queda de rede): registra no log."""
+    with _CONEXOES_TRAVA:
+        c = _CONEXOES.pop(id(event.assoc), None)
+    if c is None:
+        return
+    try:
+        req = event.assoc.requestor
+        quem = f"{str(req.ae_title).strip()} ({req.address})"
+    except Exception:
+        quem = "?"
+    log.info("Envio de %s: %d imagens, %d SR%s, %d exame(s), %.1f s, %s", quem, c["imagens"], c["sr"],
+             f", {c['outros']} outros" if c["outros"] else "", len(c["estudos"]),
+             time.time() - c["inicio"],
+             "encerrado pelo aparelho" if c["encerrada"]
+             else f"conexao caiu sem encerrar (folha fecha em {CFG_ESPERA[0]} s sem nada novo)")
+
+
+CFG_ESPERA = [20]  # ESPERA_SEGUNDOS, para o log
+
+
+def marcar_pronto(arq):
+    """PDF que o EcoPDF gravou (ou o renomeador entregou) completo: junta sem esperar estabilizar."""
+    try:
+        m = Path(arq).stat().st_mtime
+    except OSError:
+        return
+    with _PRONTOS_TRAVA:
+        _PRONTOS[str(arq)] = m
+        if len(_PRONTOS) > 500:
+            for k in list(_PRONTOS)[:250]:
+                _PRONTOS.pop(k, None)
+    ACORDAR.set()
+
+
+def _pronto(arq, mtime):
+    with _PRONTOS_TRAVA:
+        return _PRONTOS.get(str(arq)) == mtime
+
+
 def on_conectou(event, cfg):
     # vira "imagem" (C-STORE), "lista de pacientes" (C-FIND) ou "teste" logo depois;
     # se ficar assim, o aparelho conectou e nao pediu nada que o EcoPDF anote
@@ -517,8 +597,13 @@ def on_store(event, cfg):
         gravar_atomico(pasta / (limpar_arquivo(sop, 64) + ".dcm"),
                        lambda p: p.write_bytes(dados))
         _anotar_conexao(event, "imagem")
+        e_imagem = ds.get("Rows") is not None
+        if e_imagem:
+            (pasta / ULTIMA_IMG).touch()
+        _contar_na_conexao(event, pasta.name, "imagens" if e_imagem else
+                           ("sr" if str(ds.get("Modality", "")) == "SR" else "outros"))
         tipo = None
-        if ds.get("Rows") is not None:   # imagem (o SR das medidas nao muda o exame da tela)
+        if e_imagem:   # imagem (o SR das medidas nao muda o exame da tela)
             try:
                 tipo = tipo_da_imagem(ds, cfg["tipos"], regra_freq(pasta, cfg)) or ""
             except Exception:
@@ -703,6 +788,7 @@ def gerar_pdfs_do_estudo(pasta_estudo, cfg):
                 destino = cfg["pasta_imagens"] / f"{base}_{n}.pdf"
                 n += 1
         gravar_atomico(destino, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
+        marcar_pronto(destino)
         log.info("PDF de imagens: %s (%d imagens, %.1f MB)", destino.name, len(imagens),
                  destino.stat().st_size / 1e6)
         registro.append({"pdf": str(destino), "data": data, "paciente": paciente,
@@ -871,8 +957,9 @@ def _listar(pasta, cfg, agora):
     itens = []
     for arq in pasta.glob("*.pdf"):
         try:
-            if agora - arq.stat().st_mtime < 20:
-                continue  # acabou de ser salvo (ou sincronizado); espera estabilizar
+            mt = arq.stat().st_mtime
+            if agora - mt < 20 and not _pronto(arq, mt):
+                continue  # colocado por fora (copia, sincronizacao): espera estabilizar
         except OSError:
             continue
         if PEDIDO.match(arq.stem) or SEM_IMG.match(arq.stem):
@@ -1370,6 +1457,7 @@ def salvar_folha(pasta, tipo, ordem, fora, cfg):
         if r is None:
             imagens = _numeradas(pasta, g["tipo"], itens)
             gravar_atomico(pdf, lambda p: _desenhar(p, imagens, cfg, dados_do_dicom(ref, cfg)))
+            marcar_pronto(pdf)
             log.info("FOLHA AJUSTADA na tela: %s (%d de %d imagens)", pdf.name, n, len(ids))
             return True, f"Folha salva: {n} imagens."
         final = _substituir_final(r, _laudo_guardado(r, cfg), cfg, "FOLHA AJUSTADA")
@@ -1759,10 +1847,15 @@ def vigiar(cfg, parar):
                 dcms = list(pasta.glob("*.dcm")) if pasta.is_dir() else []
                 if not dcms:
                     continue
-                ultima = max(f.stat().st_mtime for f in dcms)
+                mi = pasta / ULTIMA_IMG
+                # ultima IMAGEM (SR atrasado ou duplicado nao reabre a folha); estudo de antes
+                # desta versao, sem a marca: ultimo DICOM qualquer, como antes
+                ultima = mi.stat().st_mtime if mi.exists() else max(f.stat().st_mtime for f in dcms)
                 m = pasta / GERADO
                 feito = m.stat().st_mtime if m.exists() else 0
-                if ultima > feito and agora - ultima >= cfg["espera"]:
+                fim = FIM_ENVIO.get(pasta.name, 0)
+                enviado = fim >= ultima and agora - fim >= FIM_ENVIO_S  # aparelho encerrou o envio
+                if ultima > feito and (enviado or agora - ultima >= cfg["espera"]):
                     with TRAVA:
                         if (pasta / DESCARTADOS).exists():  # imagem nova: o exame voltou a valer
                             (pasta / DESCARTADOS).unlink()
@@ -1781,7 +1874,8 @@ def vigiar(cfg, parar):
                     ultima_limpeza = agora
         except Exception:
             log.exception("Erro no vigia")
-        parar.wait(10)
+        ACORDAR.wait(10)  # fim de envio, folha pronta ou laudo novo acordam na hora
+        ACORDAR.clear()
 
 
 def limpar_antigos(cfg):
@@ -1848,6 +1942,7 @@ def iniciar_renomeador(cfg):
     mod.PRONTOS = cfg["pasta_laudos"]
     mod.REVISAR = raiz / "9 - Revisar"
     mod.LOG = cfg["pasta_log"] / "renomeador.log"
+    mod.AO_PRONTO = marcar_pronto  # laudo entregue na pasta 1: junta na hora
     mod.AO_REVISAR = lambda nome: avisar_impressora_errada(
         nome, "Não parece um laudo (sem nome do paciente ou data): foi para 9 - Revisar.")
 
@@ -1982,8 +2077,10 @@ def main():
              versao(), cfg["ae_title"], cfg["porta"], cfg["pasta_imagens"],
              cfg["pasta_laudos"], cfg["pasta_final"])
     BASE_CONEXAO[0] = cfg["pasta_log"] / "conexao.json"
+    CFG_ESPERA[0] = cfg["espera"]
     handlers = [(evt.EVT_C_ECHO, on_echo), (evt.EVT_C_STORE, on_store, [cfg]),
-                (evt.EVT_ACCEPTED, on_conectou, [cfg]), (evt.EVT_REJECTED, on_recusou, [cfg])]
+                (evt.EVT_ACCEPTED, on_conectou, [cfg]), (evt.EVT_REJECTED, on_recusou, [cfg]),
+                (evt.EVT_RELEASED, on_encerrou), (evt.EVT_CONN_CLOSE, on_fechou)]
     if cfg["worklist"]:
         try:
             import worklist
