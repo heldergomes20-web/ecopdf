@@ -2,6 +2,12 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.11
+- Exame pronto mais rapido: a folha de fotos fecha 3 s depois de o aparelho terminar de mandar o exame (antes: 1 minuto sem chegar imagem). Todos os aparelhos mandam o exame inteiro no fim e avisam quando terminam; o EcoPDF usa esse aviso. Se a conexao cair no meio, a folha fecha depois de 20 s sem chegar nada (antes 60 s) e e refeita quando o aparelho reenviar.
+- Laudo junta na hora: assim que o PDF24 salva o laudo (ou a folha fica pronta, se o laudo chegou antes), o EcoPDF junta em 1 a 2 s (antes: 20 a 30 s). PDF colocado a mao nas pastas continua esperando 20 s para nao pegar arquivo pela metade.
+- O relatorio de medidas (SR) que chega depois, ou repetido, nao refaz a folha; so imagem nova refaz.
+- Log: uma linha por envio do aparelho (quantas imagens, quantos SR, quanto tempo levou e se terminou normalmente).
+
 2026.11.10.1
 - Painel: os avisos "Tela: erro ... 10053" (navegador fechou a conexao com a tela ao recarregar, fechar a aba ou trocar de exame) deixam de contar como erro. Nao afetavam exame, PDF nem impressao; so escondiam os erros de verdade na nota "Ultimos erros" da planilha.
 - Planilha (precisa colar o script novo): a coluna Versao deixa de virar data (aparecia "versao antiga (Tue Nov 10 2026 ...)" em PC ja atualizado).
