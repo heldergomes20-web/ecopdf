@@ -2,6 +2,15 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.12
+- Impressora tirada do USB e colocada de volta em outra porta: o EcoPDF corrige sozinho. O Windows cria uma porta nova (USB002) e uma copia da impressora ("Copia 1"); a impressora de sempre e a EcoPDF Foto ficavam na porta antiga e nada imprimia. Agora, a cada 5 minutos, ao abrir a janela Imprimir e antes de imprimir, o EcoPDF passa as duas para a porta nova (mesmo modelo, uma porta so). A janela avisa "A impressora tinha mudado de porta USB. O EcoPDF ja corrigiu". Vale tambem para impressao pelo Medware.
+- EcoPDF Foto marcada como impressora padrao: volta sozinha a impressora da sala como padrao.
+- Envios do EcoPDF presos na porta antiga ha mais de 10 minutos sao cancelados na correcao (para nao sairem varias copias de uma vez). Impressoes de outros programas ficam como estao.
+- Janela Imprimir: botao "Impressora com problema?" (sempre) e "Reconfigurar impressora" (junto do aviso). Impressora desligada ou cabo solto: o aviso mostra 3 passos (ligar, conferir o cabo nos dois lados, clicar em Reconfigurar). Outro modelo de impressora: o botao abre o criar_fila_foto.bat, que refaz a EcoPDF Foto e abre a janela para escolher papel fotografico brilhante e qualidade Alta. Duas impressoras iguais ligadas no mesmo PC: o EcoPDF nao escolhe sozinho e avisa.
+- Trocar a porta de uma impressora exige administrador: a instalacao/atualizacao cria a tarefa "EcoPDF Impressora" (sem janela, so roda quando o EcoPDF pede). Sem ela, o botao pede a permissao do Windows (clicar em Sim).
+- Painel: a coluna "Fila EcoPDF Foto" mostra a ultima correcao feita sozinha (data, hora e porta).
+- Desligar: IMPRESSORA_AUTOCORRIGIR = nao no config.ini (so avisa).
+
 2026.11.11
 - Exame pronto mais rapido: a folha de fotos fecha 3 s depois de o aparelho terminar de mandar o exame (antes: 1 minuto sem chegar imagem). Todos os aparelhos mandam o exame inteiro no fim e avisam quando terminam; o EcoPDF usa esse aviso. Se a conexao cair no meio, a folha fecha depois de 20 s sem chegar nada (antes 60 s) e e refeita quando o aparelho reenviar.
 - Laudo junta na hora: assim que o PDF24 salva o laudo (ou a folha fica pronta, se o laudo chegou antes), o EcoPDF junta em 1 a 2 s (antes: 20 a 30 s). PDF colocado a mao nas pastas continua esperando 20 s para nao pegar arquivo pela metade.

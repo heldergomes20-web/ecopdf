@@ -602,10 +602,13 @@ def _texto_fila_foto(cfg, imp):
     try:
         if impressao.existe_impressora(impressao.FILA_FOTO):
             if (imp.get("nome") or "").strip().casefold() == impressao.FILA_FOTO.casefold():
-                return "ERRO: EcoPDF Foto está como impressora padrão: deixe a impressora da sala como padrão"
+                return "ERRO: EcoPDF Foto está como impressora padrão: clicar em Reconfigurar impressora (janela Imprimir)"
             if imp.get("nome") and not impressao.fila_foto_valida(imp["nome"]):
-                return "ERRO: EcoPDF Foto é de outra impressora (trocaram a impressora?): rodar criar_fila_foto.bat"
-            return "sim: fotos pela EcoPDF Foto"
+                return "ERRO: EcoPDF Foto é de outra impressora (trocaram a impressora?): clicar em Reconfigurar impressora (janela Imprimir)"
+            import impressora_reparo
+            u = impressora_reparo.ULTIMA
+            return "sim: fotos pela EcoPDF Foto" + (f" · porta corrigida sozinha {u['quando']} ({u['o_que']})"
+                                                    if u.get("quando") else "")
     except Exception:
         return "?"
     return "não: papel foto escolhido pelo EcoPDF"

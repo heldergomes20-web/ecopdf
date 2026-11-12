@@ -9,6 +9,7 @@ processados/finalizados.json). A folha e sempre refeita pela mesma funcao do Eco
 
 import io
 import json
+import logging
 import re
 import threading
 import time
@@ -242,6 +243,13 @@ def impressora_situacao(cfg):
         if _imp_cache["d"] is not None and time.time() - _imp_cache["em"] < 30:
             return _imp_cache["d"]
     d = {"grave": False, "texto": ""}
+    import impressora_reparo
+    rep = impressora_reparo.reparar(logging.getLogger("ecopdf"), cfg)    # cabo em outra porta USB: corrige antes de avisar
+    if rep.get("texto") and (rep.get("grave") or rep.get("botao")):
+        d = {"grave": rep["grave"], "texto": rep["texto"], "botao": rep["botao"]}
+        with _imp_trava:
+            _imp_cache.update(em=time.time(), d=d)
+        return d
     ok, nome = impressao.disponivel(cfg)
     if ok:
         import painel
@@ -259,13 +267,18 @@ def impressora_situacao(cfg):
         elif sit in ("pouco papel", "pouca tinta/toner"):
             d = {"grave": False, "texto": f"A impressora {nome} avisa: {sit}."}
         elif impressao.existe_impressora(impressao.FILA_FOTO) and not impressao.fila_foto_valida(nome):
-            d = {"grave": False, "texto": "A fila EcoPDF Foto é de outra impressora: as fotos saem pela padrão, "
-                                          "com o papel escolhido pelo EcoPDF. Para corrigir, rode criar_fila_foto.bat."}
+            d = {"grave": False, "botao": True,
+                 "texto": "A fila EcoPDF Foto é de outra impressora: as fotos saem pela padrão, com o papel "
+                          "escolhido pelo EcoPDF. Para corrigir, clique em Reconfigurar impressora."}
+        elif rep.get("corrigido"):
+            d = {"grave": False, "texto": rep["texto"]}
     elif "EcoPDF Foto" in nome:
-        d = {"grave": True, "texto": "A EcoPDF Foto está como impressora padrão: deixe a impressora da sala "
-                                     "como padrão no Windows."}
+        d = {"grave": True, "botao": True, "texto": "A EcoPDF Foto está como impressora padrão: clique em "
+                                                    "Reconfigurar impressora (ela volta para a impressora da sala)."}
     elif nome == "sem impressora padrao":
-        d = {"grave": True, "texto": "Este computador está sem impressora padrão no Windows."}
+        d = {"grave": True, "botao": True, "texto": "Este computador está sem impressora padrão no Windows. Confira "
+                                                    "se a impressora está ligada e com o cabo USB e clique em "
+                                                    "Reconfigurar impressora."}
     with _imp_trava:
         _imp_cache.update(em=time.time(), d=d)
     return d
@@ -722,6 +735,13 @@ def _handler(ep, cfg):
                         return self._enviar(400, {"erro": "paciente invalido"})
                     worklist.excluir(cfg, cod, bool(corpo.get("voltar")))
                     return self._enviar(200, {"ok": True})
+                if u.path == "/api/reparar_impressora":
+                    import impressora_reparo
+                    r = impressora_reparo.reconfigurar(ep.log, cfg)
+                    with _imp_trava:
+                        _imp_cache.update(em=0.0, d=None)
+                    return self._enviar(200, {"grave": r.get("grave", False), "texto": r.get("texto", ""),
+                                              "botao": r.get("botao", False), "estado": r.get("estado", "")})
                 if u.path in ("/api/imprimir_direto", "/api/imprimir"):
                     itens = itens_impressao(corpo, cfg)
                     if u.path == "/api/imprimir":
@@ -733,6 +753,8 @@ def _handler(ep, cfg):
                     fotos, laudo = paginas_lote(itens, ep, cfg)
                     if not fotos and not laudo:
                         return self._enviar(404, {"erro": "nada para imprimir"})
+                    import impressora_reparo
+                    impressora_reparo.reparar(ep.log, cfg)   # porta USB trocada: corrige antes (guardado 20 s)
                     tid = impressao.iniciar(fotos, laudo, cfg, ep.log, rapido=bool(corpo.get("rapido")),
                                             qualidade=str(corpo.get("qualidade") or "normal"))
                     if tid is None:

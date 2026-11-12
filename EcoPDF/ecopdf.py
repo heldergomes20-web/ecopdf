@@ -240,6 +240,7 @@ def carregar_config(caminho):
         "abrir_tela": _modo_abrir(c.get("TELA_ABRIR", "ao_receber")),
         "ocultar_pastas": c.get("OCULTAR_PASTAS", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "impressao_direta": c.get("IMPRESSAO_DIRETA", "sim").strip().lower() not in ("nao", "não", "0", "n"),
+        "impressora_autocorrigir": c.get("IMPRESSORA_AUTOCORRIGIR", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "foto_qualidade": _foto_qualidade(c.get("FOTO_QUALIDADE", "padrao")),
         "worklist": c.get("WORKLIST", "sim").strip().lower() not in ("nao", "não", "0", "n"),
         "medware_servidores_txt": c.get("MEDWARE_SERVIDORES", "127.0.0.1").strip(),
@@ -2083,6 +2084,11 @@ def main():
         log.exception("Painel das salas nao iniciou (o resto continua funcionando)")
 
     threading.Thread(target=vigiar_atualizacao, args=(parar,), daemon=True, name="atualizacao").start()
+    try:
+        import impressora_reparo  # cabo USB em outra porta: reaponta a impressora e a EcoPDF Foto
+        impressora_reparo.iniciar(cfg, log, parar)
+    except Exception:
+        log.exception("Autocorrecao da impressora nao iniciou (o resto continua funcionando)")
     try:
         import medware_rtf  # Ctrl+Alt+L: laudo copiado do site -> formato RTF para colar no Medware
         medware_rtf.iniciar()
