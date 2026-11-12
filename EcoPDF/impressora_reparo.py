@@ -51,6 +51,10 @@ INTERVALO_S = 5 * 60
 CACHE_S = 20
 JOB_PARADO_MIN = 10
 SEM_JANELA = 0x08000000
+# "Deixar o Windows gerenciar a impressora padrao" DESLIGADO: com ele ligado, a padrao vira a ultima
+# usada (a Wi-Fi, a PDF24...). Por usuario (HKCU), nao precisa de administrador.
+LEGADO_PS = ("Set-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows' "
+             "-Name LegacyDefaultPrinterMode -Value 1 -Type DWord")
 
 PS_DIAG = r"""
 $ErrorActionPreference = 'SilentlyContinue'
@@ -66,7 +70,8 @@ $portas = @(Get-ChildItem -LiteralPath $k | ForEach-Object {
     [pscustomobject]@{ porta = ('{0}{1:D3}' -f $base, [int]$dp.'Port Number');
                        viva = [bool]($c -and $c.Linked -eq 1); descricao = [string]$dp.'Port Description' }
   } })
-[pscustomobject]@{ impressoras = $imps; portas = $portas } | ConvertTo-Json -Compress -Depth 4
+$leg = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows').LegacyDefaultPrinterMode
+[pscustomobject]@{ impressoras = $imps; portas = $portas; windows_gerencia = ($leg -ne 1) } | ConvertTo-Json -Compress -Depth 4
 """
 
 _trava = threading.Lock()
@@ -139,11 +144,38 @@ def planejar(diag):
         irmas.sort(key=lambda p: (not _viva(p["porta"], vivas), bool(COPIA.search(p["nome"])), len(p["nome"])))
         if irmas:
             padrao = irmas[0]
-            acoes.append(("padrao", padrao["nome"]))
+            acoes.append(("padrao", padrao["nome"], "foto"))
     if not padrao:
         return {"estado": "sem_impressora", "acoes": acoes, "impressora": "", "modelo": ""}
     if not _real(padrao):
         return {"estado": "virtual", "acoes": acoes, "impressora": padrao["nome"], "modelo": padrao["driver"]}
+
+    # padrao numa fila de REDE (Wi-Fi/WSD/IP) com impressora USB no PC: a USB e a da sala e volta a ser
+    # a padrao (Helder 12/11: "e bem frequente a impressora padrao passar para a impressora wifi").
+    # So se houver UMA porta USB viva (ou que vai ser corrigida); a fila preferida e a original, antes da
+    # "(Copia N)".
+    estado_rede = ""
+    # Referencia da "impressora da sala" = o modelo da EcoPDF Foto numa porta USB (criada na instalacao a
+    # partir dela). Sem EcoPDF Foto USB, nao mexe: a sala pode usar so a Wi-Fi, ou a USB ser outra coisa.
+    if not _usb(padrao["porta"]) and foto and _usb(foto["porta"]):
+        usb = [p for p in imps if _real(p) and _usb(p["porta"]) and p["driver"] == foto["driver"]]
+        def porta_efetiva(p):
+            if _viva(p["porta"], vivas):
+                return p["porta"].upper()
+            alvo = _portas_vivas_do_modelo(p["driver"], imps, diag, vivas)
+            return alvo[0] if len(alvo) == 1 else ""
+        efetivas = {p["nome"]: porta_efetiva(p) for p in usb}
+        portas = {v for v in efetivas.values() if v}
+        if len(portas) == 1:
+            cand = [p for p in usb if efetivas[p["nome"]]]
+            cand.sort(key=lambda p: (bool(COPIA.search(p["nome"])), not _viva(p["porta"], vivas), len(p["nome"])))
+            de_rede = padrao["nome"]
+            padrao = cand[0]
+            acoes.append(("padrao", padrao["nome"], "rede", de_rede))
+        elif usb and not portas:
+            estado_rede = "rede_sem_usb"     # a USB da sala esta desligada: imprimiria em outra impressora
+        elif len(portas) > 1:
+            estado_rede = "duas"
 
     # regra unica: fila do modelo em porta USB morta -> a unica porta USB viva do modelo
     estado = "ok"
@@ -168,20 +200,37 @@ def planejar(diag):
             and _usb(destino_padrao) and not any(a[0] == "porta" and a[1] == foto["nome"] for a in acoes) \
             and _viva(destino_padrao, vivas):
         acoes.append(("porta", foto["nome"], destino_padrao))
+    if estado == "ok" and estado_rede:
+        estado = estado_rede
     if estado == "ok" and foto and foto["driver"] != padrao["driver"]:
         estado = "outro_modelo"
+    if diag.get("windows_gerencia") and _real(padrao):
+        acoes.insert(0, ("legado",))
     if estado == "ok" and acoes:
         estado = "corrigir"
     return {"estado": estado, "acoes": acoes, "impressora": padrao["nome"], "modelo": padrao["driver"]}
 
 
-def texto(estado, impressora="", modelo="", corrigido=False):
+def _desc(a):
+    if a[0] == "porta":
+        return f"{a[1]} -> porta {a[2]}"
+    if a[0] == "padrao":
+        return f"{a[1]} como padrao" + (f" (era {a[3]}, rede)" if len(a) > 3 else "")
+    return "Windows deixa de escolher a padrao sozinho"
+
+
+def texto(estado, impressora="", modelo="", corrigido=False, de=""):
     """Aviso para a janela Imprimir: (grave, texto, mostrar_botao)."""
     if estado == "desligada":
         return True, (f"A impressora {impressora} não está respondendo. 1) Confira se ela está ligada. "
                       "2) Confira o cabo USB nos dois lados (impressora e computador). "
                       "3) Clique em Reconfigurar impressora. Se acabou de ligar o cabo, espere 1 minuto "
                       "antes de clicar (o Windows instala a impressora sozinho)."), True
+    if estado == "rede_sem_usb":
+        return True, (f"A impressora padrão está em {impressora}, pela rede/Wi-Fi, e a impressora ligada neste "
+                      "computador pelo cabo USB não está respondendo. Confira se ela está ligada e com o cabo "
+                      "nos dois lados e clique em Reconfigurar impressora. Se imprimir agora, pode sair em "
+                      "outra impressora."), True
     if estado == "duas":
         return True, (f"Há duas impressoras {modelo} ligadas neste computador e o EcoPDF não sabe qual é a "
                       "da sala. Deixe só a da sala no cabo USB e clique em Reconfigurar impressora."), True
@@ -199,7 +248,10 @@ def texto(estado, impressora="", modelo="", corrigido=False):
     if estado == "sem_impressora":
         return True, ("Este computador está sem impressora padrão. Confira se a impressora está ligada e com o "
                       "cabo USB, espere 1 minuto e clique em Reconfigurar impressora."), True
-    if corrigido == "padrao":
+    if corrigido == "rede":
+        return False, (f"A impressora padrão tinha mudado para {de} (pela rede/Wi-Fi). O EcoPDF voltou para "
+                       f"{impressora}, a impressora ligada neste computador: pode imprimir."), False
+    if corrigido in ("padrao", "foto"):
         return False, ("A EcoPDF Foto estava como impressora padrão. O EcoPDF voltou a impressora da sala como "
                        "padrão: pode imprimir."), False
     if corrigido:
@@ -229,6 +281,9 @@ def _script_acoes(acoes, so_padrao=False):
         if a[0] == "padrao":
             linhas.append(f"try {{ (New-Object -ComObject WScript.Network).SetDefaultPrinter({_q(a[1])}); "
                           f"$r += 'padrao ok' }} catch {{ $r += 'padrao erro: ' + $_ }}")
+        elif a[0] == "legado":
+            linhas.append("try { " + LEGADO_PS + "; $r += 'windows nao escolhe mais a padrao' } "
+                          "catch { $r += 'legado erro: ' + $_ }")
         elif a[0] == "porta" and not so_padrao:
             n, p = _q(a[1]), _q(a[2])
             linhas.append(f"try {{ Set-Printer -Name {n} -PortName {p}; $r += 'porta ok' }} "
@@ -343,12 +398,13 @@ def reparar(log, cfg=None, interativo=False, forcar=False):
             estado = plano["estado"]
             acoes_feitas = list(plano["acoes"])
             if plano["acoes"]:
-                log.info("Impressora: corrigindo %s", "; ".join(
-                    f"{a[1]}: porta {a[2]}" if a[0] == "porta" else f"{a[1]} como padrao" for a in plano["acoes"]))
+                log.info("Impressora: corrigindo %s", "; ".join(_desc(a) for a in plano["acoes"]))
                 corrigido = _executar(plano, log, interativo)
                 if corrigido:
-                    ULTIMA.update(quando=time.strftime("%d/%m %H:%M"), o_que="; ".join(
-                        f"{a[1]} -> {a[2]}" if a[0] == "porta" else f"padrao {a[1]}" for a in plano["acoes"])[:120])
+                    feitas = [a for a in plano["acoes"] if a[0] != "legado"]
+                    if feitas:
+                        ULTIMA.update(quando=time.strftime("%d/%m %H:%M"),
+                                      o_que="; ".join(_desc(a) for a in feitas)[:120])
                 novo = planejar(diagnosticar())
                 estado = novo["estado"]
                 if not corrigido or any(a[0] == "porta" for a in novo["acoes"]):
@@ -356,8 +412,15 @@ def reparar(log, cfg=None, interativo=False, forcar=False):
                 plano = novo
             if estado == "corrigir":
                 estado = "ok"
-            tipo = ("porta" if any(a[0] == "porta" for a in acoes_feitas) else "padrao") if corrigido else ""
-            grave, txt, botao = texto(estado, plano["impressora"], plano["modelo"], tipo)
+            tipo, de = "", ""
+            if corrigido:
+                if any(a[0] == "porta" for a in acoes_feitas):
+                    tipo = "porta"
+                else:
+                    pad = next((a for a in acoes_feitas if a[0] == "padrao"), None)
+                    if pad:
+                        tipo, de = (pad[2] if len(pad) > 2 else "foto"), (pad[3] if len(pad) > 3 else "")
+            grave, txt, botao = texto(estado, plano["impressora"], plano["modelo"], tipo, de)
             r = {"estado": estado, "corrigido": corrigido, "grave": grave, "texto": txt, "botao": botao,
                  "impressora": plano["impressora"]}
         except Exception:
