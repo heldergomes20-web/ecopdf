@@ -105,6 +105,15 @@ if not defined ECOPDF_AUTO (
     "Register-ScheduledTask -TaskName 'EcoPDF Atualizar ao ligar' -Action $a -Trigger (New-ScheduledTaskTrigger -AtLogOn -User '%USERDOMAIN%\%USERNAME%') -Principal $p -Settings $s -Force | Out-Null"
 )
 
+rem Tarefa "EcoPDF Impressora" (2026.11.12): o EcoPDF roda sem administrador; quando o cabo USB
+rem volta em outra porta, ele pede esta tarefa (elevada, sem janela) para passar a impressora da sala
+rem e a EcoPDF Foto para a porta nova. Recriada a cada instalacao/atualizacao (sem gatilho: so sob pedido).
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$p = New-ScheduledTaskPrincipal -UserId '%USERDOMAIN%\%USERNAME%' -LogonType Interactive -RunLevel Highest;" ^
+  "$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 2) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew;" ^
+  "$a = New-ScheduledTaskAction -Execute '%~dp0venv\Scripts\pythonw.exe' -Argument 'impressora_reparo.py aplicar' -WorkingDirectory '%~dp0';" ^
+  "Register-ScheduledTask -TaskName 'EcoPDF Impressora' -Action $a -Principal $p -Settings $s -Force | Out-Null"
+
 set TELA_PORTA=8765
 for /f "tokens=1,2 delims== " %%a in ('findstr /b /c:"TELA_PORTA" config.ini') do set TELA_PORTA=%%b
 echo Criando o icone "EcoPDF" na Area de Trabalho e no menu Iniciar...
