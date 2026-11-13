@@ -161,7 +161,7 @@ def nomes_do_exame(do_aparelho, r, ep):
     if not laudo:
         return do_aparelho, ""
     a, b = ep.normalizar(do_aparelho), ep.normalizar(laudo)
-    if a == b or a.startswith(b + " "):
+    if a == b or a.startswith(b + " ") or ep.nome_cortado(a, b):
         return do_aparelho, ""
     return laudo, do_aparelho
 
