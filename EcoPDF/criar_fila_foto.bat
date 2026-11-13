@@ -12,7 +12,9 @@ rem (nao PDF24/XPS/OneNote/Fax) e nao para no fim.
 set "MODO=%~1"
 
 rem 0 = ja existe e e a mesma impressora da padrao; 2 = existe mas e de outra impressora; 1 = nao existe
-powershell -NoProfile -Command "$f = Get-Printer -Name 'EcoPDF Foto' -ErrorAction SilentlyContinue; if (-not $f) { exit 1 }; $p = Get-CimInstance Win32_Printer -Filter 'Default=True'; if ($p -and $p.Name -ne 'EcoPDF Foto' -and $p.Name -notmatch 'pdf|xps|onenote|fax|send to|enviar para' -and ($f.DriverName -ne $p.DriverName -or $f.PortName -ne $p.PortName)) { exit 2 }; exit 0"
+rem Mesmo modelo em outra porta (cabo USB trocado, ou padrao na fila Wi-Fi da mesma impressora) NAO refaz:
+rem o EcoPDF corrige a porta e a padrao sozinho; refazer aqui levaria a EcoPDF Foto para o Wi-Fi (13/11).
+powershell -NoProfile -Command "$f = Get-Printer -Name 'EcoPDF Foto' -ErrorAction SilentlyContinue; if (-not $f) { exit 1 }; $p = Get-CimInstance Win32_Printer -Filter 'Default=True'; if ($p -and $p.Name -ne 'EcoPDF Foto' -and $p.Name -notmatch 'pdf|xps|onenote|fax|send to|enviar para' -and $f.DriverName -ne $p.DriverName) { exit 2 }; exit 0"
 if errorlevel 2 goto refazer
 if not errorlevel 1 if /i "%MODO%"=="instalacao" exit /b 0
 if not errorlevel 1 goto preferencias
