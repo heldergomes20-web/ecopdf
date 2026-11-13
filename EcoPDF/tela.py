@@ -236,6 +236,24 @@ _imp_cache = {"em": 0.0, "d": None}
 _imp_trava = threading.Lock()
 
 
+def _depois_do_botao(r, cfg):
+    """Resultado do botao Reconfigurar coerente com o aviso que a janela Imprimir mostra: se o botao
+    "conferiu" mas a consulta da impressora ainda acusa problema (ex.: offline), mostra o problema; se o
+    problema continua igual, diz que conferiu de novo agora (13/11: o aviso parecia nao reagir ao clique)."""
+    hora = time.strftime("%H:%M")
+    if r.get("estado") == "ok" and not r.get("grave") and str(r.get("texto", "")).startswith("Impressora conferida"):
+        try:
+            s = impressora_situacao(cfg)
+        except Exception:
+            s = {}
+        if s.get("texto") and (s.get("grave") or s.get("botao")):
+            return {**s, "estado": "continua", "texto": f"Conferi agora ({hora}) e o problema continua:\n{s['texto']}"}
+        return r
+    if r.get("grave") or (r.get("botao") and r.get("estado") not in ("ok", "sem_fila_foto")):
+        return {**r, "texto": f"Conferi agora ({hora}) e o problema continua:\n{r.get('texto', '')}"}
+    return r
+
+
 def impressora_situacao(cfg):
     """Aviso para o quadro Imprimir: {"grave": bool, "texto": str}; texto "" = tudo certo.
     Mesma consulta do painel (impressora padrao do Windows), guardada por 30 s."""
@@ -256,8 +274,11 @@ def impressora_situacao(cfg):
         i = painel._impressora_padrao()
         sit, fila, minutos = i.get("situacao", ""), i.get("fila", 0), i.get("fila_min", 0)
         if sit == "offline":
-            d = {"grave": True, "texto": f"A impressora {nome} está offline: confira se está ligada e com o "
-                                         "cabo USB conectado ao computador."}
+            d = {"grave": True, "botao": True,
+                 "texto": f"A impressora {nome} está offline.\n"
+                          "1. Confira se ela está ligada (luz acesa no botão de ligar).\n"
+                          "2. Confira o cabo USB nos dois lados (impressora e computador).\n"
+                          "3. Clique em Reconfigurar impressora. Se o Windows pedir permissão, clique em Sim."}
         elif i.get("grave") and sit != "pronta" and sit:
             d = {"grave": True, "texto": f"A impressora {nome} está com problema ({sit}): resolva na impressora "
                                          "antes de imprimir."}
@@ -744,6 +765,7 @@ def _handler(ep, cfg):
                     r = impressora_reparo.reconfigurar(ep.log, cfg)
                     with _imp_trava:
                         _imp_cache.update(em=0.0, d=None)
+                    r = _depois_do_botao(r, cfg)
                     return self._enviar(200, {"grave": r.get("grave", False), "texto": r.get("texto", ""),
                                               "botao": r.get("botao", False), "estado": r.get("estado", "")})
                 if u.path in ("/api/imprimir_direto", "/api/imprimir"):

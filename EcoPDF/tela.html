@@ -329,7 +329,7 @@ function mostrarAvisoImp(a, d) {
   a.style.display = d.texto ? "block" : "none";
   const b = a.querySelector("#i-reconf");
   if (b) b.onclick = async () => {
-    b.disabled = true; b.textContent = "Conferindo a impressora...";
+    b.disabled = true; b.textContent = "Conferindo a impressora (pode levar até 1 minuto)...";
     try {
       const r = await (await fetch("/api/reparar_impressora", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"})).json();
       mostrarAvisoImp(a, r.texto ? r : {texto: "Impressora conferida: pode imprimir."});
