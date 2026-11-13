@@ -40,6 +40,12 @@ MEMORIA_MAX_MB = 600            # EcoPDF usando mais que isso = algo acumulando 
 SEM_MEDIDAS_DIAS = 3            # ultimos N dias com eco sem NENHUM relatorio de medidas = aparelho parou de mandar
                                 # (por exame nao serve: quem mede com caliper livre nao gera relatorio)
 FOLHA_MAX_S = 60                # folha de imagens demorando mais que isso = PC lento ou exame enorme
+IMPRESSORA_PERSISTE_MIN = 30   # impressora offline/com erro ha mais que isso, no expediente = aviso (13/11: desligada a noite nao)
+REINICIO_DIAS = 3               # Windows esperando reiniciar ha mais que isso = aviso (antes disso ele reinicia sozinho)
+REVISAR_HORAS = 24              # item em 9 - Revisar ha mais que isso = aviso (recem-chegado nao)
+PENDENTE_MAX_DIAS = 7           # pendencia mais velha que isso nao alarma (vira so numero): 13/11, Helder
+EXPEDIENTE = {0: (8, 18), 1: (8, 18), 2: (8, 18), 3: (8, 18), 4: (8, 18), 5: (8, 12)}  # seg=0 ... sab=5 (igual a planilha)
+MARCAS = "painel_marcas.json"   # em log/: desde quando cada situacao persiste
 ATUALIZACAO_PRONTA_DIAS = 2      # versao baixada e nao instalada ha mais que isso = tarefas da atualizacao com problema
 DISCO_DIAS_ATENCAO, DISCO_DIAS_PROBLEMA = 30, 7  # disco acaba em menos que isso no ritmo atual
 # motivo do laudo sem par (texto da tela) -> categoria curta que vai para a planilha
@@ -304,7 +310,7 @@ if (-not $p) { '{}'; exit }
 $j = @(Get-CimInstance Win32_PrintJob | Where-Object { $_.Name.StartsWith($p.Name + ',') })
 $min = 0
 if ($j.Count) { $min = [int]((Get-Date) - ($j | Sort-Object TimeSubmitted | Select-Object -First 1).TimeSubmitted).TotalMinutes }
-[pscustomobject]@{ nome = $p.Name; driver = $p.DriverName; offline = [bool]$p.WorkOffline;
+[pscustomobject]@{ nome = $p.Name; driver = $p.DriverName; porta = $p.PortName; offline = [bool]$p.WorkOffline;
   status = [int]$p.PrinterStatus; erro = [int]$p.DetectedErrorState; fila = $j.Count; fila_min = $min } |
   ConvertTo-Json -Compress
 """
@@ -336,7 +342,23 @@ def _impressora_padrao():
     if fila and fila_min > FILA_PARADA_MIN:
         grave = True
     return {"nome": str(i.get("nome") or "")[:60], "driver": str(i.get("driver") or "")[:60],
-            "situacao": sit, "grave": grave, "fila": fila, "fila_min": fila_min}
+            "porta": tipo_porta(str(i.get("porta") or "")),
+            "situacao": sit, "grave": grave, "fila": fila, "fila_min": fila_min,
+            "fila_parada": bool(fila and fila_min > FILA_PARADA_MIN)}
+
+
+def tipo_porta(porta):
+    """USB | rede | virtual | '' (nao sei), pelo nome da porta do Windows."""
+    p = porta.strip().upper()
+    if not p:
+        return ""
+    if p.startswith(("USB", "DOT4")):
+        return "USB"
+    if p.startswith(("WSD", "IP_", "EP", "HTTP", "\\\\")) or re.match(r"^\d+\.\d+\.\d+\.\d+", p):
+        return "rede"
+    if p.startswith(("PORTPROMPT", "NUL", "FILE", "PDF", "XPS", "ONENOTE", "SHRFAX")) or "PDF" in p:
+        return "virtual"
+    return ""
 
 
 def _texto_impressora(i):
@@ -344,7 +366,7 @@ def _texto_impressora(i):
         return ""
     if not i.get("nome"):
         return i.get("situacao", "")
-    t = f"{i['nome']} ({i.get('driver', '')}) · {i['situacao']}"
+    t = f"{i['nome']} ({i.get('driver', '')})" + (f" · {i['porta']}" if i.get("porta") else "") + f" · {i['situacao']}"
     if i.get("fila"):
         t += f" · fila {i['fila']} (mais antigo {i.get('fila_min', 0)} min)"
     return t[:160]
@@ -463,6 +485,30 @@ def _porta_aberta(porta):
         return False
 
 
+def no_expediente(agora=None):
+    agora = agora or datetime.now()
+    j = EXPEDIENTE.get(agora.weekday())
+    return bool(j) and j[0] <= agora.hour < j[1]
+
+
+def _marcas(cfg, ativas):
+    """{situacao: minutos desde que comecou}. ativas = {situacao: bool}. Guarda em log/ o inicio de cada
+    uma; a que sumiu e esquecida (volta a contar do zero se aparecer de novo)."""
+    arq = cfg["pasta_log"] / MARCAS
+    try:
+        m = json.loads(arq.read_text("utf-8"))
+    except (OSError, ValueError):
+        m = {}
+    agora = time.time()
+    novo = {k: float(m.get(k) or agora) for k, v in ativas.items() if v}
+    try:
+        if novo != m:
+            arq.write_text(json.dumps(novo), "utf-8")
+    except OSError:
+        pass
+    return {k: int((agora - t) / 60) for k, t in novo.items()}
+
+
 def coletar(cfg, ep, manual=False):
     """Resumo da situacao. So numeros, horarios e versao. manual = enviar_status.bat
     (fora do EcoPDF: confere se o EcoPDF esta ouvindo a porta em vez de ver a thread)."""
@@ -480,7 +526,9 @@ def coletar(cfg, ep, manual=False):
     img = [s for s in _idades([p for p in _pdfs(cfg["pasta_imagens"])], agora) if s > lim]
     lau = [s for s in _idades(_pdfs(cfg["pasta_laudos"]), agora) if s > lim]
     p0 = [s for s in _idades(_pdfs(raiz / "0 - Entrada PDF24"), agora) if s > PASTA0_PARADO_MIN * 60]
-    revisar = len(_pdfs(raiz / "9 - Revisar"))
+    rev = _idades(_pdfs(raiz / "9 - Revisar"), agora)
+    revisar = len(rev)
+    dia, maxp = ESQUECIDO_HORAS * 3600, PENDENTE_MAX_DIAS * 86400
     try:
         disco = round(shutil.disk_usage(cfg["pasta_dicom"]).free / 1e9, 1)
     except OSError:
@@ -512,6 +560,11 @@ def coletar(cfg, ep, manual=False):
         "laudos_sem_imagens_mais_antigo_min": _min(max(lau)) if lau else 0,
         "pasta0_parados": len(p0),
         "revisar": revisar,
+        "revisar_antigos": sum(1 for s in rev if s > REVISAR_HORAS * 3600),
+        "imagens_sem_laudo_1a7d": sum(1 for s in img if dia < s <= maxp),
+        "laudos_sem_imagens_1a7d": sum(1 for s in lau if dia < s <= maxp),
+        "imagens_sem_laudo_7d_mais": sum(1 for s in img if s > maxp),
+        "laudos_sem_imagens_7d_mais": sum(1 for s in lau if s > maxp),
         "retificados_3d": retificados,
         "erros_24h": _erros_24h(cfg),
         "erros_recentes": _erros_recentes(cfg),
@@ -526,6 +579,10 @@ def coletar(cfg, ep, manual=False):
     # campos novos de versoes futuras: {rotulo da coluna: valor}. A planilha cria a coluna
     # sozinha, sem trocar o script. (Os avisos continuam vindo de avaliar(), daqui.)
     d["rede"] = _rede()
+    imp = d["impressora_info"]
+    d["persiste_min"] = {} if manual else _marcas(cfg, {
+        "impressora": bool(imp.get("grave")) and bool(imp.get("nome")),
+        "reinicio": bool(d["rede"].get("reinicio"))})
     d["impressora"] = _texto_impressora(d["impressora_info"])
     d["impressora_modelo"] = d["impressora_info"].get("driver", "")
     d["extras"] = {"Botão Imprimir usado (7 dias)": _usos_imprimir(cfg, agora),
@@ -533,9 +590,17 @@ def coletar(cfg, ep, manual=False):
                    "Medidas (relatório do aparelho)": _texto_medidas(d),
                    "Fila EcoPDF Foto": _texto_fila_foto(cfg, d["impressora_info"]),
                    "Lista de pacientes (worklist)": _texto_worklist(cfg, d, ep),
-                   "Atualização automática": _texto_atualizacao()}
+                   "Atualização automática": _texto_atualizacao(),
+                   "Pendências com mais de 7 dias (sem alarme)": _texto_antigos(d)}
     d["nivel"], d["problemas"] = avaliar(d)
     return d
+
+
+def _texto_antigos(d):
+    i, l = d.get("imagens_sem_laudo_7d_mais", 0), d.get("laudos_sem_imagens_7d_mais", 0)
+    if not (i or l):
+        return "nenhuma"
+    return f"imagens sem laudo: {i} · laudos sem imagens: {l}"
 
 
 def _texto_atualizacao():
@@ -611,7 +676,14 @@ def _texto_fila_foto(cfg, imp):
                                                     if u.get("quando") else "")
     except Exception:
         return "?"
-    return "não: papel foto escolhido pelo EcoPDF"
+    try:
+        nome = imp.get("nome") or ""
+        if nome and imp.get("porta") != "virtual" and impressao.modo_foto(nome)[0] is not None:
+            return ("ERRO: falta a EcoPDF Foto (as fotos saem com a configuração de papel comum): "
+                    "rodar C:\\EcoPDF\\criar_fila_foto.bat com a impressora da sala como padrão")
+    except Exception:
+        pass
+    return "não: impressora sem papel fotográfico (um envio só)"
 
 
 def avaliar(d):
@@ -646,8 +718,9 @@ def avaliar(d):
         amar.append("regra do firewall da porta DICOM sumiu: rodar instalar.bat de novo")
     if rede.get("dorme_min"):
         amar.append(f"PC configurado para dormir após {rede['dorme_min']} min na tomada: rodar instalar.bat de novo")
-    if rede.get("reinicio"):
-        amar.append("Windows esperando reiniciar (atualização): reiniciar fora do horário de exames")
+    pm = d.get("persiste_min") or {}
+    if rede.get("reinicio") and pm.get("reinicio", 0) > REINICIO_DIAS * 1440:
+        amar.append(f"Windows esperando reiniciar há mais de {REINICIO_DIAS} dias: reiniciar fora do horário de exames")
     imp = d.get("impressora_info") or {}
     if "pdf24" in str(imp.get("nome", "")).lower():
         amar.append("impressora padrão do Windows é a PDF24: o que se imprime sem escolher não sai em papel")
@@ -661,7 +734,9 @@ def avaliar(d):
     aviso = _aviso_atualizacao(str(d.get("extras", {}).get("Atualização automática", "")))
     if aviso:
         amar.append(aviso)
-    if imp.get("grave"):
+    if imp.get("grave") and (not imp.get("nome") or imp.get("fila_parada") or
+                             (no_expediente() and pm.get("impressora", 0) >= IMPRESSORA_PERSISTE_MIN)):
+        # desligada ou sem cabo por pouco tempo / fora do expediente nao alarma; fila parada sim
         amar.append(f"impressora: {_texto_impressora(imp)}")
     elif imp.get("situacao") in ("pouco papel", "pouca tinta/toner"):
         amar.append(f"impressora com {imp['situacao']}")
@@ -671,17 +746,17 @@ def avaliar(d):
     n = (d.get("motivos_laudo_sem_par") or {}).get("data do aparelho", 0)
     if n:
         amar.append(f"{n} laudo(s) com imagens do paciente em outra data: conferir data e hora do aparelho")
-    if d["revisar"]:
-        amar.append(f"{d['revisar']} em 9 - Revisar")
+    if d.get("revisar_antigos", d["revisar"]):
+        amar.append(f"{d['revisar']} em 9 - Revisar (algum há mais de {REVISAR_HORAS} h)")
     if d["retificados_3d"]:
         amar.append(f"{d['retificados_3d']} retificado(s) para subir de novo")
     if d["erros_24h"] >= ERROS_MIN:
         amar.append(f"{d['erros_24h']} erro(s) no registro em 24 h")
-    esquecido = ESQUECIDO_HORAS * 60
-    if d["imagens_sem_laudo_mais_antiga_min"] > esquecido:
-        amar.append("imagens sem laudo há mais de 1 dia")
-    if d["laudos_sem_imagens_mais_antigo_min"] > esquecido:
-        amar.append("laudo sem imagens há mais de 1 dia" + _motivo_principal(d))
+    # so 1 a 7 dias: mais antigo que isso ja foi visto e vira so numero (coluna das pendencias antigas)
+    if d.get("imagens_sem_laudo_1a7d"):
+        amar.append(f"{d['imagens_sem_laudo_1a7d']} exame(s) com imagens sem laudo há 1 a {PENDENTE_MAX_DIAS} dias")
+    if d.get("laudos_sem_imagens_1a7d"):
+        amar.append(f"{d['laudos_sem_imagens_1a7d']} laudo(s) sem imagens há 1 a {PENDENTE_MAX_DIAS} dias" + _motivo_principal(d))
     if d.get("liberados_sem_imagens_7d", 0) > LIBERADOS_MAX:
         amar.append(f"{d['liberados_sem_imagens_7d']} laudos liberados sem imagens em 7 dias: "
                     "conferir se o aparelho está enviando (Store, rede, AE)")

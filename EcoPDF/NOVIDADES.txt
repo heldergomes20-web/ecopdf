@@ -2,6 +2,13 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.12.1
+- Falta a EcoPDF Foto (fotos saindo com a configuracao de papel comum) e a impressora da sala tem papel fotografico: a janela Imprimir mostra um passo a passo (1. janela preta: apertar uma tecla e clicar em Sim se o Windows pedir; 2. Tipo de papel = papel fotografico brilhante "Glossy", Qualidade = Alta; 3. OK) com o botao Reconfigurar impressora, que abre o criar_fila_foto.bat. Feito uma vez so por computador.
+- criar_fila_foto.bat: a janela explica em passos numerados o que escolher (aba Principal, Tipo de papel brilhante, Qualidade Alta, OK) e termina com "PRONTO. Volte ao EcoPDF e clique em Imprimir de novo".
+- Painel (menos alarme sem necessidade): impressora offline/com erro so vira alarme no expediente e depois de 30 min seguidos (ou fila parada); reinicio pendente do Windows so depois de 3 dias; "9 - Revisar" so com item de mais de 24 h; imagens sem laudo e laudos sem imagens so contam de 1 a 7 dias, os mais antigos vao para a coluna nova "Pendencias com mais de 7 dias (sem alarme)".
+- Painel: a coluna Impressora mostra o tipo de porta (USB, rede ou virtual). A coluna Fila EcoPDF Foto acusa ERRO quando falta a EcoPDF Foto numa impressora com papel fotografico.
+- Planilha (precisa colar o script novo e reimplantar): "versao antiga" so 24 h depois de a versao ser publicada; e-mail so para PROBLEMA e SEM SINAL, com uma linha listando as salas em ATENCAO; ATENCAO sozinha so no e-mail da tarde.
+
 2026.11.12
 - Impressora tirada do USB e colocada de volta em outra porta: o EcoPDF corrige sozinho. O Windows cria uma porta nova (USB002) e uma copia da impressora ("Copia 1"); a impressora de sempre e a EcoPDF Foto ficavam na porta antiga e nada imprimia. Agora, a cada 5 minutos, ao abrir a janela Imprimir e antes de imprimir, o EcoPDF passa as duas para a porta nova (mesmo modelo, uma porta so). A janela avisa "A impressora tinha mudado de porta USB. O EcoPDF ja corrigiu". Vale tambem para impressao pelo Medware.
 - EcoPDF Foto marcada como impressora padrao: volta sozinha a impressora da sala como padrao.

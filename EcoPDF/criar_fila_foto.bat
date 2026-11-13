@@ -54,16 +54,29 @@ echo  Criada.
 
 :preferencias
 echo.
-echo  Vai abrir as PREFERENCIAS da "EcoPDF Foto". Escolha:
-echo     Tipo de papel:  Papel fotografico brilhante  ^(o papel que se usa nas fotos^)
-echo     Qualidade:      Alta
-echo  e clique OK. So isso: a impressora padrao continua como esta ^(papel comum^).
-echo  Impressora laser ou preto e branco: so clique OK.
+echo  ============================================================
+echo   ULTIMO PASSO: escolher o papel fotografico (uma vez so)
+echo  ============================================================
+echo.
+echo  Quando voce apertar uma tecla, abre a janela "Preferencias de impressao"
+echo  da impressora "EcoPDF Foto". Nela:
+echo.
+echo   1. Na aba "Principal" (ou "Papel/Qualidade"), procure "Tipo de papel".
+echo   2. Em "Tipo de papel", escolha o papel fotografico BRILHANTE
+echo      (Glossy). Na Epson: "Epson Premium Glossy" ou "Premium Photo Paper Glossy".
+echo      NAO escolha "Papel normal" nem "Matte" (fosco).
+echo   3. Em "Qualidade", escolha "Alta".
+echo   4. Clique em "OK" (embaixo, a direita).
+echo.
+echo  A impressora padrao continua como esta (papel comum, para o laudo).
+echo  Impressora laser ou preto e branco: so clique em "OK".
+echo  Se a janela nao aparecer na frente, clique nela na barra de tarefas (embaixo).
 echo.
 pause
 rundll32 printui.dll,PrintUIEntry /e /n "EcoPDF Foto"
 echo.
-echo  Pronto. Na proxima impressao pelo EcoPDF as fotos saem pela "EcoPDF Foto".
+echo  PRONTO. Volte ao EcoPDF e clique em "Imprimir" de novo:
+echo  as fotos saem no papel fotografico e o laudo no papel comum.
 echo  Para desfazer: apague a impressora "EcoPDF Foto" em Configuracoes ^> Impressoras.
 echo.
 if /i not "%MODO%"=="instalacao" pause

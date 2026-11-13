@@ -465,6 +465,10 @@ def reparar(log, cfg=None, interativo=False, forcar=False):
             grave, txt, botao = texto(estado, plano["impressora"], plano["modelo"], tipo, de)
             r = {"estado": estado, "corrigido": corrigido, "grave": grave, "texto": txt, "botao": botao,
                  "impressora": plano["impressora"]}
+            if estado == "ok" and not corrigido and (cfg is None or cfg.get("impressao_direta", True)):
+                falta = _falta_fila_foto()
+                if falta:
+                    r = {**r, "estado": "sem_fila_foto", "botao": True, "impressora": falta, "texto": TEXTO_SEM_FOTO}
         except Exception:
             log.exception("Impressora: autocorrecao falhou")
             r = vazio
@@ -522,7 +526,7 @@ def reconfigurar(log, cfg=None):
                 "texto": ("Há impressões paradas na fila e o EcoPDF não conseguiu destravar sozinho. Clique de novo "
                           "em Reconfigurar impressora e, se o Windows pedir permissão, clique em Sim.")}
     r = reparar(log, cfg, interativo=True, forcar=True)
-    if r["estado"] == "outro_modelo" or (r["estado"] == "ok" and not _existe_fila_foto()):
+    if r["estado"] in ("outro_modelo", "sem_fila_foto") or (r["estado"] == "ok" and not _existe_fila_foto()):
         bat = BASE / "criar_fila_foto.bat"
         try:
             os.startfile(str(bat))
@@ -530,10 +534,35 @@ def reconfigurar(log, cfg=None):
             return {**r, "texto": f"Não consegui abrir o criar_fila_foto.bat ({e})."}
         return {**r, "grave": False, "botao": False,
                 "texto": "Abriu uma janela preta: siga o que ela pede (o Windows pede permissão: clique em Sim). "
-                         "Na janela da impressora, escolha papel fotográfico brilhante e qualidade Alta e clique OK."}
+                         "Na janela da impressora, em Tipo de papel escolha o papel fotográfico brilhante (Glossy) "
+                         "e em Qualidade escolha Alta. Clique OK e depois em Imprimir de novo."}
     if r["estado"] == "ok":
         return {**r, "texto": "Impressora conferida: está tudo certo, pode imprimir."}
     return r
+
+
+TEXTO_SEM_FOTO = (
+    "As fotos estão saindo sem a configuração de papel fotográfico (falta preparar a impressora uma vez). "
+    "Coloque o papel fotográfico e clique em Reconfigurar impressora:\n"
+    "1. Abre uma janela preta: aperte uma tecla quando ela pedir. Se o Windows pedir permissão, clique em Sim.\n"
+    "2. Na janela da impressora que abrir, em Tipo de papel escolha o papel fotográfico brilhante "
+    "(Glossy, ex.: Epson Premium Glossy / Premium Photo Paper Glossy) e em Qualidade escolha Alta.\n"
+    "3. Clique OK. É uma vez só: depois as fotos saem sempre em papel foto.")
+
+
+def _falta_fila_foto():
+    """Nome da impressora padrao se ela e de papel (com papel fotografico no driver) e nao existe a
+    EcoPDF Foto; '' se nao falta (ou nao deu para saber: nunca avisa a toa)."""
+    try:
+        if _existe_fila_foto():
+            return ""
+        import impressao
+        nome = impressao.impressora_padrao()
+        if not nome or impressao.VIRTUAIS.search(nome) or nome.casefold() == FILA_FOTO.casefold():
+            return ""
+        return nome if impressao.modo_foto(nome)[0] is not None else ""
+    except Exception:
+        return ""
 
 
 def _existe_fila_foto():
