@@ -309,7 +309,7 @@ def impressora_situacao(cfg):
     return d
 
 
-LAUDO_ESPERA_MIN = 3  # laudo recem-impresso costuma juntar em segundos: so mostra depois disso
+LAUDO_ESPERA_MIN = 3  # laudo recem-impresso: ate aqui aparece como "procurando as imagens" (13/11: Helder quer ver na hora)
 
 
 def _outra_data(data, nome, tipo, fotos, ep, cfg):
@@ -335,10 +335,14 @@ def laudos_sem_imagens(ep, cfg):
             idade = agora - arq.stat().st_mtime
         except OSError:
             continue
-        if idade < LAUDO_ESPERA_MIN * 60 or ep.SEM_IMG.match(arq.stem) or ep.PEDIDO.match(arq.stem):
+        if ep.SEM_IMG.match(arq.stem) or ep.PEDIDO.match(arq.stem):
             continue
         info = ep.ler_nome(arq, cfg["tipos"])
-        if info:
+        recente = idade < LAUDO_ESPERA_MIN * 60
+        if info and recente:
+            data, nome, tipo = info
+            motivo = "acabou de chegar: procurando as imagens deste paciente"
+        elif info:
             data, nome, tipo = info
             motivo = None
             for l in laudos:
@@ -361,8 +365,17 @@ def laudos_sem_imagens(ep, cfg):
         out.append({"laudo": arq.name, "paciente": nome.upper(), "data": data,
                     "tipo_nome": (tipo or "Exame").replace("_", " "),
                     "minutos": int(idade // 60), "motivo": motivo or "aguardando a juncao",
-                    "liberavel": bool(info)})
+                    "liberavel": bool(info), "recente": bool(info) and recente})
     return out
+
+
+def _sinal_laudos(cfg):
+    """Assinatura leve da pasta 1 (quantos PDFs e o mais novo): a pagina recarrega a lista quando muda."""
+    try:
+        ts = [a.stat().st_mtime for a in cfg["pasta_laudos"].glob("*.pdf")]
+    except OSError:
+        return ""
+    return f"{len(ts)}-{int(max(ts)) if ts else 0}"
 
 
 def _tem_descartado(data, nome, tipo, ep, cfg):
@@ -842,7 +855,7 @@ def sinal(estudo, ep, cfg):
     """Consulta leve da pagina (a cada 4 s com um exame aberto): ultimo exame que chegou e
     se a pasta do exame aberto mudou (imagem nova, medidas, folha). Le so datas de arquivo."""
     agora = time.time()
-    r = {"ultimo": None, "ass": "", "ultima_ha": None}
+    r = {"ultimo": None, "ass": "", "ultima_ha": None, "laudos": _sinal_laudos(cfg), "versao": ep.versao()}
     u = _estado["ultimo"]
     if u:
         r["ultimo"] = {"estudo": u["estudo"], "tipo": u["tipo"], "ha": int(agora - u["em"]),

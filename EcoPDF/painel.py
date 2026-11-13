@@ -171,6 +171,8 @@ def _sinais(cfg, ep, reg, agora):
     try:
         import tela
         for l in tela.laudos_sem_imagens(ep, cfg):
+            if l.get("recente"):   # recem-chegado (tela mostra na hora): ainda nao e problema
+                continue
             m = next((c for k, c in MOTIVOS if k in l["motivo"]), "outro")
             motivos[m] = motivos.get(m, 0) + 1
     except Exception:
