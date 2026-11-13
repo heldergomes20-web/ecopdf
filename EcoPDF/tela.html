@@ -113,7 +113,10 @@ tr.sem-img{cursor:default;background:#fff8f8}
 .mini .novo{position:absolute;right:3px;bottom:3px;background:#1f9d50;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:0 4px}
 .dica{display:none;align-items:center;gap:12px;background:#fff6dd;border:1px solid #f0d58a;color:#5c4300;border-radius:8px;padding:9px 12px;margin:0 0 12px;line-height:1.45}
 .dica span{flex:1}
-.i-alerta{display:none;border-radius:8px;padding:9px 12px;margin-top:12px;line-height:1.45;background:#eef2f7;color:#374151}
+.i-alerta{display:none;border-radius:8px;padding:9px 12px;margin-top:12px;line-height:1.45;background:#eef2f7;color:#374151;white-space:pre-line}
+.i-alerta.feito{background:#e5f4e4;color:#1f5130}
+.link-imp{background:none;border:none;padding:4px 0;margin-right:auto;color:#5b6876;font-size:13px;text-decoration:underline;cursor:pointer;white-space:nowrap}
+.link-imp:hover{color:#17212b}
 .i-alerta.grave{background:#fde2e2;color:#8a1f1f;border:1px solid #f3b4b4}
 .novo-aviso{display:none;align-items:center;gap:10px;background:#e3edff;border:1px solid #9db8ef;color:#1f3f8a;border-radius:8px;padding:8px 12px;margin:10px 22px 0;flex-wrap:wrap}
 .painel .grupos{columns:2 250px;column-gap:24px}
@@ -254,7 +257,7 @@ tr.sem-img{cursor:default;background:#fff8f8}
   <div class="i-alerta" id="i-alerta"></div>
   <div class="papel" id="i-papel"></div>
   <div class="quieto pq" id="i-rapido-c" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 2px">Qualidade das fotos<div class="seg" id="i-qual" role="radiogroup" aria-label="Qualidade das fotos"><button type="button" role="radio" data-q="rapida" title="Mais rápida: a impressora trata o papel foto como papel comum. Cor mais fraca.">Baixa</button><button type="button" role="radio" data-q="alta" title="Papel fotográfico pela EcoPDF Foto: mais lenta, melhor acabamento.">Alta</button></div><span id="i-qual-txt"></span></div>
-  <div class="acoes"><button class="btn" id="i-reconf2" title="Impressora tirada do USB, trocada ou que não imprime: o EcoPDF confere e corrige" style="margin-right:auto">Impressora com problema?</button><button class="btn" id="i-nao">Cancelar</button><button class="btn pri" id="i-sim">Imprimir</button></div>
+  <div class="acoes"><button type="button" class="link-imp" id="i-reconf2" title="Impressora tirada do USB, trocada ou que não imprime: o EcoPDF confere e corrige">Impressora com problema?</button><button class="btn" id="i-nao">Cancelar</button><button class="btn pri" id="i-sim">Imprimir</button></div>
 </div></div>
 <iframe id="i-quadro" title="Impressão" style="position:fixed;width:1px;height:1px;left:-10px;top:-10px;border:0"></iframe>
 
@@ -322,7 +325,7 @@ async function avisoImpressora(alvo) {
 // padrao ou abre o criar_fila_foto.bat (outro modelo de impressora); o EcoPDF ja tenta sozinho antes
 function mostrarAvisoImp(a, d) {
   a.innerHTML = esc(d.texto || "") + (d.botao ? ` <div style="margin-top:8px"><button type="button" class="btn" id="i-reconf">Reconfigurar impressora</button></div>` : "");
-  a.className = "i-alerta" + (d.grave ? " grave" : "");
+  a.className = "i-alerta" + (d.grave ? " grave" : /corrigiu|voltou|está tudo certo/.test(d.texto || "") ? " feito" : "");
   a.style.display = d.texto ? "block" : "none";
   const b = a.querySelector("#i-reconf");
   if (b) b.onclick = async () => {
