@@ -325,7 +325,7 @@ async function avisoImpressora(alvo) {
 // padrao ou abre o criar_fila_foto.bat (outro modelo de impressora); o EcoPDF ja tenta sozinho antes
 function mostrarAvisoImp(a, d) {
   a.innerHTML = esc(d.texto || "") + (d.botao ? ` <div style="margin-top:8px"><button type="button" class="btn" id="i-reconf">Reconfigurar impressora</button></div>` : "");
-  a.className = "i-alerta" + (d.grave ? " grave" : /corrigiu|voltou|está tudo certo/.test(d.texto || "") ? " feito" : "");
+  a.className = "i-alerta" + (d.grave ? " grave" : /corrigiu|voltou|está tudo certo|Cancelei|ligou de novo/.test(d.texto || "") ? " feito" : "");
   a.style.display = d.texto ? "block" : "none";
   const b = a.querySelector("#i-reconf");
   if (b) b.onclick = async () => {
