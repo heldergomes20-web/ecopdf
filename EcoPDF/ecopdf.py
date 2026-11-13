@@ -985,10 +985,25 @@ def _listar(pasta, cfg, agora):
     return itens
 
 
+NOME_CORTADO_MIN = 30   # o Medware corta nome comprido no laudo (vistos 35-36 letras, 12/11/2026)
+
+
+def nome_cortado(a, b):
+    """Um nome e o comeco exato do outro, com pelo menos NOME_CORTADO_MIN letras: laudo do
+    Medware cortado ('... PESSOA COR', '... LIMA D') x nome inteiro das imagens (worklist).
+    So comeco exato (sem acento/pontuacao): nome curto nao entra, para nao juntar parentes."""
+    x, y = sorted((normalizar(a), normalizar(b)), key=len)
+    return len(x) >= NOME_CORTADO_MIN and y.startswith(x)
+
+
 def _mesmo_paciente(a, b, cfg):
     """Primeiro nome igual e TODAS as palavras do nome mais curto presentes no longo.
     Aceita 'Larissa Fernandes' (Vivid) x 'Larissa Braga Fernandes' (laudo),
-    erro de digitacao ('Lustos' x 'Lustosa') e iniciais ('Maria F G Luckwu')."""
+    erro de digitacao ('Lustos' x 'Lustosa') e iniciais ('Maria F G Luckwu').
+    Laudo com o nome cortado pelo Medware (comeco exato de nome comprido) tambem vale."""
+    if nome_cortado(a, b):
+        return True
+
     def cheio(t):
         return [x for x in t if len(x) > 1]
     curto, longo = sorted((tokens(a), tokens(b)), key=lambda t: (len(cheio(t)), len(t)))

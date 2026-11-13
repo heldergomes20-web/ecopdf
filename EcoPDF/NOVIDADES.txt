@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.13.2
+- Nome comprido cortado no laudo: o Medware corta o nome do paciente no laudo (por exemplo "... PESSOA COR" ou "... LIMA D") e o laudo ficava como "Laudo sem imagens" mesmo com o paciente puxado certo pela worklist. Agora, se o nome do laudo for o comeco exato do nome das imagens (com pelo menos 30 letras), mesma data e mesmo tipo, junta normalmente, e a folha de imagens e a lista mostram o nome inteiro. Laudos que ja estao parados assim juntam sozinhos depois da atualizacao. Se houver dois exames do mesmo tipo que casem no dia, continua sem juntar (vai para o motivo, como hoje).
+
 2026.11.13.1
 - Laudo impresso pela PDF24 aparece na lista da tela na hora (antes so depois de 3 minutos), com o selo amarelo "Procurando imagens". Se as imagens estao na pasta, ele junta em segundos e vira exame pronto; se nao chegarem em 3 minutos, vira "Laudo sem imagens" (vermelho) com o motivo, como antes.
 - "Liberar sem imagens" ja aparece desde o comeco (continua recusando quando ha imagens do exame na pasta 2).

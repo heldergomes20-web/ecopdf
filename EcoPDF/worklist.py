@@ -411,7 +411,7 @@ def _nomes_do_dia(cfg, dia):
 
 def _mesmo_nome(laudo, medware):
     """Nome do laudo (vem do Medware) = nome da agenda; o laudo pode vir cortado."""
-    return bool(laudo) and (laudo == medware or medware.startswith(laudo + " "))
+    return bool(laudo) and (laudo == medware or medware.startswith(laudo + " ") or _ep().nome_cortado(laudo, medware))
 
 
 def atendidos(lista, cfg, dia):
