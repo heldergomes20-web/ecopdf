@@ -2,6 +2,13 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.13
+- Impressora "offline" que nao voltava com o botao Reconfigurar impressora: o Windows as vezes deixa a impressora marcada como offline mesmo ligada e com o cabo USB (e nada imprime). Agora, quando a impressora esta respondendo no USB, o EcoPDF tira essa marca sozinho (a cada 5 minutos, ao abrir a janela Imprimir e no botao) e avisa "estava marcada como offline no Windows, mas esta ligada. O EcoPDF ja corrigiu".
+- Aviso de impressora offline: agora em 3 passos (ligada, cabo USB, Reconfigurar impressora) e com o botao.
+- Botao Reconfigurar impressora: se o problema continua (ex.: impressora desligada de verdade), o aviso passa a dizer "Conferi agora (hora) e o problema continua", para ficar claro que o botao foi usado. Antes, o mesmo texto voltava igual e parecia que nada tinha acontecido; e o botao podia dizer "esta tudo certo" enquanto o aviso de offline continuava.
+- Enquanto confere, o botao mostra "Conferindo a impressora (pode levar ate 1 minuto)...".
+- Aviso de permissao do Windows em passos (clicar em Reconfigurar, clicar em Sim, esperar a mensagem verde).
+
 2026.11.12.1
 - Falta a EcoPDF Foto (fotos saindo com a configuracao de papel comum) e a impressora da sala tem papel fotografico: a janela Imprimir mostra um passo a passo (1. janela preta: apertar uma tecla e clicar em Sim se o Windows pedir; 2. Tipo de papel = papel fotografico brilhante "Glossy", Qualidade = Alta; 3. OK) com o botao Reconfigurar impressora, que abre o criar_fila_foto.bat. Feito uma vez so por computador.
 - criar_fila_foto.bat: a janela explica em passos numerados o que escolher (aba Principal, Tipo de papel brilhante, Qualidade Alta, OK) e termina com "PRONTO. Volte ao EcoPDF e clique em Imprimir de novo".

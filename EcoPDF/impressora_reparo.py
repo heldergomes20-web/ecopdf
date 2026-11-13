@@ -51,7 +51,7 @@ INTERVALO_S = 5 * 60
 CACHE_S = 20
 JOB_PARADO_MIN = 10
 SEM_JANELA = 0x08000000
-ADMIN = ("porta", "spooler", "fila")   # acoes que precisam de administrador
+ADMIN = ("porta", "spooler", "fila", "online")   # acoes que precisam de administrador
 PEDIDO = Path(tempfile.gettempdir()) / "ecopdf_impressora_pedido.json"   # botao pede "fila" para a tarefa
 # "Deixar o Windows gerenciar a impressora padrao" DESLIGADO: com ele ligado, a padrao vira a ultima
 # usada (a Wi-Fi, a PDF24...). Por usuario (HKCU), nao precisa de administrador.
@@ -217,6 +217,16 @@ def planejar(diag):
             and _usb(destino_padrao) and not any(a[0] == "porta" and a[1] == foto["nome"] for a in acoes) \
             and _viva(destino_padrao, vivas):
         acoes.append(("porta", foto["nome"], destino_padrao))
+    # fila marcada "offline" no Windows (WorkOffline) com a impressora respondendo no USB (registro diz que a
+    # porta esta ligada): o Windows nao tira a marca sozinho e nada imprime -> volta para online
+    # (13/11, Helder: "clicando em reconfigurar ... ele nao resolve, o aviso nao some")
+    if estado == "ok":
+        reg = {(r.get("porta") or "").upper() for r in _lista(diag.get("portas")) if r.get("viva")}
+        movidas = {a[1] for a in acoes if a[0] == "porta"}
+        for p in imps:
+            if p.get("offline") and _usb(p["porta"]) and p["porta"].upper() in reg and p["nome"] not in movidas \
+                    and p["driver"] == padrao["driver"] and (_real(p) or p is foto):
+                acoes.append(("online", p["nome"]))
     if estado == "ok" and estado_rede:
         estado = estado_rede
     if estado == "ok" and foto and foto["driver"] != padrao["driver"]:
@@ -237,6 +247,8 @@ def _desc(a):
         return "servico de impressao do Windows iniciado"
     if a[0] == "fila":
         return "impressoes paradas canceladas e servico reiniciado"
+    if a[0] == "online":
+        return f"{a[1]} estava marcada offline no Windows -> online"
     return "Windows deixa de escolher a padrao sozinho"
 
 
@@ -262,8 +274,11 @@ def texto(estado, impressora="", modelo="", corrigido=False, de=""):
                        "saírem em papel fotográfico, clique em Reconfigurar impressora e siga a janela que "
                        "abrir."), True
     if estado == "sem_permissao":
-        return False, ("A impressora mudou de porta USB e o EcoPDF não conseguiu corrigir sozinho. "
-                       "Clique em Reconfigurar impressora e, se o Windows pedir permissão, clique em Sim."), True
+        return False, ("O EcoPDF precisa da permissão do Windows para corrigir a impressora.\n"
+                       "1. Clique em Reconfigurar impressora.\n"
+                       "2. Se aparecer a pergunta do Windows \"Deseja permitir que este aplicativo faça alterações\", "
+                       "clique em Sim.\n"
+                       "3. Espere a mensagem verde \"pode imprimir\" (até 1 minuto)."), True
     if estado == "virtual":
         return False, (f"A impressora padrão do Windows é a {impressora}, que não é de papel: o EcoPDF abre a "
                        "janela do navegador para imprimir. Para imprimir direto, deixe a impressora da sala como "
@@ -274,6 +289,9 @@ def texto(estado, impressora="", modelo="", corrigido=False, de=""):
     if corrigido == "virtual":
         return False, (f"A impressora padrão estava na {de}, que não imprime em papel. O EcoPDF voltou para "
                        f"{impressora}, a impressora ligada neste computador: pode imprimir."), False
+    if corrigido == "online":
+        return False, (f"A impressora {impressora} estava marcada como offline no Windows, mas está ligada. "
+                       "O EcoPDF já corrigiu: pode imprimir."), False
     if corrigido == "spooler":
         return False, ("O serviço de impressão do Windows estava parado. O EcoPDF ligou de novo: pode imprimir."), False
     if corrigido == "rede":
@@ -321,6 +339,10 @@ def _script_acoes(acoes, so_padrao=False):
                           "catch { $r += 'cancelar erro: ' + $_ }")
             linhas.append("try { Restart-Service Spooler -Force; $r += 'servico de impressao reiniciado' } "
                           "catch { $r += 'reiniciar erro: ' + $_ }")
+        elif a[0] == "online":
+            linhas.append(f"try {{ Get-CimInstance Win32_Printer | Where-Object {{ $_.Name -eq {_q(a[1])} }} | "
+                          "Set-CimInstance -Property @{ WorkOffline = $false }; $r += 'online ok' } "
+                          "catch { $r += 'online erro: ' + $_ }")
         elif a[0] == "legado":
             linhas.append("try { " + LEGADO_PS + "; $r += 'windows nao escolhe mais a padrao' } "
                           "catch { $r += 'legado erro: ' + $_ }")
@@ -456,6 +478,8 @@ def reparar(log, cfg=None, interativo=False, forcar=False):
             if corrigido:
                 if any(a[0] == "spooler" for a in acoes_feitas):
                     tipo = "spooler"
+                elif any(a[0] == "online" for a in acoes_feitas) and not any(a[0] == "porta" for a in acoes_feitas):
+                    tipo = "online"
                 elif any(a[0] == "porta" for a in acoes_feitas):
                     tipo = "porta"
                 else:
