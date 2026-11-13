@@ -69,13 +69,18 @@ $imps = @(Get-CimInstance Win32_Printer | ForEach-Object {
   [pscustomobject]@{ nome = [string]$_.Name; driver = [string]$_.DriverName; porta = [string]$_.PortName;
                      padrao = [bool]$_.Default; offline = [bool]($_.WorkOffline -or $_.PrinterStatus -eq 7) } })
 $k = 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceClasses\{28d78fad-5a12-11d1-ae5b-0000f803a8c2}'
+# dispositivos conectados agora (Win32_PnPEntity so lista os presentes; nao precisa de administrador).
+# O "Linked" do registro vem vazio para usuario comum (13/11, sala 6): presenca do aparelho decide.
+$pres = @{}
+Get-CimInstance Win32_PnPEntity | ForEach-Object { if ($_.DeviceID) { $pres[$_.DeviceID.ToUpper()] = 1 } }
 $portas = @(Get-ChildItem -LiteralPath $k | ForEach-Object {
+  $inst = [string](Get-ItemProperty -LiteralPath $_.PSPath).DeviceInstance
   $dp = Get-ItemProperty -LiteralPath ($_.PSPath + '\#\Device Parameters')
   if ($dp -and $dp.'Port Number' -ne $null) {
     $base = if ($dp.'Base Name') { [string]$dp.'Base Name' } else { 'USB' }
     $c = Get-ItemProperty -LiteralPath ($_.PSPath + '\#\Control')
     [pscustomobject]@{ porta = ('{0}{1:D3}' -f $base, [int]$dp.'Port Number');
-                       viva = $(if ($c -and $c.Linked -ne $null) { [bool]($c.Linked -eq 1) } else { $null }); descricao = [string]$dp.'Port Description' }
+                       viva = $(if ($c -and $c.Linked -ne $null) { [bool]($c.Linked -eq 1) } elseif ($inst) { $pres.ContainsKey($inst.ToUpper()) } else { $null }); descricao = [string]$dp.'Port Description' }
   } })
 $leg = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows').LegacyDefaultPrinterMode
 [pscustomobject]@{ impressoras = $imps; portas = $portas; windows_gerencia = ($leg -ne 1); spooler = $sp; trabalhos = $jobs } | ConvertTo-Json -Compress -Depth 4
