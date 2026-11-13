@@ -51,6 +51,8 @@ INTERVALO_S = 5 * 60
 CACHE_S = 20
 JOB_PARADO_MIN = 10
 SEM_JANELA = 0x08000000
+ADMIN = ("porta", "spooler", "fila")   # acoes que precisam de administrador
+PEDIDO = Path(tempfile.gettempdir()) / "ecopdf_impressora_pedido.json"   # botao pede "fila" para a tarefa
 # "Deixar o Windows gerenciar a impressora padrao" DESLIGADO: com ele ligado, a padrao vira a ultima
 # usada (a Wi-Fi, a PDF24...). Por usuario (HKCU), nao precisa de administrador.
 LEGADO_PS = ("Set-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows' "
@@ -58,6 +60,11 @@ LEGADO_PS = ("Set-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows
 
 PS_DIAG = r"""
 $ErrorActionPreference = 'SilentlyContinue'
+$sp = [string](Get-Service Spooler).Status
+$agora = Get-Date
+$jobs = @(Get-CimInstance Win32_PrintJob | ForEach-Object {
+  [pscustomobject]@{ impressora = [string](($_.Name -split ',')[0]); doc = [string]$_.Document;
+                     min = [int]($agora - $_.TimeSubmitted).TotalMinutes } })
 $imps = @(Get-CimInstance Win32_Printer | ForEach-Object {
   [pscustomobject]@{ nome = [string]$_.Name; driver = [string]$_.DriverName; porta = [string]$_.PortName;
                      padrao = [bool]$_.Default; offline = [bool]$_.WorkOffline } })
@@ -71,7 +78,7 @@ $portas = @(Get-ChildItem -LiteralPath $k | ForEach-Object {
                        viva = [bool]($c -and $c.Linked -eq 1); descricao = [string]$dp.'Port Description' }
   } })
 $leg = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows').LegacyDefaultPrinterMode
-[pscustomobject]@{ impressoras = $imps; portas = $portas; windows_gerencia = ($leg -ne 1) } | ConvertTo-Json -Compress -Depth 4
+[pscustomobject]@{ impressoras = $imps; portas = $portas; windows_gerencia = ($leg -ne 1); spooler = $sp; trabalhos = $jobs } | ConvertTo-Json -Compress -Depth 4
 """
 
 _trava = threading.Lock()
@@ -131,6 +138,9 @@ def planejar(diag):
     """Decide o que fazer. Devolve {"estado", "acoes", "impressora", "modelo"}.
     estado: ok | corrigir | desligada | duas | outro_modelo | sem_impressora | virtual
     acoes: [("padrao", nome)] e [("porta", fila, porta_nova)] (porta exige administrador)."""
+    # servico de impressao do Windows parado: nada imprime e a lista de impressoras vem vazia
+    if diag.get("spooler") and diag["spooler"] != "Running":
+        return {"estado": "corrigir", "acoes": [("spooler",)], "impressora": "", "modelo": ""}
     imps = [dict(p, porta=p.get("porta") or "", driver=p.get("driver") or "")
             for p in _lista(diag.get("impressoras")) if p.get("nome")]
     vivas = portas_vivas(diag)
@@ -147,8 +157,9 @@ def planejar(diag):
             acoes.append(("padrao", padrao["nome"], "foto"))
     if not padrao:
         return {"estado": "sem_impressora", "acoes": acoes, "impressora": "", "modelo": ""}
-    if not _real(padrao):
-        return {"estado": "virtual", "acoes": acoes, "impressora": padrao["nome"], "modelo": padrao["driver"]}
+    # PDF24 (ou outra virtual) como padrao: a USB da sala volta a ser a padrao (Helder 13/11: "pode retirar
+    # o pdf24 como padrao. Ele so e usado pra isso" = o Medware imprime nele escolhendo pelo nome).
+    virtual = not _real(padrao)
 
     # padrao numa fila de REDE (Wi-Fi/WSD/IP) com impressora USB no PC: a USB e a da sala e volta a ser
     # a padrao (Helder 12/11: "e bem frequente a impressora padrao passar para a impressora wifi").
@@ -157,7 +168,7 @@ def planejar(diag):
     estado_rede = ""
     # Referencia da "impressora da sala" = o modelo da EcoPDF Foto numa porta USB (criada na instalacao a
     # partir dela). Sem EcoPDF Foto USB, nao mexe: a sala pode usar so a Wi-Fi, ou a USB ser outra coisa.
-    if not _usb(padrao["porta"]) and foto and _usb(foto["porta"]):
+    if (virtual or not _usb(padrao["porta"])) and foto and _usb(foto["porta"]):
         usb = [p for p in imps if _real(p) and _usb(p["porta"]) and p["driver"] == foto["driver"]]
         def porta_efetiva(p):
             if _viva(p["porta"], vivas):
@@ -171,11 +182,17 @@ def planejar(diag):
             cand.sort(key=lambda p: (bool(COPIA.search(p["nome"])), not _viva(p["porta"], vivas), len(p["nome"])))
             de_rede = padrao["nome"]
             padrao = cand[0]
-            acoes.append(("padrao", padrao["nome"], "rede", de_rede))
-        elif usb and not portas:
+            acoes.append(("padrao", padrao["nome"], "virtual" if virtual else "rede", de_rede))
+            virtual = False
+        elif usb and not portas and virtual:
+            cand = sorted(usb, key=lambda p: (bool(COPIA.search(p["nome"])), len(p["nome"])))
+            return {"estado": "desligada", "acoes": acoes, "impressora": cand[0]["nome"], "modelo": cand[0]["driver"]}
+        elif usb and not portas and not virtual:
             estado_rede = "rede_sem_usb"     # a USB da sala esta desligada: imprimiria em outra impressora
-        elif len(portas) > 1:
+        elif len(portas) > 1 and not virtual:
             estado_rede = "duas"
+    if virtual:
+        return {"estado": "virtual", "acoes": acoes, "impressora": padrao["nome"], "modelo": padrao["driver"]}
 
     # regra unica: fila do modelo em porta USB morta -> a unica porta USB viva do modelo
     estado = "ok"
@@ -215,7 +232,11 @@ def _desc(a):
     if a[0] == "porta":
         return f"{a[1]} -> porta {a[2]}"
     if a[0] == "padrao":
-        return f"{a[1]} como padrao" + (f" (era {a[3]}, rede)" if len(a) > 3 else "")
+        return f"{a[1]} como padrao" + (f" (era {a[3]}, {a[2]})" if len(a) > 3 else "")
+    if a[0] == "spooler":
+        return "servico de impressao do Windows iniciado"
+    if a[0] == "fila":
+        return "impressoes paradas canceladas e servico reiniciado"
     return "Windows deixa de escolher a padrao sozinho"
 
 
@@ -250,6 +271,11 @@ def texto(estado, impressora="", modelo="", corrigido=False, de=""):
     if estado == "sem_impressora":
         return True, ("Este computador está sem impressora padrão. Confira se a impressora está ligada e com o "
                       "cabo USB, espere 1 minuto e clique em Reconfigurar impressora."), True
+    if corrigido == "virtual":
+        return False, (f"A impressora padrão estava na {de}, que não imprime em papel. O EcoPDF voltou para "
+                       f"{impressora}, a impressora ligada neste computador: pode imprimir."), False
+    if corrigido == "spooler":
+        return False, ("O serviço de impressão do Windows estava parado. O EcoPDF ligou de novo: pode imprimir."), False
     if corrigido == "rede":
         return False, (f"A impressora padrão tinha mudado para {de} (pela rede/Wi-Fi). O EcoPDF voltou para "
                        f"{impressora}, a impressora ligada neste computador: pode imprimir."), False
@@ -283,6 +309,18 @@ def _script_acoes(acoes, so_padrao=False):
         if a[0] == "padrao":
             linhas.append(f"try {{ (New-Object -ComObject WScript.Network).SetDefaultPrinter({_q(a[1])}); "
                           f"$r += 'padrao ok' }} catch {{ $r += 'padrao erro: ' + $_ }}")
+        elif a[0] == "spooler":
+            linhas.append("try { Start-Service Spooler; $r += 'servico de impressao iniciado' } "
+                          "catch { $r += 'spooler erro: ' + $_ }")
+        elif a[0] == "fila":
+            # botao: cancela as impressoes paradas ha mais de 10 min (de qualquer programa) e reinicia o
+            # servico de impressao do Windows (destrava fila presa)
+            linhas.append(f"try {{ $n = 0; Get-Printer | ForEach-Object {{ Get-PrintJob -PrinterName $_.Name | "
+                          f"Where-Object {{ $_.SubmittedTime -lt (Get-Date).AddMinutes(-{JOB_PARADO_MIN}) }} | "
+                          "ForEach-Object { Remove-PrintJob -InputObject $_; $n++ } }; $r += \"$n impressoes paradas canceladas\" } "
+                          "catch { $r += 'cancelar erro: ' + $_ }")
+            linhas.append("try { Restart-Service Spooler -Force; $r += 'servico de impressao reiniciado' } "
+                          "catch { $r += 'reiniciar erro: ' + $_ }")
         elif a[0] == "legado":
             linhas.append("try { " + LEGADO_PS + "; $r += 'windows nao escolhe mais a padrao' } "
                           "catch { $r += 'legado erro: ' + $_ }")
@@ -352,7 +390,7 @@ def _pelo_uac(log):
 
 def _executar(plano, log, interativo):
     """Aplica o plano com o caminho de privilegio disponivel. Devolve True se as portas foram trocadas."""
-    portas = [a for a in plano["acoes"] if a[0] == "porta"]
+    portas = [a for a in plano["acoes"] if a[0] in ADMIN]
     if not portas:
         log.info("Impressora: %s", aplicar(plano["acoes"]))
         return True
@@ -409,14 +447,16 @@ def reparar(log, cfg=None, interativo=False, forcar=False):
                                       o_que="; ".join(_desc(a) for a in feitas)[:120])
                 novo = planejar(diagnosticar())
                 estado = novo["estado"]
-                if not corrigido or any(a[0] == "porta" for a in novo["acoes"]):
+                if not corrigido or any(a[0] in ADMIN for a in novo["acoes"]):
                     estado, corrigido = ("sem_permissao" if estado in ("ok", "corrigir") else estado), False
                 plano = novo
             if estado == "corrigir":
                 estado = "ok"
             tipo, de = "", ""
             if corrigido:
-                if any(a[0] == "porta" for a in acoes_feitas):
+                if any(a[0] == "spooler" for a in acoes_feitas):
+                    tipo = "spooler"
+                elif any(a[0] == "porta" for a in acoes_feitas):
                     tipo = "porta"
                 else:
                     pad = next((a for a in acoes_feitas if a[0] == "padrao"), None)
@@ -432,9 +472,55 @@ def reparar(log, cfg=None, interativo=False, forcar=False):
         return r
 
 
+def presos(diag, minutos=JOB_PARADO_MIN):
+    """Impressoes paradas na fila ha mais de N minutos: [(impressora, documento, minutos)]."""
+    return [(j.get("impressora", ""), j.get("doc", ""), int(j.get("min") or 0))
+            for j in _lista(diag.get("trabalhos")) if int(j.get("min") or 0) > minutos]
+
+
+def destravar(log, interativo=True):
+    """Cancela impressoes paradas ha mais de 10 min e reinicia o servico de impressao (administrador)."""
+    plano = {"acoes": [("fila",)], "modelo": ""}
+    if _admin():
+        log.info("Impressora: destravar fila: %s", aplicar(plano["acoes"]))
+        return True
+    try:
+        PEDIDO.write_text(json.dumps({"fila": True, "em": time.time()}), "utf-8")
+    except OSError:
+        pass
+    res = _pela_tarefa(log)
+    if res is None and interativo:
+        res = _pelo_uac(log)
+    try:
+        PEDIDO.unlink()
+    except OSError:
+        pass
+    if res is None:
+        return False
+    log.info("Impressora (administrador): destravar fila: %s", res.get("saida", ""))
+    return "reiniciado" in str(res.get("saida", ""))
+
+
 def reconfigurar(log, cfg=None):
     """Botao "Reconfigurar impressora": corrige com permissao (UAC se preciso); outro modelo ou
     EcoPDF Foto faltando = abre o criar_fila_foto.bat (refaz a fila e abre as preferencias)."""
+    try:
+        parados = presos(diagnosticar())
+    except Exception:
+        parados = []
+    if parados:
+        n = len(parados)
+        log.info("Impressora: botao Reconfigurar com %d impressao(oes) parada(s): %s", n,
+                 "; ".join(f"{a} ({c} min)" for a, _d, c in parados)[:200])
+        if destravar(log):
+            time.sleep(3)
+            r = reparar(log, cfg, interativo=True, forcar=True)
+            extra = f" {r['texto']}" if r.get("texto") and r.get("grave") else ""
+            return {**r, "texto": (f"Cancelei {n} impressão(ões) parada(s) e reiniciei o serviço de impressão do "
+                                   "Windows. Clique em Imprimir de novo." + extra)}
+        return {"estado": "sem_permissao", "grave": True, "botao": True, "corrigido": False, "impressora": "",
+                "texto": ("Há impressões paradas na fila e o EcoPDF não conseguiu destravar sozinho. Clique de novo "
+                          "em Reconfigurar impressora e, se o Windows pedir permissão, clique em Sim.")}
     r = reparar(log, cfg, interativo=True, forcar=True)
     if r["estado"] == "outro_modelo" or (r["estado"] == "ok" and not _existe_fila_foto()):
         bat = BASE / "criar_fila_foto.bat"
@@ -475,6 +561,13 @@ def iniciar(cfg, log, parar):
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "aplicar":
     try:
         p = planejar(diagnosticar())
+        try:
+            pedido = json.loads(PEDIDO.read_text("utf-8")) if PEDIDO.exists() else {}
+            PEDIDO.unlink()
+        except (OSError, ValueError):
+            pedido = {}
+        if pedido.get("fila") and time.time() - float(pedido.get("em", 0)) < 120:
+            p["acoes"].append(("fila",))
         saida = aplicar(p["acoes"]) if p["acoes"] else "nada a fazer"
     except Exception as e:      # noqa: BLE001 - o resultado vai para quem pediu
         saida = f"erro: {e}"

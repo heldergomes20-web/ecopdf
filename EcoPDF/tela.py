@@ -262,8 +262,12 @@ def impressora_situacao(cfg):
             d = {"grave": True, "texto": f"A impressora {nome} está com problema ({sit}): resolva na impressora "
                                          "antes de imprimir."}
         elif fila and minutos > painel.FILA_PARADA_MIN:
-            d = {"grave": True, "texto": f"Há {fila} impressão(ões) parada(s) na fila da {nome} há {minutos} min: "
-                                         "confira se a impressora está ligada e com o cabo USB, ou cancele a fila."}
+            d = {"grave": True, "botao": True,
+                 "texto": f"Há {fila} impressão(ões) parada(s) na fila da {nome} há {minutos} min.\n"
+                          "1. Confira se a impressora está ligada, com papel e com o cabo USB.\n"
+                          "2. Clique em Reconfigurar impressora: o EcoPDF cancela as impressões paradas e reinicia "
+                          "o serviço de impressão do Windows.\n"
+                          "3. Clique em Imprimir de novo."}
         elif sit in ("pouco papel", "pouca tinta/toner"):
             d = {"grave": False, "texto": f"A impressora {nome} avisa: {sit}."}
         elif impressao.existe_impressora(impressao.FILA_FOTO) and not impressao.fila_foto_valida(nome):
