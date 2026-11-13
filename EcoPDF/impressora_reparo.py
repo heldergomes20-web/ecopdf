@@ -67,7 +67,7 @@ $jobs = @(Get-CimInstance Win32_PrintJob | ForEach-Object {
                      min = [int]($agora - $_.TimeSubmitted).TotalMinutes } })
 $imps = @(Get-CimInstance Win32_Printer | ForEach-Object {
   [pscustomobject]@{ nome = [string]$_.Name; driver = [string]$_.DriverName; porta = [string]$_.PortName;
-                     padrao = [bool]$_.Default; offline = [bool]$_.WorkOffline } })
+                     padrao = [bool]$_.Default; offline = [bool]($_.WorkOffline -or $_.PrinterStatus -eq 7) } })
 $k = 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceClasses\{28d78fad-5a12-11d1-ae5b-0000f803a8c2}'
 $portas = @(Get-ChildItem -LiteralPath $k | ForEach-Object {
   $dp = Get-ItemProperty -LiteralPath ($_.PSPath + '\#\Device Parameters')
@@ -75,7 +75,7 @@ $portas = @(Get-ChildItem -LiteralPath $k | ForEach-Object {
     $base = if ($dp.'Base Name') { [string]$dp.'Base Name' } else { 'USB' }
     $c = Get-ItemProperty -LiteralPath ($_.PSPath + '\#\Control')
     [pscustomobject]@{ porta = ('{0}{1:D3}' -f $base, [int]$dp.'Port Number');
-                       viva = [bool]($c -and $c.Linked -eq 1); descricao = [string]$dp.'Port Description' }
+                       viva = $(if ($c -and $c.Linked -ne $null) { [bool]($c.Linked -eq 1) } else { $null }); descricao = [string]$dp.'Port Description' }
   } })
 $leg = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows').LegacyDefaultPrinterMode
 [pscustomobject]@{ impressoras = $imps; portas = $portas; windows_gerencia = ($leg -ne 1); spooler = $sp; trabalhos = $jobs } | ConvertTo-Json -Compress -Depth 4
@@ -107,7 +107,9 @@ def portas_vivas(diag):
     vivas = {}
     for r in _lista(diag.get("portas")):
         nome = (r.get("porta") or "").upper()
-        if nome:
+        # viva None = o Windows nao deixou ler o "Linked" (usuario sem administrador, 13/11 sala 6): nao sei
+        # -> fica para a situacao da fila, abaixo (antes contava como desligada e dava aviso falso)
+        if nome and r.get("viva") is not None:
             vivas[nome] = vivas.get(nome, False) or bool(r.get("viva"))
     for p in _lista(diag.get("impressoras")):
         porta = (p.get("porta") or "").upper()
