@@ -17,6 +17,7 @@ var HORARIOS = [9, 15];                  // horas do e-mail de alerta (~h50)
 var SEM_SINAL_MIN = 60;                  // sem envio ha mais que isso no expediente = SEM SINAL
 var EXPEDIENTE = {1: [8, 18], 2: [8, 18], 3: [8, 18], 4: [8, 18], 5: [8, 18], 6: [8, 12]}; // 0 = domingo: nada
 var RELOGIO_MAX_MIN = 10;                // diferenca maxima PC x Google
+var VERSAO_TOLERANCIA_H = 24;           // versao antiga so alarma depois disso (13/11)
 var REPO = 'heldergomes20-web/ecopdf';   // versao publicada (Latest) no GitHub
 var MAX_LINHAS = 60;
 var MAX_EXTRAS = 30;
@@ -227,7 +228,10 @@ function conferir_() {
       aten.push('impressora de modelo novo (' + mn + '): conferir a qualidade da foto impressa');
     }
     var v = versaoTxt_(r[col('Versão') - 1]);
-    if (publicada && compVersao(v, publicada) < 0) aten.push('versao antiga (' + v + ')');
+    // so depois de 24 h da publicacao: antes disso a atualizacao automatica (6h ou ao ligar) ainda vai instalar
+    if (publicada && compVersao(v, publicada) < 0 && Date.now() - publicadaEm_() > VERSAO_TOLERANCIA_H * 3600000) {
+      aten.push('versao antiga (' + v + ') mais de ' + VERSAO_TOLERANCIA_H + ' h depois de publicada a ' + publicada);
+    }
     prob = prob.filter(String); aten = aten.filter(String);
     var sit = prob.length ? 'PROBLEMA' : aten.length ? 'ATENÇÃO' : 'OK';
     return [sit, prob.concat(aten).join('; ')];
@@ -262,8 +266,10 @@ function versaoPublicada() {
     var r = UrlFetchApp.fetch('https://api.github.com/repos/' + REPO + '/releases/latest',
       {muteHttpExceptions: true, headers: {Accept: 'application/vnd.github+json'}});
     if (r.getResponseCode() === 200) {
-      var tag = String(JSON.parse(r.getContentText()).tag_name || '').replace(/^v/, '');
-      p.setProperties({VERSAO: tag, VERSAO_EM: String(Date.now())});
+      var js = JSON.parse(r.getContentText());
+      var tag = String(js.tag_name || '').replace(/^v/, '');
+      p.setProperties({VERSAO: tag, VERSAO_EM: String(Date.now()),
+                       PUBLICADA_EM: String(Date.parse(js.published_at || '') || 0)});
       return tag;
     }
   } catch (err) {}
@@ -272,6 +278,11 @@ function versaoPublicada() {
 
 /** Versao da celula como texto. Celula antiga gravada sem apostrofo pode ter virado data
  *  (2026.11.10 -> 10/11/2026): volta para AAAA.MM.DD. */
+/** Quando a Latest foi publicada (ms). 0 = nao sei (trata como antiga: alarma como antes). */
+function publicadaEm_() {
+  return Number(PropertiesService.getScriptProperties().getProperty('PUBLICADA_EM') || 0);
+}
+
 function versaoTxt_(x) {
   if (x instanceof Date) return Utilities.formatDate(x, TZ, 'yyyy.MM.dd');
   return String(x || '').replace(/^'/, '');
@@ -288,7 +299,8 @@ function compVersao(a, b) {
 
 // ---------------------------------------------------------------- alerta por e-mail
 
-/** ~9h45 e ~15h45: e-mail so se alguma sala nao estiver OK. */
+/** ~9h45 e ~15h45. E-mail com detalhe so para PROBLEMA e SEM SINAL (13/11, Helder: sem alarme sem
+ *  necessidade). ATENCAO vai numa linha de resumo; sozinha, so no e-mail das 15h45. */
 function alertar() {
   limparHistorico_();
   if (Number(Utilities.formatDate(new Date(), TZ, 'u')) === 7) return; // domingo
@@ -297,14 +309,19 @@ function alertar() {
   var n = sh.getLastRow() - LIN0 + 1;
   if (n <= 0) return;
   var r = sh.getRange(LIN0, 1, n, col('PC')).getDisplayValues().filter(function (x) { return x[1] && x[1] !== 'OK'; });
-  if (!r.length) return;
-  var ordem = {'SEM SINAL': 0, 'PROBLEMA': 1, 'ATENÇÃO': 2};
-  r.sort(function (a, b) { return ordem[a[1]] - ordem[b[1]]; });
-  var texto = r.map(function (x) { return '• ' + x[0] + ' (' + x[col('PC') - 1] + '): ' + x[1] + ' — ' + x[2]; }).join('\n');
-  var graves = r.filter(function (x) { return x[1] !== 'ATENÇÃO'; }).length;
-  MailApp.sendEmail(Session.getEffectiveUser().getEmail(),
-    'EcoPDF: ' + r.length + ' sala(s) para olhar' + (graves ? ' (' + graves + ' com problema)' : ''),
-    texto + '\n\nPainel: ' + ss.getUrl());
+  var graves = r.filter(function (x) { return x[1] === 'SEM SINAL' || x[1] === 'PROBLEMA'; });
+  var aten = r.filter(function (x) { return x[1] === 'ATENÇÃO'; });
+  var tarde = Number(Utilities.formatDate(new Date(), TZ, 'H')) >= 12;
+  if (!graves.length && !(tarde && aten.length)) return;
+  graves.sort(function (a, b) { return (a[1] === 'SEM SINAL' ? 0 : 1) - (b[1] === 'SEM SINAL' ? 0 : 1); });
+  var texto = graves.map(function (x) { return '• ' + x[0] + ' (' + x[col('PC') - 1] + '): ' + x[1] + ' — ' + x[2]; }).join('\n');
+  if (aten.length) {
+    texto += (texto ? '\n\n' : '') + 'Em ATENÇÃO (sem urgência, ver na planilha): ' +
+      aten.map(function (x) { return x[0]; }).join(', ');
+  }
+  var assunto = graves.length ? 'EcoPDF: ' + graves.length + ' sala(s) com problema' :
+    'EcoPDF: ' + aten.length + ' sala(s) em atenção (sem urgência)';
+  MailApp.sendEmail(Session.getEffectiveUser().getEmail(), assunto, texto + '\n\nPainel: ' + ss.getUrl());
 }
 
 // ---------------------------------------------------------------- instalacao
