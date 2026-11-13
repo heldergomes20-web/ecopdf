@@ -2,6 +2,13 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.13.1
+- Laudo impresso pela PDF24 aparece na lista da tela na hora (antes so depois de 3 minutos), com o selo amarelo "Procurando imagens". Se as imagens estao na pasta, ele junta em segundos e vira exame pronto; se nao chegarem em 3 minutos, vira "Laudo sem imagens" (vermelho) com o motivo, como antes.
+- "Liberar sem imagens" ja aparece desde o comeco (continua recusando quando ha imagens do exame na pasta 2).
+- A lista se atualiza assim que chega laudo novo na pasta 1 (antes, a cada 15 segundos).
+- Depois de uma atualizacao do EcoPDF, a tela se recarrega sozinha (13/11 na sala 6 ficou parada ate apertar F5).
+- O painel das salas nao conta como problema o laudo que acabou de chegar.
+
 2026.11.13
 - Impressora "offline" que nao voltava com o botao Reconfigurar impressora: o Windows as vezes deixa a impressora marcada como offline mesmo ligada e com o cabo USB (e nada imprime). Agora, quando a impressora esta respondendo no USB, o EcoPDF tira essa marca sozinho (a cada 5 minutos, ao abrir a janela Imprimir e no botao) e avisa "estava marcada como offline no Windows, mas esta ligada. O EcoPDF ja corrigiu".
 - Aviso de impressora offline: agora em 3 passos (ligada, cabo USB, Reconfigurar impressora) e com o botao.

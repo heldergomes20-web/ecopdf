@@ -380,7 +380,7 @@ function desenharLista() {
   $("linhas").insertAdjacentHTML("afterbegin", laudos.map(l => `<tr class="sem-img">
     <td>${dataBr(l.data)}</td><td class="quieto">—</td><td><b>${esc(l.paciente)}</b></td><td title="${esc(l.tipo_nome)}">${esc(tipoCurto(l.tipo_nome))}</td>
     <td class="quieto">—</td><td class="quieto pq">${esc(l.motivo)} · há ${tempo(l.minutos)}</td>
-    <td><span class="selo s-Alerta">Laudo sem imagens</span></td>
+    <td><span class="selo ${l.recente ? "s-Pendente" : "s-Alerta"}">${l.recente ? "Procurando imagens" : "Laudo sem imagens"}</span></td>
     <td style="text-align:right">${l.liberavel ? `<button class="btn" data-lib="${esc(l.laudo)}">Liberar sem imagens</button>` : ""}</td></tr>`).join(""));
   botaoSelecionados();
   $("vazio").style.display = lista.length + laudos.length ? "none" : "block";
@@ -1059,6 +1059,7 @@ async function recarregarExame() {
   if (zoom === 1) mostrar(atual); else $("g-info").textContent = `Imagem ${atual + 1} de ${ordem.length}`;
   document.querySelectorAll(".mini").forEach(m => m.classList.toggle("atual", Number(m.dataset.k) === atual));
 }
+let versaoVista = "", laudosVistos = null;
 async function sinal() {
   if (document.hidden || sinalOcupado) return;
   sinalOcupado = true;
@@ -1074,6 +1075,11 @@ async function sinal() {
       else if (!ex) aviso(`Novo exame chegou: ${u.paciente || ""} (${tipoCurto(u.tipo_nome)}). Está no topo da lista.`);
       else if (ex && (u.estudo !== ex.estudo || u.tipo !== ex.tipo)) mostrarAvisoNovo(u);
     } else if (avisoNovo && chaveU(avisoNovo) === chaveU(u) && !avisoNovo.paciente && u.paciente) mostrarAvisoNovo(u);
+    // EcoPDF atualizado enquanto a tela estava aberta: recarrega a pagina (13/11: ficou parada ate o F5)
+    if (d.versao && versaoVista && d.versao !== versaoVista && !ex && !document.querySelector(".fundo[style*='flex']")) { location.reload(); return; }
+    if (d.versao && !versaoVista) versaoVista = d.versao;
+    // laudo novo na pasta 1: aparece na lista na hora ("Procurando imagens"), sem esperar os 15 s
+    if (d.laudos !== undefined) { if (laudosVistos !== null && d.laudos !== laudosVistos && !ex) carregarLista(); laudosVistos = d.laudos; }
     if (ex && d.ass) {
       if (!!d.envio_ok !== envioOk) { envioOk = !!d.envio_ok; subtitulo(); }
       if (d.ass !== assVista) await recarregarExame();
