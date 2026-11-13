@@ -222,15 +222,17 @@ def _desc(a):
 def texto(estado, impressora="", modelo="", corrigido=False, de=""):
     """Aviso para a janela Imprimir: (grave, texto, mostrar_botao)."""
     if estado == "desligada":
-        return True, (f"A impressora {impressora} não está respondendo. 1) Confira se ela está ligada. "
-                      "2) Confira o cabo USB nos dois lados (impressora e computador). "
-                      "3) Clique em Reconfigurar impressora. Se acabou de ligar o cabo, espere 1 minuto "
-                      "antes de clicar (o Windows instala a impressora sozinho)."), True
+        return True, (f"A impressora {impressora} não está respondendo.\n"
+                      "1. Confira se ela está ligada.\n"
+                      "2. Confira o cabo USB nos dois lados (impressora e computador).\n"
+                      "3. Clique em Reconfigurar impressora. Se acabou de ligar o cabo, espere 1 minuto antes "
+                      "(o Windows instala a impressora sozinho)."), True
     if estado == "rede_sem_usb":
-        return True, (f"A impressora padrão está em {impressora}, pela rede/Wi-Fi, e a impressora ligada neste "
-                      "computador pelo cabo USB não está respondendo. Confira se ela está ligada e com o cabo "
-                      "nos dois lados e clique em Reconfigurar impressora. Se imprimir agora, pode sair em "
-                      "outra impressora."), True
+        return True, (f"A impressora padrão está em {impressora}, pela rede/Wi-Fi: se imprimir agora, pode sair "
+                      "em outra impressora. A impressora ligada neste computador pelo cabo USB não está respondendo.\n"
+                      "1. Confira se ela está ligada.\n"
+                      "2. Confira o cabo USB nos dois lados (impressora e computador).\n"
+                      "3. Clique em Reconfigurar impressora."), True
     if estado == "duas":
         return True, (f"Há duas impressoras {modelo} ligadas neste computador e o EcoPDF não sabe qual é a "
                       "da sala. Deixe só a da sala no cabo USB e clique em Reconfigurar impressora."), True
