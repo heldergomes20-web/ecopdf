@@ -965,7 +965,33 @@ def ler_nome(arq, tipos):
         t = normalizar(tipo)
         if resto.endswith(" " + t):
             return data, resto[: -len(t) - 1], "" if tipo == "Imagens" else tipo
+    # "_Exame" = o renomeador nao achou o tipo no laudo: nao e parte do nome do paciente
+    if resto.endswith(" " + TIPO_DESCONHECIDO):
+        resto = resto[: -len(TIPO_DESCONHECIDO) - 1]
     return data, resto, ""
+
+
+TIPO_DESCONHECIDO = "exame"   # renomear_laudos.formatar_tipo sem titulo
+_tipo_lido = {}
+
+
+def tipo_pelo_laudo(arq, tipos):
+    """Laudo '..._Exame.pdf' (tipo nao achado ao renomear): rele o PDF com o leitor atual.
+    Devolve o tipo do config ou ''. Guardado por arquivo+data de modificacao."""
+    try:
+        chave = (str(arq), arq.stat().st_mtime)
+    except OSError:
+        return ""
+    if chave not in _tipo_lido:
+        tipo = ""
+        try:
+            import renomear_laudos
+            achado = renomear_laudos.formatar_tipo(renomear_laudos.extrair_campos(arq)[2])
+            tipo = next((t for t in tipos if t.lower() == achado.lower()), "")
+        except Exception:
+            log.exception("Tipo do laudo nao lido: %s", arq.name)
+        _tipo_lido[chave] = tipo
+    return _tipo_lido[chave]
 
 
 def _listar(pasta, cfg, agora):
@@ -980,6 +1006,8 @@ def _listar(pasta, cfg, agora):
         if PEDIDO.match(arq.stem) or SEM_IMG.match(arq.stem):
             continue  # pedido de tirar/voltar imagem: tratado em processar_pedidos
         info = ler_nome(arq, cfg["tipos"])
+        if info and not info[2] and pasta == cfg["pasta_laudos"]:
+            info = (info[0], info[1], tipo_pelo_laudo(arq, cfg["tipos"]))
         if info:
             itens.append((arq, *info))
     return itens
@@ -1038,6 +1066,16 @@ def _casar(laudo, laudos, fotos, cfg):
     if len(irmaos) == 1 and len(do_dia) == 1 and sem_tipo:
         return sem_tipo[0], None  # um laudo e um PDF de imagens no dia: sem ambiguidade
     return None, "tipo do exame nao identificado e mais de um exame/PDF do paciente no dia"
+
+
+def nome_final(laudo):
+    """Nome do PDF final: o do laudo, com '_Exame' trocado pelo tipo achado no conteudo."""
+    arq, tipo = laudo[0], laudo[3]
+    if tipo:
+        m = re.match(r"(.+)_Exame((?:_\d+)?)$", arq.stem, re.I)
+        if m:
+            return f"{m.group(1)}_{tipo}{m.group(2)}{arq.suffix}"
+    return arq.name
 
 
 def _livre(arq):
@@ -1376,7 +1414,7 @@ def juntar_laudos(cfg):
             if not (_livre(arq) and _livre(foto[0])):
                 pendentes.append((arq, "PDF aberto em outro programa: feche para juntar"))
                 continue  # tenta de novo em 10 s
-            final = cfg["pasta_final"] / arq.name
+            final = cfg["pasta_final"] / nome_final(laudo)
             # final primeiro, depois move: se cair no meio, refaz igual na proxima volta
             gravar_atomico(final, lambda p: _mesclar(arq, foto[0], p, cfg))
             destino = cfg["pasta_processados"] / f"{datetime.now():%Y-%m-%d}"

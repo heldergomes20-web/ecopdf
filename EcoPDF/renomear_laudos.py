@@ -125,7 +125,7 @@ def _nome_da_linha(junto):
     for t in m.group(1).split():
         if t == ":":
             continue
-        if t in PARAR_NOME or t.endswith(":") or RE_QUALQUER_DATA.search(t):
+        if t in PARAR_NOME or t.capitalize() in PARAR_NOME or t.endswith(":") or RE_QUALQUER_DATA.search(t):
             break
         partes.append(t)
     return " ".join(partes) or None
@@ -179,14 +179,62 @@ def extrair_campos(pdf_path: Path):
     if RE_FETAL.search(sem_acento(texto_pagina).lower()):
         titulo = "Ecocardiograma Fetal"
 
-    # Laudo de eco sem linha de titulo: identifica pelo conteudo
+    # Laudo de eco sem linha de titulo: identifica pelo conteudo (regra antiga, mantida)
     if titulo is None:
         t = sem_acento(texto_pagina).lower()
         if ("unidimensional" in t or "ecocardiograma" in t or "laudo descritivo" in t
                 or "ecodopplercardiograma" in t):
             titulo = "Ecocardiograma"
 
+    # Ainda sem titulo: rotulo "Exame:" do cabecalho (so se disser o tipo) e depois o corpo
+    # do laudo. Sem isso o arquivo saia "..._Exame.pdf" e nao juntava (Helder 19/11/2026).
+    if titulo is None:
+        rot = _titulo_do_rotulo(juntos)
+        if rot and any(re.search(rx, sem_acento(rot).lower()) for rx, _ in TIPOS_POR_PALAVRA):
+            titulo = rot
+    if titulo is None:
+        titulo = titulo_pelo_conteudo(texto_pagina)
+
     return nome, data, titulo
+
+
+RE_ROTULO_EXAME = re.compile(r"(?:^|\s)Exame\s*:\s*(.+)$", re.I)
+# Palavras do corpo do laudo (sem acento, minusculo)
+RE_CONTEUDO_ECO = re.compile(
+    r"(?:eco|doppler)\w*cardiogra|ecocardiografia|transtoracic|unidimensional|laudo descritivo"
+    r"|ventriculo esquerdo|valva mitral|valva aortica|fracao de ejecao|septo interventricular")
+RE_CONTEUDO_VASC = re.compile(r"carotid|vertebr")
+RE_CONTEUDO_OUTRO = re.compile(r"estresse|stress|esforco|dobutamina|transesofag")
+
+
+def _titulo_do_rotulo(juntos):
+    """'Exame: ECOCARDIOGRAMA TRANSTORACICO  Convenio: ...' -> 'ECOCARDIOGRAMA TRANSTORACICO'."""
+    for junto in juntos:
+        m = RE_ROTULO_EXAME.search(junto)
+        if not m:
+            continue
+        partes = []
+        for t in m.group(1).split():
+            if t == ":" or t.endswith(":") or t in PARAR_NOME or RE_QUALQUER_DATA.search(t):
+                break
+            partes.append(t)
+        if partes:
+            return " ".join(partes)
+    return None
+
+
+def titulo_pelo_conteudo(texto):
+    """Tipo pelo corpo do laudo, quando nao ha titulo. So responde sem ambiguidade:
+    eco sem carotidas -> Ecocardiograma; carotidas sem eco -> carotidas; o resto, None."""
+    t = sem_acento(texto or "").lower()
+    if RE_CONTEUDO_OUTRO.search(t):
+        return None
+    eco, vasc = bool(RE_CONTEUDO_ECO.search(t)), bool(RE_CONTEUDO_VASC.search(t))
+    if eco and not vasc:
+        return "Ecocardiograma"
+    if vasc and not eco:
+        return "Doppler de carotidas e vertebrais"
+    return None
 
 
 # ----------------------------------------------------------------------------
