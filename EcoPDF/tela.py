@@ -363,11 +363,58 @@ def laudos_sem_imagens(ep, cfg):
                     motivo = "nenhuma imagem deste paciente nesta data (nome diferente no aparelho ou exame sem fotos)"
         else:
             data, nome, tipo, motivo = "", arq.stem, "", "nome fora do padrao AAAA_MM_DD_Nome_Tipo"
+        juntar = [] if not info or tipo or recente else [
+            {"foto": f[0].name, "tipo_nome": f[3].replace("_", " ")} for f in _imagens_para_juntar(arq, ep, cfg)]
+        if juntar:
+            motivo = ("o laudo nao diz o tipo do exame (modelo sem titulo): se estas forem as imagens, "
+                      "clique em Juntar com " + " ou ".join(j["tipo_nome"] for j in juntar))
         out.append({"laudo": arq.name, "paciente": nome.upper(), "data": data,
                     "tipo_nome": (tipo or "Exame").replace("_", " "),
                     "minutos": int(idade // 60), "motivo": motivo or "aguardando a juncao",
-                    "liberavel": bool(info), "recente": bool(info) and recente})
+                    "liberavel": bool(info), "recente": bool(info) and recente, "juntar": juntar})
     return out
+
+
+def _imagens_para_juntar(arq, ep, cfg):
+    """Laudo sem tipo (modelo sem titulo, '_Exame'): PDFs de imagens do mesmo paciente e dia que
+    o botao 'Juntar com estas imagens' pode usar. So os que juntam sem ambiguidade: com tipo, um
+    so PDF desse tipo no dia e nenhum outro laudo desse tipo do paciente na pasta 1."""
+    info = ep.ler_nome(arq, cfg["tipos"])
+    if not info or info[2]:
+        return []
+    data, nome, _ = info
+    agora = time.time() + 60
+    fotos = [f for f in ep._listar(cfg["pasta_imagens"], cfg, agora)
+             if f[1] == data and f[3] and ep._mesmo_paciente(f[2], nome, cfg)]
+    laudos = [l for l in ep._listar(cfg["pasta_laudos"], cfg, agora)
+              if l[0] != arq and l[1] == data and ep._mesmo_paciente(l[2], nome, cfg)]
+    return [f for f in fotos
+            if sum(1 for g in fotos if g[3] == f[3]) == 1 and not any(l[3] == f[3] for l in laudos)]
+
+
+def juntar_com_imagens(nome, foto, ep, cfg):
+    """Botao 'Juntar com estas imagens' (Helder 19/11/2026): o laudo sem tipo ganha o tipo do
+    PDF de imagens escolhido no nome ('..._Exame.pdf' -> '..._Ecocardiograma.pdf') e o vigia
+    junta na proxima volta, pelo caminho normal. (ok, mensagem)."""
+    arq = cfg["pasta_laudos"] / Path(nome).name
+    if Path(nome).name != nome or arq.suffix.lower() != ".pdf" or not arq.is_file():
+        return False, "Laudo nao encontrado na pasta 1 (talvez ja tenha juntado)."
+    escolhida = next((f for f in _imagens_para_juntar(arq, ep, cfg) if f[0].name == foto), None)
+    if escolhida is None:
+        return False, "Essas imagens nao servem mais para este laudo (ja juntaram ou mudaram): atualize a lista."
+    m = re.match(r"(.+?)(?:_Exame)?((?:_\d+)?)$", arq.stem, re.I)
+    novo = arq.with_name(f"{m.group(1)}_{escolhida[3]}{m.group(2)}.pdf")
+    n = 2
+    while novo.exists():
+        novo = arq.with_name(f"{m.group(1)}_{escolhida[3]}_{n}.pdf")
+        n += 1
+    with ep.TRAVA:
+        try:
+            arq.rename(novo)
+        except OSError:
+            return False, "Laudo aberto em outro programa: feche e tente de novo."
+    ep.log.info("Tela: laudo sem tipo juntado com %s: %s -> %s", foto, arq.name, novo.name)
+    return True, f"Juntando com as imagens de {escolhida[3].replace('_', ' ')}: aparece pronto em alguns segundos."
 
 
 def _sinal_laudos(cfg):
@@ -801,6 +848,9 @@ def _handler(ep, cfg):
                         return self._enviar(200, {"navegador": True})
                     _anotar_impressao(cfg)
                     return self._enviar(200, {"id": tid})
+                if u.path == "/api/juntar":
+                    ok, msg = juntar_com_imagens(str(corpo.get("laudo", "")), str(corpo.get("foto", "")), ep, cfg)
+                    return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
                 if u.path == "/api/liberar":
                     ok, msg = liberar_sem_imagens(str(corpo.get("laudo", "")), ep, cfg)
                     return self._enviar(200, {"ok": ok, "mensagem" if ok else "erro": msg})
