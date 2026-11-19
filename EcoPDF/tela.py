@@ -347,6 +347,7 @@ def laudos_sem_imagens(ep, cfg):
             motivo = None
             for l in laudos:
                 if l[0] == arq:
+                    tipo = l[3] or tipo  # '_Exame' com o tipo achado no conteudo do laudo
                     foto, motivo = ep._casar(l, laudos, fotos, cfg)
                     if foto is not None:
                         motivo = ("as imagens foram achadas, mas um dos PDFs esta aberto em outro "

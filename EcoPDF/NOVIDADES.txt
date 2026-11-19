@@ -2,6 +2,9 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.19
+- Laudo com "EXAME" no fim do nome: quando o EcoPDF nao achava o tipo no laudo (sem a linha abaixo de "Solicitado por" e sem a palavra "ecocardiograma"), o arquivo era nomeado "..._Exame.pdf"; a lista mostrava "NOME DO PACIENTE EXAME", tipo "Exame", e o laudo nao juntava com as imagens (que tinham tipo). Agora: (1) "Exame" no fim do arquivo nao entra no nome do paciente; (2) o tipo tambem e procurado no rotulo "Exame:" do cabecalho e no corpo do laudo (ventriculo esquerdo, valva mitral, fracao de ejecao = eco; carotidas/vertebrais = Doppler de carotidas; os dois juntos ou estresse/transesofagico = continua sem tipo); (3) laudo ja parado como "_Exame" e relido sozinho depois da atualizacao e junta, e o PDF final sai com o tipo no nome. Laudo sem tipo identificavel continua sem juntar sozinho (para nao juntar com o exame errado): use "Liberar sem imagens" ou reimprima.
+
 2026.11.13.2
 - Nome comprido cortado no laudo: o Medware corta o nome do paciente no laudo (por exemplo "... PESSOA COR" ou "... LIMA D") e o laudo ficava como "Laudo sem imagens" mesmo com o paciente puxado certo pela worklist. Agora, se o nome do laudo for o comeco exato do nome das imagens (com pelo menos 30 letras), mesma data e mesmo tipo, junta normalmente, e a folha de imagens e a lista mostram o nome inteiro. Laudos que ja estao parados assim juntam sozinhos depois da atualizacao. Se houver dois exames do mesmo tipo que casem no dia, continua sem juntar (vai para o motivo, como hoje).
 
