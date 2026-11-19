@@ -381,7 +381,7 @@ function desenharLista() {
     <td>${dataBr(l.data)}</td><td class="quieto">—</td><td><b>${esc(l.paciente)}</b></td><td title="${esc(l.tipo_nome)}">${esc(tipoCurto(l.tipo_nome))}</td>
     <td class="quieto">—</td><td class="quieto pq">${esc(l.motivo)} · há ${tempo(l.minutos)}</td>
     <td><span class="selo ${l.recente ? "s-Pendente" : "s-Alerta"}">${l.recente ? "Procurando imagens" : "Laudo sem imagens"}</span></td>
-    <td style="text-align:right">${l.liberavel ? `<button class="btn" data-lib="${esc(l.laudo)}">Liberar sem imagens</button>` : ""}</td></tr>`).join(""));
+    <td style="text-align:right">${(l.juntar || []).map(j => `<button class="btn" data-junta="${esc(l.laudo)}" data-foto="${esc(j.foto)}" data-txt="Juntar com ${esc(j.tipo_nome)}" title="O laudo não diz o tipo do exame. Junta com as imagens de ${esc(j.tipo_nome)} deste paciente no dia.">Juntar com ${esc(j.tipo_nome)}</button> `).join("")}${l.liberavel ? `<button class="btn" data-lib="${esc(l.laudo)}">Liberar sem imagens</button>` : ""}</td></tr>`).join(""));
   botaoSelecionados();
   $("vazio").style.display = lista.length + laudos.length ? "none" : "block";
   $("vazio").textContent = filtro.semLaudo && filtro.dias < 9999 ? "Nenhuma pendência neste período (veja as mais antigas em 6 meses)." : "Nenhum exame neste filtro.";
@@ -425,12 +425,28 @@ async function liberar(bt) {
   } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
   setTimeout(carregarLista, 1500);
 }
+async function juntarLaudo(bt) {
+  if (bt.dataset.conf !== "1") {
+    bt.dataset.conf = "1"; bt.classList.add("on"); bt.textContent = "Confirmar: " + bt.dataset.txt.toLowerCase();
+    setTimeout(() => { if (bt.isConnected) { bt.dataset.conf = ""; bt.classList.remove("on"); bt.textContent = bt.dataset.txt; } }, 5000);
+    return;
+  }
+  bt.disabled = true;
+  try {
+    const r = await fetch("/api/juntar", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({laudo: bt.dataset.junta, foto: bt.dataset.foto})});
+    const d = await r.json();
+    aviso(d.ok ? d.mensagem : d.erro, !d.ok);
+  } catch (e) { aviso("Sem conexão com o EcoPDF.", true); }
+  setTimeout(carregarLista, 1500);
+}
 document.querySelectorAll("[data-dias]").forEach(b => b.onclick = () => { filtro.dias = Number(b.dataset.dias); salvarFiltro(); desenharLista(); });
 $("b-semlaudo").onclick = () => { filtro.semLaudo = !filtro.semLaudo; salvarFiltro(); desenharLista(); };
 $("busca").oninput = e => { filtro.busca = e.target.value; desenharLista(); };
 $("linhas").onclick = e => {
   const bl = e.target.closest("[data-lib]");
   if (bl) { liberar(bl); return; }
+  const bj = e.target.closest("[data-junta]");
+  if (bj) { juntarLaudo(bj); return; }
   const bs = e.target.closest("[data-subi]");
   if (bs) { jaSubi(exames[Number(bs.dataset.subi)], bs); return; }
   const cs = e.target.closest("[data-sel]");
