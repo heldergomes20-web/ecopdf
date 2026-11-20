@@ -6,6 +6,10 @@ Uso (pelos .bat desta pasta):
   assinar.bat [EcoPDF.zip]      cria EcoPDF.zip.sig ao lado do zip (para anexar ao release)
   verificar.bat / verificar_teste.bat  confere o release geral (Latest) ou de teste
   reverter.bat <antiga> <nova>  refaz o zip de uma versao antiga com numero novo, ja assinado
+  CONFIGURAR PUBLICACAO.bat     uma vez: guarda a chave de PUBLICAR do GitHub, cifrada com a
+                                senha da assinatura (chave_publicar.enc, so no pendrive)
+  PUBLICAR VERSAO.bat           em um clique: acha o rascunho novo no GitHub, mostra as novidades,
+                                pede a senha, assina, anexa o .sig, publica como Latest e verifica
 
 Repositorio privado: a consulta ao GitHub usa a chave de leitura. Ela vem de TOKEN em
 assinador.ini, ou do painel.ini do pendrive (GITHUB_TOKEN, ou pedida a planilha do painel com
@@ -18,6 +22,7 @@ import getpass
 import hashlib
 import io
 import json
+import os
 import re
 import socket
 import sys
@@ -45,6 +50,8 @@ CHAVE_PRIVADA = PASTA / "chave_privada.pem"
 CHAVE_PUBLICA = PASTA / "chave_publica.txt"
 PUBLICADOS = PASTA / "publicados"
 ULTIMA = PUBLICADOS / "ultima_versao.txt"
+CHAVE_PUBLICAR = PASTA / "chave_publicar.enc"   # chave do GitHub que publica, cifrada com a senha
+SENHA = None                                    # senha digitada uma vez (publicar)
 
 VERSAO_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$")
 OBRIGATORIOS = ["EcoPDF/VERSAO.txt", "EcoPDF/ecopdf.py", "EcoPDF/instalar.bat",
@@ -87,7 +94,7 @@ def carregar_publica():
 def carregar_privada():
     if not CHAVE_PRIVADA.exists():
         falha("nao achei chave_privada.pem nesta pasta (o pendrive esta conectado?).")
-    senha = getpass.getpass("  Senha da chave (nao aparece ao digitar): ").encode()
+    senha = SENHA or getpass.getpass("  Senha da chave (nao aparece ao digitar): ").encode()
     try:
         return serialization.load_pem_private_key(CHAVE_PRIVADA.read_bytes(), password=senha)
     except (ValueError, TypeError):
@@ -141,7 +148,7 @@ def gerar_chaves():
     print("\n  Chave publica: " + base64.b64encode(publica).decode() + "\n")
 
 
-def assinar(caminho_zip=None, ao_lado=True):
+def assinar(caminho_zip=None, ao_lado=True, publicando=False):
     caminho = Path(caminho_zip.strip('"')) if caminho_zip else PASTA / "EcoPDF.zip"
     if not caminho.exists():
         falha(f"nao achei {caminho}. Arraste o EcoPDF.zip para cima do assinar.bat.")
@@ -195,6 +202,9 @@ def assinar(caminho_zip=None, ao_lado=True):
         onde = sig_ao_lado
     else:
         onde = destino / "EcoPDF.zip.sig"
+    if publicando:
+        print(f"  Assinado ({versao}). Copia guardada em {destino}")
+        return versao, sig_txt
     print(f"\n  Assinado. Arquivo da assinatura:\n  {onde}\n")
     print(f"  Anexe-o ao rascunho do release {versao} no GitHub (o nome tem de ser EcoPDF.zip.sig).")
     print(f"  Copia guardada em {destino}\n")
@@ -357,6 +367,148 @@ def verificar(canal="geral"):
     sys.exit(1 if erros else 0)
 
 
+# ---------------------------------------------------------------- publicar em um clique
+
+def _derivar(senha, sal):
+    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+    return Scrypt(salt=sal, length=32, n=2 ** 15, r=8, p=1).derive(senha)
+
+
+def _cifrar_chave(token, senha):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    sal, nonce = os.urandom(16), os.urandom(12)
+    ct = AESGCM(_derivar(senha, sal)).encrypt(nonce, token.encode(), b"ecopdf-publicar")
+    CHAVE_PUBLICAR.write_text(base64.b64encode(b"EP1" + sal + nonce + ct).decode() + "\n", encoding="ascii")
+
+
+def _decifrar_chave(senha):
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    try:
+        raw = base64.b64decode(CHAVE_PUBLICAR.read_text(encoding="ascii").strip())
+        if raw[:3] != b"EP1":
+            raise ValueError
+        return AESGCM(_derivar(senha, raw[3:19])).decrypt(raw[19:31], raw[31:], b"ecopdf-publicar").decode()
+    except (OSError, ValueError, InvalidTag):
+        falha("nao consegui abrir a chave de publicar com esta senha. Rode CONFIGURAR PUBLICACAO.bat de novo.")
+
+
+def _api(metodo, url, corpo=None, tipo="application/json"):
+    """Pedido ao GitHub com a chave de publicar. Devolve (status, json ou bytes)."""
+    cab = {"User-Agent": "EcoPDF-publicar", "Accept": "application/vnd.github+json",
+           "Authorization": "Bearer " + CHAVE_GH}
+    dados = None
+    if corpo is not None:
+        dados = json.dumps(corpo).encode() if tipo == "application/json" else corpo
+        cab["Content-Type"] = tipo
+    req = urllib.request.Request(url, data=dados, method=metodo, headers=cab)
+    try:
+        with _ABRIR.open(req, timeout=120) as r:
+            st, b = r.status, r.read()
+    except urllib.error.HTTPError as e:
+        st, b = e.code, e.read()
+    try:
+        return st, json.loads(b) if b else None
+    except ValueError:
+        return st, b
+
+
+def _pedir_senha():
+    global SENHA
+    SENHA = getpass.getpass("  Senha da assinatura (nao aparece ao digitar): ").encode()
+    carregar_privada()   # confere a senha antes de seguir
+    return SENHA
+
+
+def configurar_publicar():
+    global CHAVE_GH
+    r = repo()
+    print("\n  CONFIGURAR A PUBLICACAO EM UM CLIQUE (uma vez so)\n")
+    print("  1. No github.com: sua foto > Settings > Developer settings > Personal access tokens")
+    print("     > Fine-grained tokens > Generate new token.")
+    print("  2. Token name: EcoPDF publicar.  Expiration: Custom, daqui a 1 ano.")
+    print(f"  3. Repository access: Only select repositories > {r.split('/')[1]}.")
+    print("  4. Permissions > Repository permissions > Contents: Read and write. Nada mais.")
+    print("  5. Generate token e copie a chave (comeca com github_pat_).\n")
+    token = getpass.getpass("  Cole a chave aqui e aperte Enter (nao aparece ao colar): ").strip()
+    if not re.match(r"^(github_pat_|ghp_)\w+$", token):
+        falha("isso nao parece uma chave do GitHub (comeca com github_pat_). Nada foi guardado.")
+    print(f"  Chave recebida (termina em {token[-4:]}). Conferindo no GitHub...")
+    CHAVE_GH = token
+    st, lista = _api("GET", f"https://api.github.com/repos/{r}/releases?per_page=30")
+    if st != 200:
+        falha(f"o GitHub recusou esta chave (codigo {st}). Confira os passos 3 e 4 e gere outra.")
+    if not any(x.get("draft") for x in lista):
+        print("  Aviso: a chave le o repositorio, mas nao vi rascunhos. Confira se Contents esta em")
+        print("  Read and write; se nao estiver, a publicacao vai falhar e e so configurar de novo.")
+    print("\n  Agora a senha da assinatura: a chave de publicar fica cifrada com ela.")
+    senha = _pedir_senha()
+    _cifrar_chave(token, senha)
+    print(f"\n  PRONTO. Chave de publicar guardada (cifrada) em {CHAVE_PUBLICAR.name}.")
+    print("  Copie este arquivo tambem para o pendrive reserva. A partir de agora: PUBLICAR VERSAO.bat\n")
+
+
+def publicar():
+    global CHAVE_GH
+    r = repo()
+    if not CHAVE_PUBLICAR.exists():
+        falha("falta configurar a publicacao. Rode CONFIGURAR PUBLICACAO.bat uma vez.")
+    print("\n  PUBLICAR VERSAO NOVA DO ECOPDF\n")
+    senha = _pedir_senha()
+    CHAVE_GH = _decifrar_chave(senha)
+    st, lista = _api("GET", f"https://api.github.com/repos/{r}/releases?per_page=50")
+    if st != 200:
+        falha(f"o GitHub respondeu {st} ao listar as versoes. A chave de publicar venceu? "
+              "Gere outra e rode CONFIGURAR PUBLICACAO.bat.")
+    publicadas = [x["tag_name"] for x in lista if not x.get("draft") and VERSAO_RE.match(x.get("tag_name", ""))]
+    ultima = max(publicadas, key=chave_versao) if publicadas else "0.0.0"
+    novos = [x for x in lista if x.get("draft") and VERSAO_RE.match(x.get("tag_name", ""))
+             and chave_versao(x["tag_name"]) > chave_versao(ultima)]
+    if not novos:
+        print(f"  Nenhum rascunho novo para publicar (ultima publicada: {ultima}).\n")
+        sys.exit(0)
+    rel = max(novos, key=lambda x: chave_versao(x["tag_name"]))
+    tag = rel["tag_name"]
+    anexos = {a["name"]: a for a in rel.get("assets", [])}
+    if "EcoPDF.zip" not in anexos:
+        falha(f"o rascunho {tag} nao tem o EcoPDF.zip. Peca para gerar o rascunho de novo.")
+    print(f"  Versao em rascunho: {tag}   (ultima publicada: {ultima})\n")
+    notas = (rel.get("body") or "").split("\n---")[0].strip().splitlines()
+    for linha in notas[:40]:
+        print("    " + linha)
+    if len(notas) > 40:
+        print("    (...)")
+    if input(f"\n  Publicar a {tag} para TODAS as salas? Digite S e aperte Enter: ").strip().upper() != "S":
+        print("  Nada foi publicado.\n")
+        sys.exit(0)
+    st, zipb = baixar(anexos["EcoPDF.zip"]["url"], anexo=True)
+    if st != 200:
+        falha(f"nao consegui baixar o EcoPDF.zip do rascunho (codigo {st}).")
+    temp = PASTA / f"_rascunho_{tag}.zip"
+    temp.write_bytes(zipb)
+    try:
+        versao, sig_txt = assinar(str(temp), ao_lado=False, publicando=True)
+    finally:
+        temp.unlink(missing_ok=True)
+    if versao != tag:
+        falha(f"o zip diz versao {versao} e o rascunho diz {tag}. Nada foi publicado.")
+    if "EcoPDF.zip.sig" in anexos:   # sobra de uma tentativa anterior
+        _api("DELETE", anexos["EcoPDF.zip.sig"]["url"])
+    up = rel["upload_url"].split("{")[0] + "?name=EcoPDF.zip.sig"
+    st, _ = _api("POST", up, sig_txt.encode("ascii"), tipo="application/octet-stream")
+    if st not in (200, 201):
+        falha(f"o GitHub recusou anexar a assinatura (codigo {st}). A chave tem Contents: Read and write?")
+    ok("assinatura anexada ao rascunho")
+    st, _ = _api("PATCH", rel["url"], {"draft": False, "prerelease": False, "make_latest": "true"})
+    if st != 200:
+        falha(f"o GitHub recusou publicar (codigo {st}). O rascunho continua com a assinatura; "
+              "publique pela pagina do GitHub como Latest.")
+    ok(f"{tag} publicada como Latest")
+    import time
+    time.sleep(3)
+    verificar("geral")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     cmd = args[0] if args else ""
@@ -366,6 +518,10 @@ if __name__ == "__main__":
         assinar(args[1] if len(args) > 1 else None)
     elif cmd == "verificar":
         verificar(args[1] if len(args) > 1 else "geral")
+    elif cmd == "configurar-publicar":
+        configurar_publicar()
+    elif cmd == "publicar":
+        publicar()
     elif cmd == "reverter" and len(args) == 3:
         reverter(args[1], args[2])
     else:

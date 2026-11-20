@@ -5,7 +5,17 @@ Uma vez so:
   2. gerar_chaves.bat -> cria chave_privada.pem (SECRETA, com senha) e chave_publica.txt.
   3. Copie esta pasta inteira para um segundo pendrive guardado em outro lugar.
 
-A cada versao nova (o rascunho do release ja foi criado no GitHub):
+Publicar em um clique (desde 20/11/2026):
+  Uma vez: CONFIGURAR PUBLICACAO.bat. Ele explica como criar no GitHub a chave de PUBLICAR
+  (Contents: Read and write, so o ecopdf), pede a chave e a senha da assinatura e guarda a
+  chave cifrada com essa senha em chave_publicar.enc. Copie esse arquivo para o pendrive reserva.
+  A cada versao nova: PUBLICAR VERSAO.bat. Ele acha o rascunho novo, mostra as novidades, pede
+  a senha, pergunta "Publicar para TODAS as salas?", assina, anexa o .sig, publica como Latest
+  e roda a verificacao. So vale se aparecer TUDO CERTO.
+  Pendrive perdido: apague a chave "EcoPDF publicar" no GitHub (Settings > Developer settings).
+  Sem a senha ninguem assina, e as salas recusam versao sem assinatura valida.
+
+A cada versao nova, do jeito manual (se o PUBLICAR VERSAO.bat nao funcionar):
   1. Baixe o EcoPDF.zip do rascunho.
   2. Arraste-o para cima de assinar.bat e digite a senha. Sai EcoPDF.zip.sig ao lado.
   3. Anexe EcoPDF.zip.sig ao rascunho, marque pre-release e publique.

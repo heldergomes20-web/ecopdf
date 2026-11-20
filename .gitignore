@@ -13,3 +13,7 @@ ferramentas/assinador/publicados/
 EcoPDF/painel.ini
 EcoPDF/canal.ini
 EcoPDF/_anterior/
+
+# chave de PUBLICAR do GitHub (cifrada) e zip temporario do assinador: so no pendrive
+chave_publicar.enc
+ferramentas/assinador/_rascunho_*.zip
