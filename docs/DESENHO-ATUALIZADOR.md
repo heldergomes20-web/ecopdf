@@ -7,7 +7,9 @@ Ainda NÃO implementado no ecopdf.py. Este arquivo registra o desenho combinado 
 - Cada versão = release com tag = versão (AAAA.MM.DD.N); anexos obrigatórios `EcoPDF.zip` e `EcoPDF.zip.sig` (base64 Ed25519 dos bytes do zip).
 - Canal geral = release Latest (não pre-release). Canal teste = maior versão publicada (pre-release ou não). Rascunhos são ignorados.
 - Claude cria o rascunho com o zip; Helder assina offline (assinar.bat) e anexa o .sig, publica como pre-release; promove a Latest após validar.
-- Cliente usa a API pública `https://api.github.com/repos/<repo>/releases` (sem token; limite 60 req/h por IP é suficiente para poucas checagens/dia). Ignora release sem os dois anexos.
+- Cliente usa a API `https://api.github.com/repos/<repo>/releases`. Ignora release sem os dois anexos.
+- Desde 2026.11.20 (preparação do repositório privado): chave de leitura fine-grained (só este repositório, Contents = Read-only) guardada UMA vez na planilha do painel (propriedade GITHUB_TOKEN; menu EcoPDF > Chave de leitura do GitHub). PCs, instalador e assinador pedem a chave à planilha com a PAINEL_CHAVE do painel.ini e guardam cópia (acesso_github.txt). GITHUB_TOKEN no painel.ini força uma chave. Recusa (401/403/404) = pede de novo à planilha e tenta 1 vez. Anexos pelo endereço da API (assets/{id}, Accept application/octet-stream), sem levar o Authorization no redirecionamento. Sem chave = acesso anônimo (só com repositório público).
+- Renovar a chave: criar a nova no GitHub, colar na planilha, revogar a antiga. Os PCs pegam a nova na próxima checagem (até 2 h).
 - Licença: todos os direitos reservados. Repo não contém dados de pacientes, IPs ou senhas.
 - Esquema visual: https://claude.ai/artifact/TaMLEsB5SNaijEQUHmd3Bj
 

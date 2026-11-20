@@ -6,15 +6,23 @@ Uso (pelos .bat desta pasta):
   assinar.bat [EcoPDF.zip]      cria EcoPDF.zip.sig ao lado do zip (para anexar ao release)
   verificar.bat / verificar_teste.bat  confere o release geral (Latest) ou de teste
   reverter.bat <antiga> <nova>  refaz o zip de uma versao antiga com numero novo, ja assinado
+
+Repositorio privado: a consulta ao GitHub usa a chave de leitura. Ela vem de TOKEN em
+assinador.ini, ou do painel.ini do pendrive (GITHUB_TOKEN, ou pedida a planilha do painel com
+PAINEL_URL + PAINEL_CHAVE). O painel.ini e procurado nesta pasta, na pasta de cima e em
+"Instalador EcoPDF" ao lado.
 """
 import base64
 import configparser
 import getpass
 import hashlib
 import io
+import json
 import re
+import socket
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -157,6 +165,8 @@ def assinar(caminho_zip=None, ao_lado=True):
         import json
         st, corpo = baixar(f"https://api.github.com/repos/{repo()}/releases?per_page=30", api=True)
         tags = [x.get("tag_name", "") for x in json.loads(corpo) if not x.get("draft")] if st == 200 else []
+        if st != 200:
+            print(f"  (o GitHub respondeu {st}: confira a chave de leitura; segui com o registro do pendrive)")
         tags = [t for t in tags if VERSAO_RE.match(t)]
         ultima_gh = max(tags, key=chave_versao) if tags else None
     except Exception:
@@ -219,13 +229,69 @@ def reverter(antiga, nova):
     print(f"  {PUBLICADOS / nova}  (EcoPDF.zip e EcoPDF.zip.sig).\n")
 
 
-def baixar(url, api=False):
+def _painel_ini(k):
+    for pasta in (PASTA, PASTA.parent, PASTA.parent / "Instalador EcoPDF"):
+        try:
+            texto = (pasta / "painel.ini").read_text("utf-8-sig")
+        except OSError:
+            continue
+        for linha in texto.splitlines():
+            a, sep, v = linha.partition("=")
+            if sep and a.strip().upper() == k:
+                return v.strip()
+        return ""
+    return ""
+
+
+def _pedir_chave():
+    """Chave de leitura do GitHub ('' = sem): assinador.ini TOKEN > painel.ini GITHUB_TOKEN > planilha."""
+    cfg = configparser.ConfigParser()
+    cfg.read(PASTA / "assinador.ini", encoding="utf-8")
+    t = cfg.get("github", "TOKEN", fallback="").strip() or _painel_ini("GITHUB_TOKEN")
+    if t:
+        return t
+    url, chave_painel = _painel_ini("PAINEL_URL"), _painel_ini("PAINEL_CHAVE")
+    if not url or not chave_painel:
+        return ""
+    corpo = json.dumps({"chave": chave_painel, "pc": socket.gethostname(), "pedido": "github"}).encode("utf-8")
+    try:
+        req = urllib.request.Request(url, data=corpo, method="POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.loads(r.read(20000).decode("utf-8", "replace"))
+        return str(d.get("github") or "").strip() if d.get("ok") else ""
+    except Exception:
+        return ""
+
+
+CHAVE_GH = None
+
+
+class _Redirecionar(urllib.request.HTTPRedirectHandler):
+    """Anexo do release redireciona para o armazenamento: segue sem levar a chave para outro endereco."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        novo = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if novo is not None and urllib.parse.urlsplit(newurl).hostname != urllib.parse.urlsplit(req.full_url).hostname:
+            novo.remove_header("Authorization")
+        return novo
+
+
+_ABRIR = urllib.request.build_opener(_Redirecionar())
+
+
+def baixar(url, api=False, anexo=False):
+    global CHAVE_GH
+    if CHAVE_GH is None:
+        CHAVE_GH = _pedir_chave()
     cab = {"User-Agent": "EcoPDF-verificador"}
     if api:
         cab["Accept"] = "application/vnd.github+json"
+    if anexo:
+        cab["Accept"] = "application/octet-stream"
+    if CHAVE_GH:
+        cab["Authorization"] = "Bearer " + CHAVE_GH
     req = urllib.request.Request(url, headers=cab)
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with _ABRIR.open(req, timeout=60) as r:
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -236,7 +302,11 @@ def release_do_canal(r, canal):
     import json
     st, corpo = baixar(f"https://api.github.com/repos/{r}/releases?per_page=30", api=True)
     if st != 200:
-        falha(f"o GitHub respondeu {st} ao listar os releases de {r}. O repositorio e publico?")
+        falha(f"o GitHub respondeu {st} ao listar os releases de {r}. "
+              + ("A chave de leitura foi recusada: confira a chave na planilha do painel "
+                 "(menu EcoPDF > Chave de leitura do GitHub)." if CHAVE_GH else
+                 "Nao achei a chave de leitura (repositorio privado precisa dela): confira o painel.ini "
+                 "no pendrive ou TOKEN em assinador.ini."))
     publicados = [x for x in json.loads(corpo) if not x.get("draft")]
     if canal == "geral":
         publicados = [x for x in publicados if not x.get("prerelease")]
@@ -256,7 +326,7 @@ def verificar(canal="geral"):
     tag = rel["tag_name"]
     print(f"  Versao que as maquinas deste canal vao receber: {tag}"
           + ("  (pre-release)" if rel.get("prerelease") else "  (Latest)"))
-    anexos = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
+    anexos = {a["name"]: a["url"] for a in rel.get("assets", [])}   # endereco da API: vale com repo privado
     erros = 0
     for nome in ("EcoPDF.zip", "EcoPDF.zip.sig"):
         if nome in anexos:
@@ -267,8 +337,8 @@ def verificar(canal="geral"):
     if erros:
         print(f"\n  Resultado: {erros} problema(s) - as maquinas ignorariam este release\n")
         sys.exit(1)
-    st_z, zipb = baixar(anexos["EcoPDF.zip"])
-    st_s, sigb = baixar(anexos["EcoPDF.zip.sig"])
+    st_z, zipb = baixar(anexos["EcoPDF.zip"], anexo=True)
+    st_s, sigb = baixar(anexos["EcoPDF.zip.sig"], anexo=True)
     if st_z != 200 or st_s != 200:
         falha(f"nao consegui baixar os anexos (respostas {st_z}/{st_s})")
     try:

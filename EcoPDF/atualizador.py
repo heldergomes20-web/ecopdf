@@ -26,6 +26,13 @@ poder trocar componentes que o atualizador usa.
 
 O canal fica em canal.ini (deste PC, fora do zip; sem o arquivo = geral).
 Nunca rebaixa (so instala versao MAIOR), exceto pelo comando "geral" acima.
+
+Chave de leitura do GitHub (desde 2026.11.20, para o repositorio poder ser privado):
+  ordem: GITHUB_TOKEN no painel.ini (forca) > acesso_github.txt (guardada) > pedida a planilha
+  do painel (PAINEL_URL + PAINEL_CHAVE do painel.ini; a chave fica UMA vez no script da planilha,
+  menu EcoPDF > Chave de leitura do GitHub). Chave recusada pelo GitHub (401/403/404): pede outra
+  a planilha e tenta de novo uma vez (troca/renovacao da chave = so na planilha).
+  Sem chave nenhuma: segue sem (funciona enquanto o repositorio for publico).
 """
 import base64
 import configparser
@@ -39,6 +46,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -55,7 +63,8 @@ CHAVE_PUBLICA = "AMnlb2+BTFjFstkWT3MMldMu7Bnfa6Ab0lUKjNWLhFQ="   # chave_publica
 VERSAO_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$")
 ANTERIOR = BASE / "_anterior"
 # nunca copiados para _anterior nem sobrescritos: dados e arquivos locais deste PC
-LOCAIS = {"venv", "processados", "dicom", "log", "_anterior", "__pycache__", "painel.ini", "canal.ini"}
+LOCAIS = {"venv", "processados", "dicom", "log", "_anterior", "__pycache__", "painel.ini", "canal.ini",
+          "acesso_github.txt"}
 WINDOWS = os.name == "nt"
 INSTALAR, VOLTOU = 10, 11   # codigos de saida lidos pelo .bat
 PRONTA = BASE / "log" / "atualizacao_pronta"     # zip + sig ja baixados e conferidos
@@ -63,6 +72,7 @@ ESTADO = BASE / "log" / "atualizacao_auto.json"  # o que a automatica fez (paine
 TRAVA = BASE / "log" / "atualizando.trava"
 JANELA_6H = (5 * 60 + 30, 7 * 60)                 # minutos do dia em que a tarefa das 6h pode instalar
 SEM_EXAME_MIN = 15
+CHAVE_GITHUB = BASE / "acesso_github.txt"        # chave de leitura do GitHub guardada (veio da planilha)
 
 
 def dizer(msg=""):
@@ -106,20 +116,106 @@ def gravar_canal(c):
         f"CANAL = {c}\n{auto}", encoding="utf-8")
 
 
-def baixar(url, api=False):
-    cab = {"User-Agent": "EcoPDF-atualizador"}
-    if api:
-        cab["Accept"] = "application/vnd.github+json"
-    with urllib.request.urlopen(urllib.request.Request(url, headers=cab), timeout=90) as r:
+def _painel_ini(k):
+    """Valor do painel.ini deste PC ('' se nao houver). Formato: CHAVE = valor."""
+    try:
+        for linha in (BASE / "painel.ini").read_text("utf-8-sig").splitlines():
+            a, sep, v = linha.partition("=")
+            if sep and a.strip().upper() == k:
+                return v.strip()
+    except OSError:
+        pass
+    return ""
+
+
+def pedir_chave_github():
+    """Chave de leitura do GitHub guardada na planilha do painel ('' se a planilha nao tem)."""
+    url, chave_painel = _painel_ini("PAINEL_URL"), _painel_ini("PAINEL_CHAVE")
+    if not url or not chave_painel:
+        return ""
+    corpo = json.dumps({"chave": chave_painel, "pc": socket.gethostname(), "pedido": "github"}).encode("utf-8")
+    req = urllib.request.Request(url, data=corpo, method="POST", headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        d = json.loads(r.read(20000).decode("utf-8", "replace"))
+    return str(d.get("github") or "").strip() if d.get("ok") else ""
+
+
+def _chave_github(renovar=False):
+    """(chave, origem). origem: painel.ini, guardada, planilha ou '' (sem chave)."""
+    fixa = _painel_ini("GITHUB_TOKEN")
+    if fixa:
+        return fixa, "painel.ini"
+    if not renovar:
+        try:
+            t = CHAVE_GITHUB.read_text("utf-8").strip()
+            if t:
+                return t, "guardada"
+        except OSError:
+            pass
+    try:
+        t = pedir_chave_github()
+    except Exception:
+        t = ""
+    if t:
+        try:
+            CHAVE_GITHUB.write_text(t, "utf-8")
+        except OSError:
+            pass
+    return t, ("planilha" if t else "")
+
+
+class _Redirecionar(urllib.request.HTTPRedirectHandler):
+    """O anexo do release redireciona para o armazenamento do GitHub: segue sem levar a chave
+    para outro endereco (o armazenamento recusa pedido com duas autenticacoes)."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        novo = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if novo is not None and urllib.parse.urlsplit(newurl).hostname != urllib.parse.urlsplit(req.full_url).hostname:
+            novo.remove_header("Authorization")
+        return novo
+
+
+_ABRIR = urllib.request.build_opener(_Redirecionar())
+
+
+def _get(url, chave_gh, anexo):
+    cab = {"User-Agent": "EcoPDF-atualizador",
+           "Accept": "application/octet-stream" if anexo else "application/vnd.github+json"}
+    if chave_gh:
+        cab["Authorization"] = "Bearer " + chave_gh
+    with _ABRIR.open(urllib.request.Request(url, headers=cab), timeout=90) as r:
         return r.read()
 
 
+def baixar(url, anexo=False):
+    """GET no GitHub com a chave de leitura (se houver). Recusa (401/403/404) = pede outra chave
+    a planilha e tenta de novo uma vez. Anota no estado se o acesso foi com chave (painel mostra)."""
+    chave_gh, origem = _chave_github()
+    try:
+        dados = _get(url, chave_gh, anexo)
+    except urllib.error.HTTPError as e:
+        if e.code not in (401, 403, 404):
+            raise
+        nova, origem = _chave_github(renovar=True) if origem != "painel.ini" else ("", "")
+        if not nova or nova == chave_gh:
+            _anotar_acesso(f"chave recusada ({e.code})" if chave_gh else f"sem chave, GitHub recusou ({e.code})")
+            raise
+        chave_gh = nova
+        try:
+            dados = _get(url, chave_gh, anexo)
+        except urllib.error.HTTPError as e2:
+            if e2.code in (401, 403, 404):
+                _anotar_acesso(f"chave recusada ({e2.code})")
+            raise
+    _anotar_acesso("com chave" if chave_gh else "sem chave")
+    return dados
+
+
 def releases():
-    dados = json.loads(baixar(f"https://api.github.com/repos/{REPO}/releases?per_page=30", api=True))
+    dados = json.loads(baixar(f"https://api.github.com/repos/{REPO}/releases?per_page=30"))
     validos = []
     for r in dados:
         tag = r.get("tag_name", "")
-        anexos = {a["name"]: a["browser_download_url"] for a in r.get("assets", [])}
+        anexos = {a["name"]: a["url"] for a in r.get("assets", [])}   # endereco da API: vale com repo privado
         if r.get("draft") or not VERSAO_RE.match(tag) or not {"EcoPDF.zip", "EcoPDF.zip.sig"} <= anexos.keys():
             continue
         validos.append({"tag": tag, "teste": bool(r.get("prerelease")), "anexos": anexos})
@@ -223,6 +319,13 @@ def atualizar(pedido=None):
     dizer("Procurando versao nova no GitHub...")
     try:
         validos = releases()
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403, 404):
+            raise SystemExit(f"o GitHub recusou o acesso as versoes (codigo {e.code}). Confira a chave de "
+                             "leitura na planilha do painel (menu EcoPDF > Chave de leitura do GitHub). "
+                             "O EcoPDF continua funcionando na versao atual.")
+        raise SystemExit(f"sem acesso ao GitHub ({e}). Confira a internet e tente de novo. "
+                         "O EcoPDF continua funcionando na versao atual.")
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise SystemExit(f"sem acesso ao GitHub ({e}). Confira a internet e tente de novo. "
                          "O EcoPDF continua funcionando na versao atual.")
@@ -247,8 +350,8 @@ def atualizar(pedido=None):
         return
     tag = alvo["tag"]
     dizer(f"Baixando {tag}{' (teste)' if alvo['teste'] else ''}...")
-    zipb = baixar(alvo["anexos"]["EcoPDF.zip"])
-    sigb = baixar(alvo["anexos"]["EcoPDF.zip.sig"])
+    zipb = baixar(alvo["anexos"]["EcoPDF.zip"], anexo=True)
+    sigb = baixar(alvo["anexos"]["EcoPDF.zip.sig"], anexo=True)
     conferir(zipb, sigb, tag)
     dizer("Assinatura conferida.")
     if not _travar():
@@ -300,13 +403,28 @@ def ler_estado():
         return {}
 
 
-def gravar_estado(**campos):
-    d = ler_estado()
-    d.update(campos, quando=_agora())
+def _salvar_estado(d):
     ESTADO.parent.mkdir(parents=True, exist_ok=True)
     tmp = ESTADO.with_suffix(".tmp")
     tmp.write_text(json.dumps(d, ensure_ascii=False), "utf-8")
     os.replace(tmp, ESTADO)
+
+
+def gravar_estado(**campos):
+    d = ler_estado()
+    d.update(campos, quando=_agora())
+    _salvar_estado(d)
+
+
+def _anotar_acesso(texto):
+    """Como foi o ultimo acesso ao GitHub (com chave / sem chave / chave recusada). Nao mexe em 'quando'."""
+    try:
+        d = ler_estado()
+        if d.get("github") != texto:
+            d["github"] = texto
+            _salvar_estado(d)
+    except OSError:
+        pass
 
 
 def _limpar_pronta():
@@ -345,8 +463,8 @@ def preparar():
         if p and p[0] == tag:
             gravar_estado(checado=_agora(), erro_checagem="", canal=canal)
             return f"{tag} ja pronta"
-        zipb = baixar(alvo["anexos"]["EcoPDF.zip"])
-        sigb = baixar(alvo["anexos"]["EcoPDF.zip.sig"])
+        zipb = baixar(alvo["anexos"]["EcoPDF.zip"], anexo=True)
+        sigb = baixar(alvo["anexos"]["EcoPDF.zip.sig"], anexo=True)
         conferir(zipb, sigb, tag)
         _limpar_pronta()
         tmp = PRONTA.with_name(PRONTA.name + ".tmp")
@@ -463,8 +581,9 @@ def iniciar_auto(momento):
 def texto_painel():
     """Coluna 'Atualizacao automatica' do painel: uma linha, ERRO/ATENCAO no comeco quando ha o que olhar."""
     e = ler_estado()
+    gh = f" · GitHub: {e['github']}" if e.get("github") else ""
     if not auto_ligada():
-        return "desligada neste PC (canal.ini AUTO = nao)"
+        return "desligada neste PC (canal.ini AUTO = nao)" + gh
     partes = []
     if e.get("resultado") == "voltou" and e.get("recusada"):
         return f"ERRO: {e.get('erro', '')}"
@@ -479,7 +598,7 @@ def texto_painel():
         rot = {"instalada": f"última: {e.get('de', '?')} -> {e.get('versao', '?')} ({e.get('como', '')})",
                "adiada": "adiada às 6h (exame chegando)", "erro": f"erro: {e.get('erro', '')[:60]}"}
         partes.append(rot[e["resultado"]] + f" em {str(e['quando'])[5:16].replace('T', ' ')}")
-    return " · ".join(partes) or "ainda não checou"
+    return (" · ".join(partes) or "ainda não checou") + gh
 
 
 def voltar():

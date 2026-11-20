@@ -623,6 +623,9 @@ def _aviso_atualizacao(texto):
         desde = datetime.fromisoformat(e.get("pronta_desde", "")) if e.get("pronta") else None
     except Exception:
         return ""
+    if "recus" in str(e.get("github", "")):
+        return (f"GitHub recusou o acesso às atualizações ({e['github']}): conferir a chave de leitura "
+                "na planilha (menu EcoPDF > Chave de leitura do GitHub)")
     if desde and (datetime.now() - desde).total_seconds() > ATUALIZACAO_PRONTA_DIAS * 86400:
         return (f"versão {e['pronta']} baixada há mais de {ATUALIZACAO_PRONTA_DIAS} dias e não instalada: "
                 "conferir as tarefas \"EcoPDF Atualizar\" (rodar instalar.bat de novo)")
