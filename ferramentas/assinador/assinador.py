@@ -78,7 +78,7 @@ def chave_versao(v):
 def repo():
     cfg = configparser.ConfigParser()
     cfg.read(PASTA / "assinador.ini", encoding="utf-8")
-    r = cfg.get("github", "REPO", fallback="").strip().strip("/")
+    r = cfg.get("github", "REPO", fallback="").strip().strip("/") or "heldergomes20-web/ecopdf"
     if r.count("/") != 1:
         falha("preencha REPO em assinador.ini (ex.: seuusuario/ecopdf)")
     return r
@@ -420,8 +420,15 @@ def _pedir_senha():
     return SENHA
 
 
+def _conferir_pasta():
+    if not CHAVE_PRIVADA.exists():
+        falha("nao achei chave_privada.pem nesta pasta. Rode este .bat de dentro da pasta do pendrive "
+              "onde esta a sua chave de assinatura (chave_privada.pem e chave_publica.txt).")
+
+
 def configurar_publicar():
     global CHAVE_GH
+    _conferir_pasta()
     r = repo()
     print("\n  CONFIGURAR A PUBLICACAO EM UM CLIQUE (uma vez so)\n")
     print("  1. No github.com: sua foto > Settings > Developer settings > Personal access tokens")
@@ -450,6 +457,7 @@ def configurar_publicar():
 
 def publicar():
     global CHAVE_GH
+    _conferir_pasta()
     r = repo()
     if not CHAVE_PUBLICAR.exists():
         falha("falta configurar a publicacao. Rode CONFIGURAR PUBLICACAO.bat uma vez.")
