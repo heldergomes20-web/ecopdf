@@ -15,4 +15,9 @@ A cada versao nova (o rascunho do release ja foi criado no GitHub):
 Voltar atras:
   reverter.bat -> refaz o codigo de uma versao antiga com numero novo, ja assinado.
 
+Repositorio privado: verificar.bat e a trava de versao do assinar.bat consultam o GitHub com a
+chave de leitura que fica na planilha do painel. O assinador pede a chave usando o painel.ini do
+pendrive (nesta pasta, na pasta de cima ou na pasta "Instalador EcoPDF" ao lado). Sem painel.ini:
+escreva TOKEN = <chave> em assinador.ini.
+
 Nunca apague chave_privada.pem nem a pasta publicados.

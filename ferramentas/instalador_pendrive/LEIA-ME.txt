@@ -3,6 +3,8 @@ Instalador EcoPDF do pendrive
 Copie esta pasta inteira para o pendrive, junto com o painel.ini (o painel.ini vai
 DENTRO desta pasta, ao lado do "INSTALAR ECOPDF.bat"). Nao precisa recopiar quando sair
 versao nova: o instalador sempre baixa a versao publicada no GitHub.
+Com o repositorio privado, o instalador usa a chave de leitura do GitHub que fica na
+planilha do painel (ele pede com o painel.ini desta pasta). Sem o painel.ini aqui, nao baixa.
 
 No PC da sala (com internet):
 1. Dois cliques em "INSTALAR ECOPDF.bat" e aceite a permissao de administrador.

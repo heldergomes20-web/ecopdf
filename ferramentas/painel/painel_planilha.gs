@@ -10,6 +10,11 @@
  * Instalar: Extensoes > Apps Script > colar este arquivo > Salvar > recarregar a planilha
  *           > menu EcoPDF > Configurar (uma vez) > Implantar como app da Web.
  * Nunca chega nome de paciente: o EcoPDF so manda numero, horario, versao e rede.
+ *
+ * Chave de leitura do GitHub (2026.11.20, repositorio privado): fica so aqui, nas propriedades
+ * do script (menu EcoPDF > Chave de leitura do GitHub). O atualizador de cada PC pede a chave
+ * com a mesma PAINEL_CHAVE do painel.ini (pedido "github") e guarda uma copia; trocar a chave
+ * = so colar a nova aqui (os PCs pedem de novo quando o GitHub recusar a antiga).
  */
 
 var TZ = 'America/Fortaleza';            // Joao Pessoa (UTC-3, sem horario de verao)
@@ -43,6 +48,7 @@ function doPost(e) {
   try { d = JSON.parse(e.postData.contents); } catch (err) { return resp(false, 'json'); }
   var chave = PropertiesService.getScriptProperties().getProperty('CHAVE') || '';
   if (!chave || d.chave !== chave) return resp(false, 'chave');
+  if (d.pedido === 'github') return respGithub_(limpo(d.pc, 40));
   var pc = limpo(d.pc, 40);
   if (!pc) return resp(false, 'pc');
 
@@ -174,6 +180,14 @@ function modeloNovo_(modelo) {
   return mod[modelo] - desde > BASE_MODELOS_DIAS * 86400000 ? modelo : '';
 }
 
+/** Entrega a chave de leitura do GitHub ao atualizador do PC (ja conferida a PAINEL_CHAVE). */
+function respGithub_(pc) {
+  var p = PropertiesService.getScriptProperties();
+  try { p.setProperty('GITHUB_PEDIU_' + (pc || '?'), new Date().toISOString()); } catch (err) {}
+  return ContentService.createTextOutput(JSON.stringify({ok: true, github: p.getProperty('GITHUB_TOKEN') || ''}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function resp(ok, motivo) {
   return ContentService.createTextOutput(JSON.stringify({ok: ok, motivo: motivo || ''}))
     .setMimeType(ContentService.MimeType.JSON);
@@ -264,7 +278,7 @@ function versaoPublicada() {
   if (Date.now() - em < 3600000) return p.getProperty('VERSAO') || '';
   try {
     var r = UrlFetchApp.fetch('https://api.github.com/repos/' + REPO + '/releases/latest',
-      {muteHttpExceptions: true, headers: {Accept: 'application/vnd.github+json'}});
+      {muteHttpExceptions: true, headers: cabGithub_()});
     if (r.getResponseCode() === 200) {
       var js = JSON.parse(r.getContentText());
       var tag = String(js.tag_name || '').replace(/^v/, '');
@@ -274,6 +288,45 @@ function versaoPublicada() {
     }
   } catch (err) {}
   return p.getProperty('VERSAO') || '';
+}
+
+/** Cabecalho do GitHub: com a chave de leitura, se houver (obrigatoria com o repositorio privado). */
+function cabGithub_(tk) {
+  var cab = {Accept: 'application/vnd.github+json'};
+  tk = tk === undefined ? PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN') : tk;
+  if (tk) cab.Authorization = 'Bearer ' + tk;
+  return cab;
+}
+
+/** Menu: cola (ou apaga) a chave de leitura do GitHub e testa na hora. */
+function chaveGithub() {
+  var ui = SpreadsheetApp.getUi(), p = PropertiesService.getScriptProperties();
+  var atual = p.getProperty('GITHUB_TOKEN') || '';
+  var r = ui.prompt('Chave de leitura do GitHub',
+    (atual ? 'Já existe uma chave (termina em ' + atual.slice(-4) + ').\n\n' : 'Nenhuma chave guardada ainda.\n\n') +
+    '1. Cole aqui a chave nova (começa com github_pat_).\n2. Clique em OK.\n\n' +
+    'Para apagar a chave: escreva APAGAR e clique em OK. Para sair sem mudar nada: Cancelar.',
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var tk = r.getResponseText().trim();
+  if (tk.toUpperCase() === 'APAGAR') {
+    p.deleteProperty('GITHUB_TOKEN');
+    ui.alert('Chave apagada. Com o repositório privado, os PCs param de achar versões novas até você colar outra.');
+    return;
+  }
+  if (!/^(github_pat_|ghp_)\w+$/.test(tk)) { ui.alert('Isso não parece uma chave do GitHub (começa com github_pat_). Nada foi mudado.'); return; }
+  var t = UrlFetchApp.fetch('https://api.github.com/repos/' + REPO + '/releases/latest',
+    {muteHttpExceptions: true, headers: cabGithub_(tk)});
+  if (t.getResponseCode() !== 200) {
+    ui.alert('O GitHub recusou esta chave (código ' + t.getResponseCode() + '). Nada foi mudado.\n\n' +
+      'Confira na criação da chave: Repository access = Only select repositories > ecopdf; ' +
+      'Permissions > Repository permissions > Contents = Read-only.');
+    return;
+  }
+  p.setProperty('GITHUB_TOKEN', tk);
+  p.deleteProperty('VERSAO_EM');
+  ui.alert('Chave guardada e funcionando (versão Latest: ' + JSON.parse(t.getContentText()).tag_name + ').\n\n' +
+    'Os PCs pegam a chave na próxima checagem (até 2 h) e a coluna "Atualização automática" passa a mostrar "GitHub: com chave".');
 }
 
 /** Versao da celula como texto. Celula antiga gravada sem apostrofo pode ter virado data
@@ -331,6 +384,7 @@ function onOpen() {
     .addItem('Configurar (uma vez)', 'configurar')
     .addItem('Conferir agora', 'conferir')
     .addItem('Testar e-mail de alerta', 'alertar')
+    .addItem('Chave de leitura do GitHub', 'chaveGithub')
     .addToUi();
 }
 

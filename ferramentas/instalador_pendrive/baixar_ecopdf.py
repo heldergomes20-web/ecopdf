@@ -4,6 +4,9 @@ Uso (pelo "INSTALAR ECOPDF.bat"): python baixar_ecopdf.py geral|teste [pasta_des
   geral = versao de producao (Latest); teste = a mais nova publicada (pre-release ou Latest).
 Nada e extraido se a assinatura nao conferir. Dados do PC (processados, dicom, log, venv,
 painel.ini) nunca sao tocados. O painel.ini ao lado deste arquivo (no pendrive) e copiado.
+Chave de leitura do GitHub (repositorio privado): GITHUB_TOKEN no painel.ini do pendrive, ou
+pedida a planilha do painel (PAINEL_URL + PAINEL_CHAVE do mesmo painel.ini); fica guardada
+no PC (acesso_github.txt) para o atualizador.
 Codigo de saida: 0 = pronto para rodar o instalar.bat; 1 = erro (nada mudou).
 """
 import base64
@@ -11,8 +14,11 @@ import io
 import json
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -26,7 +32,8 @@ except Exception:
 REPO = "heldergomes20-web/ecopdf"
 CHAVE_PUBLICA = "AMnlb2+BTFjFstkWT3MMldMu7Bnfa6Ab0lUKjNWLhFQ="   # a mesma do atualizador.py
 VERSAO_RE = re.compile(r"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$")
-LOCAIS = {"venv", "processados", "dicom", "log", "_anterior", "__pycache__", "painel.ini", "canal.ini"}
+LOCAIS = {"venv", "processados", "dicom", "log", "_anterior", "__pycache__", "painel.ini", "canal.ini",
+          "acesso_github.txt"}
 AQUI = Path(__file__).resolve().parent
 
 
@@ -34,12 +41,69 @@ def dizer(m=""):
     print("  " + m if m else "", flush=True)
 
 
-def baixar(url, api=False):
-    cab = {"User-Agent": "EcoPDF-instalador"}
-    if api:
-        cab["Accept"] = "application/vnd.github+json"
-    with urllib.request.urlopen(urllib.request.Request(url, headers=cab), timeout=120) as r:
-        return r.read()
+def _painel_ini(k):
+    try:
+        for linha in (AQUI / "painel.ini").read_text("utf-8-sig").splitlines():
+            a, sep, v = linha.partition("=")
+            if sep and a.strip().upper() == k:
+                return v.strip()
+    except OSError:
+        pass
+    return ""
+
+
+def _pedir_chave():
+    """Chave de leitura do GitHub: GITHUB_TOKEN do painel.ini ou a guardada na planilha ('' = sem)."""
+    fixa = _painel_ini("GITHUB_TOKEN")
+    if fixa:
+        return fixa
+    url, chave_painel = _painel_ini("PAINEL_URL"), _painel_ini("PAINEL_CHAVE")
+    if not url or not chave_painel:
+        return ""
+    corpo = json.dumps({"chave": chave_painel, "pc": socket.gethostname(), "pedido": "github"}).encode("utf-8")
+    try:
+        req = urllib.request.Request(url, data=corpo, method="POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.loads(r.read(20000).decode("utf-8", "replace"))
+        return str(d.get("github") or "").strip() if d.get("ok") else ""
+    except Exception:
+        return ""
+
+
+CHAVE_GH = None
+
+
+class _Redirecionar(urllib.request.HTTPRedirectHandler):
+    """Anexo do release redireciona para o armazenamento: segue sem levar a chave para outro endereco."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        novo = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if novo is not None and urllib.parse.urlsplit(newurl).hostname != urllib.parse.urlsplit(req.full_url).hostname:
+            novo.remove_header("Authorization")
+        return novo
+
+
+_ABRIR = urllib.request.build_opener(_Redirecionar())
+
+
+def baixar(url, anexo=False):
+    global CHAVE_GH
+    if CHAVE_GH is None:
+        CHAVE_GH = _pedir_chave()
+    cab = {"User-Agent": "EcoPDF-instalador",
+           "Accept": "application/octet-stream" if anexo else "application/vnd.github+json"}
+    if CHAVE_GH:
+        cab["Authorization"] = "Bearer " + CHAVE_GH
+    try:
+        with _ABRIR.open(urllib.request.Request(url, headers=cab), timeout=120) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403, 404):
+            sys.exit(f"o GitHub recusou o acesso as versoes (codigo {e.code}). "
+                     + ("A chave de leitura foi recusada: confira a chave na planilha do painel "
+                        "(menu EcoPDF > Chave de leitura do GitHub)." if CHAVE_GH else
+                        "Nao achei a chave de leitura: confira se o painel.ini esta ao lado deste instalador "
+                        "e se a chave foi colada na planilha (menu EcoPDF > Chave de leitura do GitHub)."))
+        raise
 
 
 def chave(v):
@@ -47,11 +111,11 @@ def chave(v):
 
 
 def escolher(canal):
-    dados = json.loads(baixar(f"https://api.github.com/repos/{REPO}/releases?per_page=30", api=True))
+    dados = json.loads(baixar(f"https://api.github.com/repos/{REPO}/releases?per_page=30"))
     validos = []
     for r in dados:
         tag = r.get("tag_name", "")
-        anexos = {a["name"]: a["browser_download_url"] for a in r.get("assets", [])}
+        anexos = {a["name"]: a["url"] for a in r.get("assets", [])}   # endereco da API: vale com repo privado
         if r.get("draft") or not VERSAO_RE.match(tag) or not {"EcoPDF.zip", "EcoPDF.zip.sig"} <= anexos.keys():
             continue
         if canal == "geral" and r.get("prerelease"):
@@ -87,7 +151,7 @@ def main():
         sys.exit("nenhuma versao de producao (Latest) publicada ainda. Rode de novo e escolha T (teste).")
     tag, teste, anexos = alvo
     dizer(f"Baixando {tag}{' (teste)' if teste else ''}...")
-    zipb, sigb = baixar(anexos["EcoPDF.zip"]), baixar(anexos["EcoPDF.zip.sig"])
+    zipb, sigb = baixar(anexos["EcoPDF.zip"], anexo=True), baixar(anexos["EcoPDF.zip.sig"], anexo=True)
     conferir(zipb, sigb, tag)
     dizer("Assinatura conferida.")
 
@@ -119,6 +183,8 @@ def main():
         dizer("painel.ini copiado do pendrive.")
     else:
         dizer("AVISO: nao achei painel.ini ao lado deste instalador; o painel das salas fica desligado.")
+    if CHAVE_GH and not _painel_ini("GITHUB_TOKEN"):
+        (destino / "acesso_github.txt").write_text(CHAVE_GH, "utf-8")   # o atualizador usa a mesma
     dizer(f"EcoPDF {tag} copiado para {destino} (canal {canal}).")
 
 
