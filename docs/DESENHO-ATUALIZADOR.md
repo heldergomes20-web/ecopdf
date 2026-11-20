@@ -37,6 +37,7 @@ Ainda NÃO implementado no ecopdf.py. Este arquivo registra o desenho combinado 
 
 ## Publicação
 - Ver manual de atualização (Claude Doc https://claude.ai/artifact/4d4bQwgKBCVyYVQCS6sBbo, cópia eco-pdf/MANUAL_ATUALIZACAO.md).
+- Desde 2026-11-20: `PUBLICAR VERSAO.bat` no pendrive (assinador.py publicar) faz tudo em um clique: lista os rascunhos com a chave de PUBLICAR (fine-grained, Contents: Read and write), pega o de versão maior que a última publicada, mostra as notas, pede a senha uma vez (abre a chave privada e decifra a chave de publicar: scrypt + AES-GCM em chave_publicar.enc, configurada uma vez por `CONFIGURAR PUBLICACAO.bat`), confirma "S", assina (mesmas travas de versão), anexa EcoPDF.zip.sig, PATCH draft=false + make_latest e roda verificar geral. A assinatura continua sendo a trava: a chave de publicar sozinha não faz as salas aceitarem nada.
 
 ## Proposta pendente (2026-10-31): chave reserva
 - Embutir 2 chaves públicas (principal + reserva offline, outro pendrive/senha). Cliente aceita qualquer uma. Release assinado pela reserva pode trocar a lista de chaves confiáveis (rotação sem reinstalar salas). Aguardando decisão do Helder.
