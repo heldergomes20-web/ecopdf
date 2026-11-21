@@ -520,8 +520,9 @@ def aparelhos(cfg, ep, log=None):
 def enviar(cfg, ep, parte, linhas):
     """POST para a planilha (pedido "levantamento"). True se a planilha gravou."""
     import urllib.request
+    # "computador" e nao "pc": a planilha antiga (sem o pedido "levantamento") recusa sem gravar nada na aba Salas
     corpo = {"chave": cfg.get("painel_chave", ""), "pedido": "levantamento",
-             "pc": (os.environ.get("COMPUTERNAME") or socket.gethostname() or "?")[:40],
+             "computador": (os.environ.get("COMPUTERNAME") or socket.gethostname() or "?")[:40],
              "versao": ep.versao() if ep else "", "levantamento": VERSAO_LEV, "parte": parte,
              "linhas": [[_limpo(g, 80), _limpo(i, 200), _limpo(d, 2000), n if isinstance(n, (int, float)) else 0,
                          _limpo(x, 300)] for g, i, d, n, x in linhas]}
@@ -542,7 +543,8 @@ def enviar(cfg, ep, parte, linhas):
     try:
         with urllib.request.urlopen(req, timeout=120) as r:
             resp = r.read(2000).decode("utf-8", "replace")
-        return '"ok":true' in resp.replace(" ", "")
+        resp = resp.replace(" ", "")
+        return '"ok":true' in resp and '"linhas":' in resp  # so a planilha com o pedido "levantamento" devolve "linhas"
     except Exception:
         return False
 
