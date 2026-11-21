@@ -199,7 +199,7 @@ function respGithub_(pc) {
 
 /** Uma parte do levantamento de um PC: apaga as linhas antigas dessa parte desse PC e grava as novas. */
 function levantamento_(d) {
-  var pc = limpo(d.pc, 40), parte = limpo(d.parte, 20);
+  var pc = limpo(d.computador, 40), parte = limpo(d.parte, 20);  // 'computador': a versao antiga deste script recusa sem gravar
   if (!pc || !parte || !(d.linhas instanceof Array)) return resp(false, 'levantamento');
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
