@@ -2,6 +2,13 @@
 Versao instalada: veja VERSAO.txt, o status.bat ou o DADOS DESTE PC.txt.
 Para atualizar: clicar no numero da versao na tela (ou rodar atualizar_agora.bat). Sem internet: extrair o EcoPDF.zip novo por cima de C:\EcoPDF e rodar instalar.bat como administrador.
 
+2026.11.20.1
+- Levantamento do Medware e das medidas dos aparelhos (para preparar o preenchimento automatico do laudo e o historico). Roda sozinho UMA vez em cada PC, so fora do horario (a noite, sabado a tarde ou domingo) e com o PC parado ha 30 minutos; nao atrapalha o exame.
+- No PC que tem o banco do Medware (Bessa e sala 3): manda a estrutura do banco (tabelas, quantidade de laudos por ano e por modelo, nomes das variaveis do laudo e opcoes mais usadas, como o texto do laudo e organizado). Nos outros PCs essa parte so avisa "banco em outro PC".
+- Em todos os PCs: lista das medidas que o aparelho manda no relatorio de medidas (codigo, nome, unidade e quantas vezes apareceu), tirada dos exames ja guardados.
+- Nunca sai nome, CPF, data de nascimento ou valor de medida de paciente: so nomes de campos e contagens. O resultado vai para a aba "Levantamento" da planilha do painel; uma copia fica em C:\EcoPDF\log\levantamento_enviado.json.
+- Para rodar na hora (fora do horario de exames): levantamento.bat na pasta C:\EcoPDF. Pode levar de alguns minutos a meia hora.
+
 2026.11.20
 - Preparacao para o repositorio do EcoPDF ficar privado no GitHub. O atualizador passa a usar uma chave de leitura do GitHub, guardada so na planilha do painel: cada PC pede a chave com a mesma senha do painel (painel.ini) e guarda uma copia. Enquanto a chave nao for colada na planilha, tudo continua como hoje. Trocar ou renovar a chave = so colar a nova na planilha (menu EcoPDF > Chave de leitura do GitHub); os PCs pegam a nova sozinhos.
 - Painel: a coluna "Atualizacao automatica" mostra "GitHub: com chave" ou "GitHub: sem chave". Se o GitHub recusar a chave, a sala fica em ATENCAO com o passo para corrigir.
