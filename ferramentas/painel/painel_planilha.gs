@@ -15,6 +15,12 @@
  * do script (menu EcoPDF > Chave de leitura do GitHub). O atualizador de cada PC pede a chave
  * com a mesma PAINEL_CHAVE do painel.ini (pedido "github") e guarda uma copia; trocar a chave
  * = so colar a nova aqui (os PCs pedem de novo quando o GitHub recusar a antiga).
+ *
+ * Levantamento (2026.11.20.1): cada PC manda UMA vez, fora do horario, a estrutura do banco do
+ * Medware (tabelas, contagens, nomes das variaveis, modelos de laudo) e o catalogo das medidas que
+ * os aparelhos mandam no SR (codigo/nome/unidade e quantas vezes). So estrutura e contagens: nunca
+ * nome, CPF ou valor de paciente. Vai para a aba "Levantamento" (criada sozinha); reenvio da mesma
+ * parte pelo mesmo PC substitui as linhas antigas dessa parte.
  */
 
 var TZ = 'America/Fortaleza';            // Joao Pessoa (UTC-3, sem horario de verao)
@@ -30,6 +36,8 @@ var MODELO_NOVO_HORAS = 24;         // impressora de modelo nunca visto: ATENCAO
 var BASE_MODELOS_DIAS = 3;          // modelos vistos nos 3 primeiros dias = os de hoje, sem aviso               // colunas novas que o EcoPDF pode criar sozinho
 
 var ABA = 'Salas', ABA_PCS = 'PCs', LIN0 = 4; // dados a partir da linha 4
+var ABA_LEV = 'Levantamento';           // estrutura do Medware + medidas do SR (pedido "levantamento")
+var LEV_COLS = ['Enviado em', 'PC', 'Versão', 'Parte', 'Grupo', 'Item', 'Detalhe', 'N', 'Extra'];
 var ABA_HIST = 'Histórico', HIST_DIAS = 365;  // uma linha por envio (e por SEM SINAL); apaga > 12 meses
 var HIST_COLS = ['Quando', 'Sala', 'PC', 'Versão', 'Situação', 'O que olhar', 'IP do PC', 'Disco livre (GB)', 'Erros (24 h)'];
 var COLS = ['Sala', 'Situação', 'O que olhar', 'Último envio', 'PC', 'Versão',
@@ -49,6 +57,7 @@ function doPost(e) {
   var chave = PropertiesService.getScriptProperties().getProperty('CHAVE') || '';
   if (!chave || d.chave !== chave) return resp(false, 'chave');
   if (d.pedido === 'github') return respGithub_(limpo(d.pc, 40));
+  if (d.pedido === 'levantamento') return levantamento_(d);
   var pc = limpo(d.pc, 40);
   if (!pc) return resp(false, 'pc');
 
@@ -186,6 +195,44 @@ function respGithub_(pc) {
   try { p.setProperty('GITHUB_PEDIU_' + (pc || '?'), new Date().toISOString()); } catch (err) {}
   return ContentService.createTextOutput(JSON.stringify({ok: true, github: p.getProperty('GITHUB_TOKEN') || ''}))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Uma parte do levantamento de um PC: apaga as linhas antigas dessa parte desse PC e grava as novas. */
+function levantamento_(d) {
+  var pc = limpo(d.pc, 40), parte = limpo(d.parte, 20);
+  if (!pc || !parte || !(d.linhas instanceof Array)) return resp(false, 'levantamento');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(ABA_LEV), nc = LEV_COLS.length;
+    if (!sh) {
+      sh = ss.insertSheet(ABA_LEV);
+      sh.getRange(1, 1, 1, nc).setValues([LEV_COLS]).setFontWeight('bold').setBackground('#eceff1');
+      sh.setFrozenRows(1);
+      sh.setColumnWidth(6, 280);
+      sh.setColumnWidth(7, 420);
+    }
+    var n = sh.getLastRow() - 1, manter = [];
+    if (n > 0) {
+      manter = sh.getRange(2, 1, n, nc).getValues().filter(function (r) { return !(r[1] === pc && r[3] === parte); });
+      sh.getRange(2, 1, n, nc).clearContent();
+    }
+    var agora = new Date(), versao = limpo(d.versao, 20);
+    var novas = d.linhas.slice(0, 20000).map(function (l) {
+      l = l instanceof Array ? l : [];
+      return [agora, pc, versao, parte, limpo(l[0], 80), limpo(l[1], 200), limpo(l[2], 2000), num(l[3]), limpo(l[4], 300)];
+    });
+    var tudo = manter.concat(novas);
+    if (tudo.length) {
+      sh.getRange(2, 3, tudo.length, 1).setNumberFormat('@');           // versao como texto (Sheets pt-BR vira data)
+      sh.getRange(2, 1, tudo.length, nc).setValues(tudo);
+      sh.getRange(2, 1, tudo.length, 1).setNumberFormat('dd/MM HH:mm');
+    }
+    return ContentService.createTextOutput(JSON.stringify({ok: true, linhas: novas.length}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function resp(ok, motivo) {

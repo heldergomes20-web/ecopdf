@@ -2135,6 +2135,11 @@ def main():
         painel.iniciar(cfg, sys.modules[__name__], parar)
     except Exception:
         log.exception("Painel das salas nao iniciou (o resto continua funcionando)")
+    try:
+        import levantamento  # uma vez por PC, fora do horario: estrutura do Medware e medidas do SR
+        levantamento.iniciar(cfg, sys.modules[__name__], parar)
+    except Exception:
+        log.exception("Levantamento nao iniciou (o resto continua funcionando)")
 
     threading.Thread(target=vigiar_atualizacao, args=(parar,), daemon=True, name="atualizacao").start()
     try:
